@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "881397025098",
+    "project_id": "marketmaps-1",
+    "storage_bucket": "marketmaps-1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:881397025098:android:6e7f02a49d244567ab59b3",
+        "android_client_info": {
+          "package_name": "com.marketmaps.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDuIoQqN1m1aJLgHFW_stff_qFB6w-wSZ4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
