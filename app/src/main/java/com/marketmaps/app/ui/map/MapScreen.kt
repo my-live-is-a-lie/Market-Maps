@@ -64,6 +64,10 @@ import org.mapsforge.map.layer.cache.TileCache
 import org.mapsforge.map.layer.download.TileDownloadLayer
 import org.mapsforge.map.layer.download.tilesource.OpenStreetMapMapnik
 import org.mapsforge.map.layer.overlay.Marker
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 @Composable
 fun MapScreen(
@@ -92,6 +96,9 @@ fun MapScreen(
     var userLat by remember { mutableStateOf<Double?>(null) }
     var userLon by remember { mutableStateOf<Double?>(null) }
 
+    // تفاصيل المحل
+    var selectedStore by remember { mutableStateOf<Store?>(null) }
+
     val searchResults = remember(searchQuery, stores, userLat, userLon) {
         filterAndSortStores(stores, searchQuery, userLat, userLon)
     }
@@ -99,12 +106,14 @@ fun MapScreen(
     val isAddModeRef = remember { mutableStateOf(isAddMode) }
     isAddModeRef.value = isAddMode
 
+    val storesRef = remember { mutableStateOf(stores) }
+    storesRef.value = stores
+
     LaunchedEffect(Unit) {
         val result = storeRepository.getAllStores()
         if (result.isSuccess) {
             stores = result.getOrDefault(emptyList())
         }
-        // محاولة الحصول على موقع المستخدم للترتيب حسب الأقرب
         tryGetLastLocation(context) { lat, lon ->
             userLat = lat
             userLon = lon
@@ -179,6 +188,18 @@ fun MapScreen(
                                 showAddDialog = true
                             }
                         }
+
+                        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                            // البحث عن أقرب محل للضغط
+                            val projection = mapView.mapViewProjection
+                            val tapped = projection.fromPixels(e.x.toInt(), e.y.toInt())
+                            val nearest = findNearestStore(storesRef.value, tapped.latitude, tapped.longitude, maxDistanceMeters = 80.0)
+                            if (nearest != null) {
+                                selectedStore = nearest
+                                return true
+                            }
+                            return false
+                        }
                     })
 
                     mapView.setOnTouchListener { _, event ->
@@ -194,7 +215,6 @@ fun MapScreen(
                 }
             )
 
-            // مربع البحث في الأعلى
             SearchBar(
                 query = searchQuery,
                 onQueryChange = { searchQuery = it },
@@ -204,8 +224,8 @@ fun MapScreen(
                         LatLong(store.latitude, store.longitude)
                     )
                     mapViewRef?.model?.mapViewPosition?.zoomLevel = 17.toByte()
-                    searchQuery = "" // إخفاء النتائج بعد الاختيار
-                    Toast.makeText(context, store.name, Toast.LENGTH_SHORT).show()
+                    searchQuery = ""
+                    selectedStore = store
                 },
                 modifier = Modifier.align(Alignment.TopCenter)
             )
@@ -334,8 +354,49 @@ fun MapScreen(
                     }
                 )
             }
+
+            // نافذة تفاصيل المحل
+            selectedStore?.let { store ->
+                StoreDetailsDialog(
+                    store = store,
+                    onDismiss = { selectedStore = null }
+                )
+            }
         }
     }
+}
+
+/**
+ * البحث عن أقرب محل من نقطة الضغط (بالمتر).
+ */
+private fun findNearestStore(
+    stores: List<Store>,
+    lat: Double,
+    lon: Double,
+    maxDistanceMeters: Double
+): Store? {
+    var nearest: Store? = null
+    var minDist = Double.MAX_VALUE
+
+    stores.forEach { store ->
+        val dist = haversineMeters(lat, lon, store.latitude, store.longitude)
+        if (dist < minDist && dist <= maxDistanceMeters) {
+            minDist = dist
+            nearest = store
+        }
+    }
+    return nearest
+}
+
+private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val r = 6371000.0
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val a = sin(dLat / 2) * sin(dLat / 2) +
+            cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
+            sin(dLon / 2) * sin(dLon / 2)
+    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return r * c
 }
 
 private fun addMarkersToMap(context: Context, mapView: MapView, stores: List<Store>) {
