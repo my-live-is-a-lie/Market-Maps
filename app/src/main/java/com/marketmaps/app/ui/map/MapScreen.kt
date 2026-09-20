@@ -1,8 +1,14 @@
 package com.marketmaps.app.ui.map
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
+import android.content.pm.PackageManager
 import android.view.GestureDetector
 import android.view.MotionEvent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -39,6 +45,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import org.mapsforge.core.model.LatLong
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 import org.mapsforge.map.android.util.AndroidUtil
@@ -47,9 +57,6 @@ import org.mapsforge.map.layer.cache.TileCache
 import org.mapsforge.map.layer.download.TileDownloadLayer
 import org.mapsforge.map.layer.download.tilesource.OpenStreetMapMapnik
 
-/**
- * شاشة الخريطة الرئيسية.
- */
 @Composable
 fun MapScreen(
     modifier: Modifier = Modifier
@@ -63,13 +70,49 @@ fun MapScreen(
     var isMenuExpanded by remember { mutableStateOf(false) }
     var isAddMode by remember { mutableStateOf(false) }
 
-    // حالة نافذة إضافة محل
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedLat by remember { mutableStateOf(0.0) }
     var selectedLon by remember { mutableStateOf(0.0) }
 
-    // مرجع للـ MapView للوصول إليه من GestureDetector
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+
+    // لحل مشكلة القيمة القديمة في GestureDetector
+    val isAddModeRef = remember { mutableStateOf(isAddMode) }
+    isAddModeRef.value = isAddMode
+
+    // طلب إذن الموقع
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+
+        if (fineGranted || coarseGranted) {
+            moveToCurrentLocation(context, mapViewRef)
+        } else {
+            Toast.makeText(
+                context,
+                "يجب السماح بالوصول إلى الموقع لاستخدام هذه الميزة",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    fun requestLocationAndMove() {
+        val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+
+        if (fine == PackageManager.PERMISSION_GRANTED || coarse == PackageManager.PERMISSION_GRANTED) {
+            moveToCurrentLocation(context, mapViewRef)
+        } else {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize()
@@ -84,11 +127,9 @@ fun MapScreen(
                     val mapView = createMapView(ctx)
                     mapViewRef = mapView
 
-                    // إضافة مستمع للضغط المطول
                     val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
                         override fun onLongPress(e: MotionEvent) {
-                            if (isAddMode) {
-                                // تحويل إحداثيات الشاشة إلى إحداثيات جغرافية
+                            if (isAddModeRef.value) {
                                 val projection = mapView.mapViewProjection
                                 val latLong = projection.fromPixels(e.x.toInt(), e.y.toInt())
                                 selectedLat = latLong.latitude
@@ -100,7 +141,7 @@ fun MapScreen(
 
                     mapView.setOnTouchListener { _, event ->
                         gestureDetector.onTouchEvent(event)
-                        false // نترك الخريطة تتعامل مع اللمس بشكل طبيعي
+                        false
                     }
 
                     mapView
@@ -153,9 +194,10 @@ fun MapScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        // زر موقعي الحالي (مربوط الآن)
                         FloatingActionButton(
                             onClick = {
-                                // TODO: تحديد الموقع الحالي
+                                requestLocationAndMove()
                                 isMenuExpanded = false
                             },
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -203,14 +245,12 @@ fun MapScreen(
                 }
             }
 
-            // نافذة إضافة محل
             if (showAddDialog) {
                 AddStoreDialog(
                     latitude = selectedLat,
                     longitude = selectedLon,
                     onDismiss = { showAddDialog = false },
                     onSave = { name, categoryPath, description ->
-                        // حالياً نطبع فقط، لاحقاً سنحفظ في Firebase ونضيف علامة على الخريطة
                         println("تم حفظ محل: $name | $categoryPath | $description | $selectedLat, $selectedLon")
                         showAddDialog = false
                         isAddMode = false
@@ -218,6 +258,29 @@ fun MapScreen(
                 )
             }
         }
+    }
+}
+
+@SuppressLint("MissingPermission")
+private fun moveToCurrentLocation(context: Context, mapView: MapView?) {
+    if (mapView == null) return
+
+    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+
+    fusedLocationClient.getCurrentLocation(
+        Priority.PRIORITY_HIGH_ACCURACY,
+        CancellationTokenSource().token
+    ).addOnSuccessListener { location ->
+        if (location != null) {
+            val latLong = LatLong(location.latitude, location.longitude)
+            mapView.model.mapViewPosition.animateTo(latLong)
+            mapView.model.mapViewPosition.zoomLevel = 16.toByte()
+            Toast.makeText(context, "تم تحديد موقعك الحالي", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "تعذر الحصول على الموقع، تأكد من تفعيل GPS", Toast.LENGTH_LONG).show()
+        }
+    }.addOnFailureListener {
+        Toast.makeText(context, "حدث خطأ أثناء تحديد الموقع", Toast.LENGTH_LONG).show()
     }
 }
 
