@@ -1,6 +1,8 @@
 package com.marketmaps.app.ui.map
 
 import android.content.Context
+import android.view.GestureDetector
+import android.view.MotionEvent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -10,10 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -49,9 +49,6 @@ import org.mapsforge.map.layer.download.tilesource.OpenStreetMapMapnik
 
 /**
  * شاشة الخريطة الرئيسية.
- * تحتوي على زر سفلي أيسر ينبثق منه زرّان:
- * 1. تحديد موقعي الحالي
- * 2. إضافة محل (يفعل وضع الإضافة)
  */
 @Composable
 fun MapScreen(
@@ -59,16 +56,20 @@ fun MapScreen(
 ) {
     val context = LocalContext.current
 
-    // تهيئة Mapsforge مرة واحدة
     remember {
         AndroidGraphicFactory.createInstance(context.applicationContext)
     }
 
-    // حالة فتح قائمة الأزرار
     var isMenuExpanded by remember { mutableStateOf(false) }
-
-    // حالة وضع إضافة محل
     var isAddMode by remember { mutableStateOf(false) }
+
+    // حالة نافذة إضافة محل
+    var showAddDialog by remember { mutableStateOf(false) }
+    var selectedLat by remember { mutableStateOf(0.0) }
+    var selectedLon by remember { mutableStateOf(0.0) }
+
+    // مرجع للـ MapView للوصول إليه من GestureDetector
+    var mapViewRef by remember { mutableStateOf<MapView?>(null) }
 
     Scaffold(
         modifier = modifier.fillMaxSize()
@@ -78,15 +79,39 @@ fun MapScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // عرض الخريطة
             AndroidView(
                 factory = { ctx ->
-                    createMapView(ctx)
+                    val mapView = createMapView(ctx)
+                    mapViewRef = mapView
+
+                    // إضافة مستمع للضغط المطول
+                    val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
+                        override fun onLongPress(e: MotionEvent) {
+                            if (isAddMode) {
+                                // تحويل إحداثيات الشاشة إلى إحداثيات جغرافية
+                                val projection = mapView.mapViewProjection
+                                val latLong = projection.fromPixels(e.x.toInt(), e.y.toInt())
+                                selectedLat = latLong.latitude
+                                selectedLon = latLong.longitude
+                                showAddDialog = true
+                            }
+                        }
+                    })
+
+                    mapView.setOnTouchListener { _, event ->
+                        gestureDetector.onTouchEvent(event)
+                        false // نترك الخريطة تتعامل مع اللمس بشكل طبيعي
+                    }
+
+                    mapView
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                update = { mapView ->
+                    mapViewRef = mapView
+                }
             )
 
-            // نص وضع الإضافة (يظهر في الأسفل عندما يكون الوضع مفعلاً)
+            // نص وضع الإضافة
             AnimatedVisibility(
                 visible = isAddMode,
                 enter = fadeIn() + slideInVertically { it },
@@ -111,7 +136,7 @@ fun MapScreen(
                 )
             }
 
-            // مجموعة الأزرار في أسفل الشاشة أقصى اليسار
+            // الأزرار السفلية
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -119,7 +144,6 @@ fun MapScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // الزرّان المنبثقان (يظهران عند فتح القائمة)
                 AnimatedVisibility(
                     visible = isMenuExpanded,
                     enter = fadeIn() + slideInVertically { it },
@@ -129,10 +153,9 @@ fun MapScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // زر تحديد موقعي الحالي
                         FloatingActionButton(
                             onClick = {
-                                // TODO: سنضيف منطق تحديد الموقع لاحقاً
+                                // TODO: تحديد الموقع الحالي
                                 isMenuExpanded = false
                             },
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -140,13 +163,9 @@ fun MapScreen(
                             shape = CircleShape,
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.MyLocation,
-                                contentDescription = "موقعي الحالي"
-                            )
+                            Icon(Icons.Default.MyLocation, contentDescription = "موقعي الحالي")
                         }
 
-                        // زر إضافة محل
                         FloatingActionButton(
                             onClick = {
                                 isAddMode = !isAddMode
@@ -171,11 +190,8 @@ fun MapScreen(
                     }
                 }
 
-                // الزر الرئيسي الذي يفتح/يغلق القائمة
                 FloatingActionButton(
-                    onClick = {
-                        isMenuExpanded = !isMenuExpanded
-                    },
+                    onClick = { isMenuExpanded = !isMenuExpanded },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     shape = CircleShape
@@ -186,13 +202,25 @@ fun MapScreen(
                     )
                 }
             }
+
+            // نافذة إضافة محل
+            if (showAddDialog) {
+                AddStoreDialog(
+                    latitude = selectedLat,
+                    longitude = selectedLon,
+                    onDismiss = { showAddDialog = false },
+                    onSave = { name, categoryPath, description ->
+                        // حالياً نطبع فقط، لاحقاً سنحفظ في Firebase ونضيف علامة على الخريطة
+                        println("تم حفظ محل: $name | $categoryPath | $description | $selectedLat, $selectedLon")
+                        showAddDialog = false
+                        isAddMode = false
+                    }
+                )
+            }
         }
     }
 }
 
-/**
- * إنشاء MapView مع طبقة تحميل بلاطات OpenStreetMap عبر الإنترنت.
- */
 private fun createMapView(context: Context): MapView {
     val mapView = MapView(context).apply {
         isClickable = true
@@ -220,7 +248,6 @@ private fun createMapView(context: Context): MapView {
     mapView.layerManager.layers.add(downloadLayer)
     downloadLayer.onResume()
 
-    // موقع افتراضي: القاهرة
     mapView.model.mapViewPosition.setCenter(LatLong(30.0444, 31.2357))
     mapView.model.mapViewPosition.zoomLevel = 12.toByte()
 
