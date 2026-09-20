@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +50,9 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.marketmaps.app.data.Store
+import com.marketmaps.app.data.StoreRepository
+import kotlinx.coroutines.launch
 import org.mapsforge.core.model.LatLong
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 import org.mapsforge.map.android.util.AndroidUtil
@@ -62,6 +66,8 @@ fun MapScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val storeRepository = remember { StoreRepository() }
 
     remember {
         AndroidGraphicFactory.createInstance(context.applicationContext)
@@ -76,11 +82,9 @@ fun MapScreen(
 
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
 
-    // لحل مشكلة القيمة القديمة في GestureDetector
     val isAddModeRef = remember { mutableStateOf(isAddMode) }
     isAddModeRef.value = isAddMode
 
-    // طلب إذن الموقع
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -152,7 +156,6 @@ fun MapScreen(
                 }
             )
 
-            // نص وضع الإضافة
             AnimatedVisibility(
                 visible = isAddMode,
                 enter = fadeIn() + slideInVertically { it },
@@ -177,7 +180,6 @@ fun MapScreen(
                 )
             }
 
-            // الأزرار السفلية
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -194,7 +196,6 @@ fun MapScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // زر موقعي الحالي (مربوط الآن)
                         FloatingActionButton(
                             onClick = {
                                 requestLocationAndMove()
@@ -251,9 +252,27 @@ fun MapScreen(
                     longitude = selectedLon,
                     onDismiss = { showAddDialog = false },
                     onSave = { name, categoryPath, description ->
-                        println("تم حفظ محل: $name | $categoryPath | $description | $selectedLat, $selectedLon")
-                        showAddDialog = false
-                        isAddMode = false
+                        scope.launch {
+                            val store = Store(
+                                name = name,
+                                category = categoryPath,
+                                description = description,
+                                latitude = selectedLat,
+                                longitude = selectedLon
+                            )
+                            val result = storeRepository.addStore(store)
+                            if (result.isSuccess) {
+                                Toast.makeText(context, "تم حفظ المحل بنجاح", Toast.LENGTH_SHORT).show()
+                                showAddDialog = false
+                                isAddMode = false
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "فشل حفظ المحل: ${result.exceptionOrNull()?.message}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
                     }
                 )
             }
