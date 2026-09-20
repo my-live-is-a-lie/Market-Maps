@@ -63,6 +63,11 @@ dependencies {
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.8.5")
 
+    // Mapsforge (للخريطة الأوفلاين والأونلاين)
+    implementation("org.mapsforge:mapsforge-map-android:0.30.0")
+    implementation("org.mapsforge:mapsforge-map:0.30.0")
+    implementation("org.mapsforge:mapsforge-themes:0.30.0")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
