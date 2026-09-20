@@ -87,22 +87,30 @@ fun MapScreen(
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
     var stores by remember { mutableStateOf<List<Store>>(emptyList()) }
 
+    // البحث
+    var searchQuery by remember { mutableStateOf("") }
+    var userLat by remember { mutableStateOf<Double?>(null) }
+    var userLon by remember { mutableStateOf<Double?>(null) }
+
+    val searchResults = remember(searchQuery, stores, userLat, userLon) {
+        filterAndSortStores(stores, searchQuery, userLat, userLon)
+    }
+
     val isAddModeRef = remember { mutableStateOf(isAddMode) }
     isAddModeRef.value = isAddMode
 
-    // تحميل المحلات عند فتح الشاشة
     LaunchedEffect(Unit) {
         val result = storeRepository.getAllStores()
         if (result.isSuccess) {
             stores = result.getOrDefault(emptyList())
-            // إضافة العلامات بعد تحميل المحلات
-            mapViewRef?.let { mapView ->
-                addMarkersToMap(context, mapView, stores)
-            }
+        }
+        // محاولة الحصول على موقع المستخدم للترتيب حسب الأقرب
+        tryGetLastLocation(context) { lat, lon ->
+            userLat = lat
+            userLon = lon
         }
     }
 
-    // تحديث العلامات عندما يتغير mapView أو قائمة المحلات
     LaunchedEffect(mapViewRef, stores) {
         mapViewRef?.let { mapView ->
             addMarkersToMap(context, mapView, stores)
@@ -116,7 +124,10 @@ fun MapScreen(
         val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
         if (fineGranted || coarseGranted) {
-            moveToCurrentLocation(context, mapViewRef)
+            moveToCurrentLocation(context, mapViewRef) { lat, lon ->
+                userLat = lat
+                userLon = lon
+            }
         } else {
             Toast.makeText(
                 context,
@@ -131,7 +142,10 @@ fun MapScreen(
         val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
 
         if (fine == PackageManager.PERMISSION_GRANTED || coarse == PackageManager.PERMISSION_GRANTED) {
-            moveToCurrentLocation(context, mapViewRef)
+            moveToCurrentLocation(context, mapViewRef) { lat, lon ->
+                userLat = lat
+                userLon = lon
+            }
         } else {
             locationPermissionLauncher.launch(
                 arrayOf(
@@ -178,6 +192,22 @@ fun MapScreen(
                 update = { mapView ->
                     mapViewRef = mapView
                 }
+            )
+
+            // مربع البحث في الأعلى
+            SearchBar(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                results = searchResults,
+                onResultClick = { store ->
+                    mapViewRef?.model?.mapViewPosition?.animateTo(
+                        LatLong(store.latitude, store.longitude)
+                    )
+                    mapViewRef?.model?.mapViewPosition?.zoomLevel = 17.toByte()
+                    searchQuery = "" // إخفاء النتائج بعد الاختيار
+                    Toast.makeText(context, store.name, Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.align(Alignment.TopCenter)
             )
 
             AnimatedVisibility(
@@ -287,7 +317,6 @@ fun MapScreen(
                             val result = storeRepository.addStore(store)
                             if (result.isSuccess) {
                                 Toast.makeText(context, "تم حفظ المحل بنجاح", Toast.LENGTH_SHORT).show()
-                                // إعادة تحميل المحلات لإظهار العلامة الجديدة
                                 val refreshed = storeRepository.getAllStores()
                                 if (refreshed.isSuccess) {
                                     stores = refreshed.getOrDefault(emptyList())
@@ -309,15 +338,10 @@ fun MapScreen(
     }
 }
 
-/**
- * إضافة علامات المحلات على الخريطة.
- */
 private fun addMarkersToMap(context: Context, mapView: MapView, stores: List<Store>) {
-    // إزالة العلامات القديمة (غير طبقة البلاطات)
     val layersToRemove = mapView.layerManager.layers.filterIsInstance<Marker>()
     layersToRemove.forEach { mapView.layerManager.layers.remove(it) }
 
-    // أيقونة بسيطة للعلامة (نستخدم أيقونة النظام مؤقتاً)
     val drawable: Drawable? = ContextCompat.getDrawable(context, android.R.drawable.ic_menu_mylocation)
     val bitmap: Bitmap? = drawable?.let { AndroidGraphicFactory.convertToBitmap(it) }
 
@@ -331,7 +355,11 @@ private fun addMarkersToMap(context: Context, mapView: MapView, stores: List<Sto
 }
 
 @SuppressLint("MissingPermission")
-private fun moveToCurrentLocation(context: Context, mapView: MapView?) {
+private fun moveToCurrentLocation(
+    context: Context,
+    mapView: MapView?,
+    onLocation: ((Double, Double) -> Unit)? = null
+) {
     if (mapView == null) return
 
     val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
@@ -344,12 +372,27 @@ private fun moveToCurrentLocation(context: Context, mapView: MapView?) {
             val latLong = LatLong(location.latitude, location.longitude)
             mapView.model.mapViewPosition.animateTo(latLong)
             mapView.model.mapViewPosition.zoomLevel = 16.toByte()
+            onLocation?.invoke(location.latitude, location.longitude)
             Toast.makeText(context, "تم تحديد موقعك الحالي", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, "تعذر الحصول على الموقع، تأكد من تفعيل GPS", Toast.LENGTH_LONG).show()
         }
     }.addOnFailureListener {
         Toast.makeText(context, "حدث خطأ أثناء تحديد الموقع", Toast.LENGTH_LONG).show()
+    }
+}
+
+@SuppressLint("MissingPermission")
+private fun tryGetLastLocation(context: Context, onLocation: (Double, Double) -> Unit) {
+    val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+    val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+    if (fine != PackageManager.PERMISSION_GRANTED && coarse != PackageManager.PERMISSION_GRANTED) return
+
+    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+        if (location != null) {
+            onLocation(location.latitude, location.longitude)
+        }
     }
 }
 
