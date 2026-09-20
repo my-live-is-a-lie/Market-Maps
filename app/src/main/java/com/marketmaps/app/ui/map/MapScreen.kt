@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.drawable.Drawable
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.widget.Toast
@@ -34,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +55,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.marketmaps.app.data.Store
 import com.marketmaps.app.data.StoreRepository
 import kotlinx.coroutines.launch
+import org.mapsforge.core.graphics.Bitmap
 import org.mapsforge.core.model.LatLong
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 import org.mapsforge.map.android.util.AndroidUtil
@@ -60,6 +63,7 @@ import org.mapsforge.map.android.view.MapView
 import org.mapsforge.map.layer.cache.TileCache
 import org.mapsforge.map.layer.download.TileDownloadLayer
 import org.mapsforge.map.layer.download.tilesource.OpenStreetMapMapnik
+import org.mapsforge.map.layer.overlay.Marker
 
 @Composable
 fun MapScreen(
@@ -81,9 +85,29 @@ fun MapScreen(
     var selectedLon by remember { mutableStateOf(0.0) }
 
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+    var stores by remember { mutableStateOf<List<Store>>(emptyList()) }
 
     val isAddModeRef = remember { mutableStateOf(isAddMode) }
     isAddModeRef.value = isAddMode
+
+    // تحميل المحلات عند فتح الشاشة
+    LaunchedEffect(Unit) {
+        val result = storeRepository.getAllStores()
+        if (result.isSuccess) {
+            stores = result.getOrDefault(emptyList())
+            // إضافة العلامات بعد تحميل المحلات
+            mapViewRef?.let { mapView ->
+                addMarkersToMap(context, mapView, stores)
+            }
+        }
+    }
+
+    // تحديث العلامات عندما يتغير mapView أو قائمة المحلات
+    LaunchedEffect(mapViewRef, stores) {
+        mapViewRef?.let { mapView ->
+            addMarkersToMap(context, mapView, stores)
+        }
+    }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -263,6 +287,11 @@ fun MapScreen(
                             val result = storeRepository.addStore(store)
                             if (result.isSuccess) {
                                 Toast.makeText(context, "تم حفظ المحل بنجاح", Toast.LENGTH_SHORT).show()
+                                // إعادة تحميل المحلات لإظهار العلامة الجديدة
+                                val refreshed = storeRepository.getAllStores()
+                                if (refreshed.isSuccess) {
+                                    stores = refreshed.getOrDefault(emptyList())
+                                }
                                 showAddDialog = false
                                 isAddMode = false
                             } else {
@@ -277,6 +306,27 @@ fun MapScreen(
                 )
             }
         }
+    }
+}
+
+/**
+ * إضافة علامات المحلات على الخريطة.
+ */
+private fun addMarkersToMap(context: Context, mapView: MapView, stores: List<Store>) {
+    // إزالة العلامات القديمة (غير طبقة البلاطات)
+    val layersToRemove = mapView.layerManager.layers.filterIsInstance<Marker>()
+    layersToRemove.forEach { mapView.layerManager.layers.remove(it) }
+
+    // أيقونة بسيطة للعلامة (نستخدم أيقونة النظام مؤقتاً)
+    val drawable: Drawable? = ContextCompat.getDrawable(context, android.R.drawable.ic_menu_mylocation)
+    val bitmap: Bitmap? = drawable?.let { AndroidGraphicFactory.convertToBitmap(it) }
+
+    if (bitmap == null) return
+
+    stores.forEach { store ->
+        val latLong = LatLong(store.latitude, store.longitude)
+        val marker = Marker(latLong, bitmap, 0, -bitmap.height / 2)
+        mapView.layerManager.layers.add(marker)
     }
 }
 

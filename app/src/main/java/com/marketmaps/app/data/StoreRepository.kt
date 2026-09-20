@@ -13,7 +13,6 @@ class StoreRepository {
 
     /**
      * حفظ محل جديد.
-     * يُرجع الـ id الذي أنشأه Firestore.
      */
     suspend fun addStore(store: Store): Result<String> {
         return try {
@@ -27,6 +26,33 @@ class StoreRepository {
             )
             val documentRef = collection.add(data).await()
             Result.success(documentRef.id)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * جلب كل المحلات.
+     */
+    suspend fun getAllStores(): Result<List<Store>> {
+        return try {
+            val snapshot = collection.get().await()
+            val stores = snapshot.documents.mapNotNull { doc ->
+                try {
+                    Store(
+                        id = doc.id,
+                        name = doc.getString("name") ?: "",
+                        category = doc.getString("category") ?: "",
+                        description = doc.getString("description") ?: "",
+                        latitude = doc.getDouble("latitude") ?: 0.0,
+                        longitude = doc.getDouble("longitude") ?: 0.0,
+                        createdAt = doc.getLong("createdAt") ?: 0L
+                    )
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            Result.success(stores)
         } catch (e: Exception) {
             Result.failure(e)
         }
