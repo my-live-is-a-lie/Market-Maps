@@ -11,9 +11,6 @@ class StoreRepository {
     private val db = FirebaseFirestore.getInstance()
     private val collection = db.collection("stores")
 
-    /**
-     * حفظ محل جديد.
-     */
     suspend fun addStore(store: Store): Result<String> {
         return try {
             val data = hashMapOf(
@@ -31,9 +28,6 @@ class StoreRepository {
         }
     }
 
-    /**
-     * جلب كل المحلات.
-     */
     suspend fun getAllStores(): Result<List<Store>> {
         return try {
             val snapshot = collection.get().await()
@@ -53,6 +47,39 @@ class StoreRepository {
                 }
             }
             Result.success(stores)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * تحديث محل موجود.
+     */
+    suspend fun updateStore(store: Store): Result<Unit> {
+        return try {
+            if (store.id.isBlank()) return Result.failure(Exception("معرف المحل غير موجود"))
+            val data = hashMapOf(
+                "name" to store.name,
+                "category" to store.category,
+                "description" to store.description,
+                "latitude" to store.latitude,
+                "longitude" to store.longitude
+            )
+            collection.document(store.id).update(data as Map<String, Any>).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * حذف محل.
+     */
+    suspend fun deleteStore(storeId: String): Result<Unit> {
+        return try {
+            if (storeId.isBlank()) return Result.failure(Exception("معرف المحل غير موجود"))
+            collection.document(storeId).delete().await()
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
