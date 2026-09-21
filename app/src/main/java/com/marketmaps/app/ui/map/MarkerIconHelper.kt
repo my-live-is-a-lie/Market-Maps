@@ -4,17 +4,20 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.Bitmap as AndroidBitmap
 import org.mapsforge.core.graphics.Bitmap
-import org.mapsforge.map.android.graphics.AndroidGraphicFactory
+import org.mapsforge.map.android.graphics.AndroidBitmap as MapsforgeAndroidBitmap
 
 /**
- * أيقونات علامات — حجم كبير + موقع المستخدم بالأحمر.
+ * أيقونات علامات.
+ *
+ * مهم: لا نُخزّن كائن Mapsforge Bitmap في الكاش لأن Marker يستدعي
+ * decrementRefCount عند الحذف فيُدمَّر الـ bitmap ويسبب NullPointerException.
+ * نخزّن نسخة Android فقط وننشئ Mapsforge Bitmap جديداً في كل مرة.
  */
 object MarkerIconHelper {
 
-    private val cache = mutableMapOf<String, Bitmap>()
+    private val androidCache = mutableMapOf<String, AndroidBitmap>()
 
     fun colorForCategory(category: String): Int {
         val c = category.lowercase()
@@ -42,17 +45,23 @@ object MarkerIconHelper {
 
     fun getMarkerBitmap(category: String): Bitmap {
         val color = colorForCategory(category)
-        val key = "store_v2_$color"
-        // حجم أكبر بكثير (حوالي ضعف السابق)
-        return cache.getOrPut(key) { createPinBitmap(color, 168, 224) }
+        val key = "store_$color"
+        val template = androidCache.getOrPut(key) { createPinAndroid(color, 168, 224) }
+        val copy = template.copy(AndroidBitmap.Config.ARGB_8888, false)
+            ?: template.copy(AndroidBitmap.Config.ARGB_8888, true)
+            ?: createPinAndroid(color, 168, 224)
+        return MapsforgeAndroidBitmap(copy)
     }
 
-    /** علامة الموقع الحالي — حمراء */
     fun getUserLocationBitmap(): Bitmap {
-        return cache.getOrPut("user_red_v2") { createUserPinBitmap() }
+        val template = androidCache.getOrPut("user_red") { createUserPinAndroid() }
+        val copy = template.copy(AndroidBitmap.Config.ARGB_8888, false)
+            ?: template.copy(AndroidBitmap.Config.ARGB_8888, true)
+            ?: createUserPinAndroid()
+        return MapsforgeAndroidBitmap(copy)
     }
 
-    private fun createPinBitmap(color: Int, width: Int, height: Int): Bitmap {
+    private fun createPinAndroid(color: Int, width: Int, height: Int): AndroidBitmap {
         val androidBmp = AndroidBitmap.createBitmap(width, height, AndroidBitmap.Config.ARGB_8888)
         val canvas = Canvas(androidBmp)
 
@@ -94,12 +103,10 @@ object MarkerIconHelper {
         }
         canvas.drawCircle(headCx, headCy, headRadius - 2.5f, stroke)
 
-        val drawable = BitmapDrawable(null, androidBmp)
-        return AndroidGraphicFactory.convertToBitmap(drawable)
+        return androidBmp
     }
 
-    /** دبوس أحمر لموقع المستخدم */
-    private fun createUserPinBitmap(): Bitmap {
+    private fun createUserPinAndroid(): AndroidBitmap {
         val width = 140
         val height = 180
         val color = Color.parseColor("#E53935")
@@ -142,7 +149,6 @@ object MarkerIconHelper {
         }
         canvas.drawCircle(headCx, headCy, headRadius * 0.18f, center)
 
-        val drawable = BitmapDrawable(null, androidBmp)
-        return AndroidGraphicFactory.convertToBitmap(drawable)
+        return androidBmp
     }
 }
