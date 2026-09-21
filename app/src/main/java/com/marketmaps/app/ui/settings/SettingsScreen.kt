@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -22,6 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -37,9 +39,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.MapDownloader
+import com.marketmaps.app.data.MapProvider
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,6 +56,7 @@ fun SettingsScreen(
     val prefs = remember { AppPreferences(context) }
 
     val offlineMode by prefs.offlineMode.collectAsState(initial = false)
+    val mapProvider by prefs.mapProvider.collectAsState(initial = MapProvider.GOOGLE)
     var mapDownloaded by remember { mutableStateOf(MapDownloader.isEgyptMapDownloaded(context)) }
     var isDownloading by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
@@ -77,12 +82,51 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "الخريطة بدون إنترنت",
+                text = "نوع الخريطة",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(8.dp)) {
+                    MapProviderOption(
+                        title = "خرائط جوجل (موصى به)",
+                        subtitle = "أدق وأكثر وضوحاً — يحتاج إنترنت",
+                        selected = mapProvider == MapProvider.GOOGLE,
+                        onClick = {
+                            scope.launch {
+                                prefs.setMapProvider(MapProvider.GOOGLE)
+                                prefs.setOfflineMode(false)
+                                Toast.makeText(context, "تم اختيار خرائط جوجل", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                    MapProviderOption(
+                        title = "Mapsforge",
+                        subtitle = "يعمل بدون إنترنت بعد تحميل الخريطة",
+                        selected = mapProvider == MapProvider.MAPSFORGE,
+                        onClick = {
+                            scope.launch {
+                                prefs.setMapProvider(MapProvider.MAPSFORGE)
+                                Toast.makeText(context, "تم اختيار Mapsforge", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
+            }
+
+            Text(
+                text = "ملاحظة: خرائط جوجل تحتاج مفتاح API من Google Cloud. راجع ملف README.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Text(
+                text = "الخريطة بدون إنترنت (Mapsforge)",
                 style = MaterialTheme.typography.titleLarge
             )
 
             Text(
-                text = "يمكنك تحميل خريطة مصر (حوالي 173 ميجا) لاستخدام التطبيق بدون اتصال. لن يتم التحميل تلقائياً.",
+                text = "تحميل خريطة مصر (~173 ميجا) لاستخدام Mapsforge بدون اتصال.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -149,39 +193,41 @@ fun SettingsScreen(
                 }
             }
 
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("وضع بدون إنترنت", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            text = if (mapDownloaded)
-                                "عند التفعيل تُستخدم الخريطة المحمّلة"
-                            else
-                                "حمّل الخريطة أولاً لتفعيل هذا الخيار",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+            if (mapProvider == MapProvider.MAPSFORGE) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("وضع بدون إنترنت", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = if (mapDownloaded)
+                                    "عند التفعيل تُستخدم الخريطة المحمّلة"
+                                else
+                                    "حمّل الخريطة أولاً",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = offlineMode && mapDownloaded,
+                            enabled = mapDownloaded && !isDownloading,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    prefs.setOfflineMode(enabled)
+                                    Toast.makeText(
+                                        context,
+                                        if (enabled) "وضع بدون إنترنت" else "وضع الإنترنت",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
                         )
                     }
-                    Switch(
-                        checked = offlineMode && mapDownloaded,
-                        enabled = mapDownloaded && !isDownloading,
-                        onCheckedChange = { enabled ->
-                            scope.launch {
-                                prefs.setOfflineMode(enabled)
-                                Toast.makeText(
-                                    context,
-                                    if (enabled) "تم تفعيل وضع بدون إنترنت" else "تم التبديل إلى الإنترنت",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                    )
                 }
             }
 
@@ -193,6 +239,36 @@ fun SettingsScreen(
                     CircularProgressIndicator()
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MapProviderOption(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(
+                selected = selected,
+                onClick = onClick,
+                role = Role.RadioButton
+            )
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Column(modifier = Modifier.padding(start = 8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

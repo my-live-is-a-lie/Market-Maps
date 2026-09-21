@@ -6,11 +6,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -20,9 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/**
- * أزرار التنقل بين نتائج البحث (السابق / التالي) مع رقم النتيجة والمسافة.
- */
 @Composable
 fun SearchResultNav(
     currentIndex: Int,
@@ -31,6 +28,7 @@ fun SearchResultNav(
     distanceText: String?,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (total <= 0 || currentIndex < 0) return
@@ -41,20 +39,38 @@ fun SearchResultNav(
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
                 shape = RoundedCornerShape(16.dp)
             )
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = storeName,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1
-        )
-        if (!distanceText.isNullOrBlank()) {
-            Text(
-                text = distanceText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.padding(start = 8.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = storeName,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1
+                )
+                if (!distanceText.isNullOrBlank()) {
+                    Text(
+                        text = distanceText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "إغلاق التنقل",
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -67,7 +83,7 @@ fun SearchResultNav(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                    contentDescription = "النتيجة السابقة",
+                    contentDescription = "السابق",
                     tint = if (currentIndex > 0)
                         MaterialTheme.colorScheme.primary
                     else
@@ -88,7 +104,7 @@ fun SearchResultNav(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "النتيجة التالية",
+                    contentDescription = "التالي",
                     tint = if (currentIndex < total - 1)
                         MaterialTheme.colorScheme.primary
                     else
