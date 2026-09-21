@@ -132,7 +132,6 @@ fun MapScreen(
         val item = navResults[index]
         val store = item.store
         moveCamera(store.latitude, store.longitude, 17f)
-        selectedStore = store
     }
 
     val isAddModeRef = remember { mutableStateOf(isAddMode) }
@@ -328,7 +327,6 @@ fun MapScreen(
                     navResults = if (searchQuery.isNotBlank()) searchResults else navResults
                     navIndex = navResults.indexOfFirst { it.store.id == store.id }.takeIf { it >= 0 } ?: 0
                     moveCamera(store.latitude, store.longitude, 17f)
-                    selectedStore = store
                 },
                 expanded = searchExpanded,
                 onExpandedChange = { searchExpanded = it },
@@ -353,13 +351,14 @@ fun MapScreen(
                 }
             }
 
-            if (navResults.isNotEmpty() && navIndex in navResults.indices) {
+            if (navResults.size > 1 && navIndex in navResults.indices) {
                 val current = navResults[navIndex]
                 val distanceText = if (current.distanceMeters >= 0) formatDistance(current.distanceMeters) else null
+                val displayName = "${current.store.category} ${current.store.name}".trim()
                 SearchResultNav(
                     currentIndex = navIndex,
                     total = navResults.size,
-                    storeName = current.store.name,
+                    storeName = displayName,
                     distanceText = distanceText,
                     onPrevious = { goToNavResult(navIndex - 1) },
                     onNext = { goToNavResult(navIndex + 1) },
@@ -368,8 +367,8 @@ fun MapScreen(
                         navIndex = -1
                     },
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 24.dp)
+                        .align(Alignment.BottomStart)
+                        .padding(start = 16.dp, bottom = 100.dp)
                         .zIndex(2f)
                 )
             }
