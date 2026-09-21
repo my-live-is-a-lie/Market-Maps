@@ -50,7 +50,6 @@ android {
 
     packaging {
         jniLibs {
-            // استبعاد مكتبات المعالجات الأخرى إن وُجدت في التبعيات
             excludes += setOf(
                 "**/armeabi/**",
                 "**/armeabi-v7a/**",
@@ -81,18 +80,18 @@ dependencies {
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
-    // Mapsforge (أونلاين + أوفلاين)
-    implementation("org.mapsforge:mapsforge-map-android:0.30.0")
-    implementation("org.mapsforge:mapsforge-map:0.30.0")
-    implementation("org.mapsforge:mapsforge-themes:0.30.0")
-    implementation("org.mapsforge:mapsforge-map-reader:0.30.0")
+    // Mapsforge — أحدث إصدار منشور على Maven Central
+    implementation("org.mapsforge:mapsforge-map-android:0.25.0")
+    implementation("org.mapsforge:mapsforge-map:0.25.0")
+    implementation("org.mapsforge:mapsforge-themes:0.25.0")
+    implementation("org.mapsforge:mapsforge-map-reader:0.25.0")
+    implementation("com.caverock:androidsvg:1.4")
 
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-firestore-ktx")
 
-    // OkHttp لتحميل ملف الخريطة
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
