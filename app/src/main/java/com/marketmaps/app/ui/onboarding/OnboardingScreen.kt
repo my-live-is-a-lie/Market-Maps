@@ -47,9 +47,6 @@ import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.EgyptLocations
 import kotlinx.coroutines.launch
 
-/**
- * شاشة أول استخدام: تحديد الموقع عبر GPS أو اختيار يدوي.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingScreen(
@@ -136,8 +133,7 @@ fun OnboardingScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
-            text = "حدد موقعك لنبدأ بعرض المحلات القريبة منك.
-يمكنك لاحقاً تحميل الخريطة للعمل بدون إنترنت من الإعدادات.",
+            text = "حدد موقعك لنبدأ بعرض المحلات القريبة منك. يمكنك لاحقاً تحميل الخريطة للعمل بدون إنترنت من الإعدادات.",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -145,7 +141,6 @@ fun OnboardingScreen(
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // زر GPS
         Button(
             onClick = { requestGps() },
             enabled = !isLoadingGps,
@@ -165,7 +160,6 @@ fun OnboardingScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // الدولة (ثابتة حالياً)
         OutlinedTextField(
             value = "مصر",
             onValueChange = {},
@@ -176,7 +170,6 @@ fun OnboardingScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // المحافظة
         ExposedDropdownMenuBox(
             expanded = expandedGov,
             onExpandedChange = { expandedGov = it }
@@ -210,7 +203,6 @@ fun OnboardingScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // المنطقة
         if (selectedGov != null) {
             ExposedDropdownMenuBox(
                 expanded = expandedArea,
@@ -263,7 +255,6 @@ fun OnboardingScreen(
 
         OutlinedButton(
             onClick = {
-                // تخطي: القاهرة كافتراضي
                 finishWithLocation(30.0444, 31.2357, "القاهرة")
             },
             modifier = Modifier.fillMaxWidth()

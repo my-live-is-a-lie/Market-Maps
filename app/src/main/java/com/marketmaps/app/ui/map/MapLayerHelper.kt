@@ -13,7 +13,7 @@ import org.mapsforge.map.layer.download.TileDownloadLayer
 import org.mapsforge.map.layer.download.tilesource.OpenStreetMapMapnik
 import org.mapsforge.map.layer.renderer.TileRendererLayer
 import org.mapsforge.map.reader.MapFile
-import org.mapsforge.map.rendertheme.internal.InternalRenderTheme
+import org.mapsforge.map.rendertheme.internal.MapsforgeThemes
 import java.io.File
 
 /**
@@ -81,7 +81,7 @@ object MapLayerHelper {
                 bundle.tileCache,
                 mapView.model.mapViewPosition,
                 mapFile as MapDataStore,
-                InternalRenderTheme.DEFAULT,
+                MapsforgeThemes.DEFAULT,
                 false,
                 true,
                 false
