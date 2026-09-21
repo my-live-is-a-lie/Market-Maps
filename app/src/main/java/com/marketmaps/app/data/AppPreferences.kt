@@ -13,6 +13,12 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "market_maps_prefs")
 
+/** مزود الخريطة: جوجل (افتراضي) أو Mapsforge */
+enum class MapProvider {
+    GOOGLE,
+    MAPSFORGE
+}
+
 class AppPreferences(private val context: Context) {
 
     private val onboardingDoneKey = booleanPreferencesKey("onboarding_done")
@@ -22,6 +28,7 @@ class AppPreferences(private val context: Context) {
     private val areaLabelKey = stringPreferencesKey("area_label")
     private val offlineModeKey = booleanPreferencesKey("offline_mode")
     private val mapFileNameKey = stringPreferencesKey("map_file_name")
+    private val mapProviderKey = stringPreferencesKey("map_provider")
 
     val onboardingDone: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[onboardingDoneKey] ?: false
@@ -40,6 +47,14 @@ class AppPreferences(private val context: Context) {
 
     val mapFileName: Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[mapFileNameKey]
+    }
+
+    /** الافتراضي: خرائط جوجل */
+    val mapProvider: Flow<MapProvider> = context.dataStore.data.map { prefs ->
+        when (prefs[mapProviderKey]) {
+            "MAPSFORGE" -> MapProvider.MAPSFORGE
+            else -> MapProvider.GOOGLE
+        }
     }
 
     suspend fun setOnboardingDone(done: Boolean = true) {
@@ -61,5 +76,9 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setMapFileName(name: String) {
         context.dataStore.edit { it[mapFileNameKey] = name }
+    }
+
+    suspend fun setMapProvider(provider: MapProvider) {
+        context.dataStore.edit { it[mapProviderKey] = provider.name }
     }
 }
