@@ -57,6 +57,7 @@ fun SettingsScreen(
 
     val offlineMode by prefs.offlineMode.collectAsState(initial = false)
     val mapProvider by prefs.mapProvider.collectAsState(initial = MapProvider.MAPSFORGE)
+    val rememberFilter by prefs.rememberFilter.collectAsState(initial = false)
     var mapDownloaded by remember { mutableStateOf(MapDownloader.isEgyptMapDownloaded(context)) }
     var isDownloading by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
@@ -109,7 +110,6 @@ fun SettingsScreen(
                                 "خرائط جوجل تحتاج بطاقة دفع. استخدم OpenStreetMap الآن.",
                                 Toast.LENGTH_LONG
                             ).show()
-                            // لا نفعّل جوجل تلقائياً بدون مفتاح
                         }
                     )
                 }
@@ -216,6 +216,43 @@ fun SettingsScreen(
                                 Toast.makeText(
                                     context,
                                     if (enabled) "وضع بدون إنترنت" else "وضع الإنترنت (أوضح)",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    )
+                }
+            }
+
+            Text(
+                text = "البحث والفلاتر",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("تذكر إعدادات الفلتر", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "عند التفعيل يُحفظ آخر فلتر استخدمته. عند الإيقاف يعود للـ«الكل» في كل مرة.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = rememberFilter,
+                        onCheckedChange = { enabled ->
+                            scope.launch {
+                                prefs.setRememberFilter(enabled)
+                                Toast.makeText(
+                                    context,
+                                    if (enabled) "سيتم تذكر الفلتر" else "الفلتر سيعود للافتراضي",
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }
