@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,10 +46,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -74,6 +78,7 @@ fun MapScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val storeRepository = remember { StoreRepository() }
 
@@ -89,6 +94,7 @@ fun MapScreen(
     var selectedLon by remember { mutableStateOf(0.0) }
 
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+    var downloadLayerRef by remember { mutableStateOf<TileDownloadLayer?>(null) }
     var stores by remember { mutableStateOf<List<Store>>(emptyList()) }
 
     var searchQuery by remember { mutableStateOf("") }
@@ -107,6 +113,22 @@ fun MapScreen(
 
     val storesRef = remember { mutableStateOf(stores) }
     storesRef.value = stores
+
+    // ربط دورة حياة الشاشة بطبقة تحميل البلاطات (إيقاف عند الخروج من الشاشة)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> downloadLayerRef?.onResume()
+                Lifecycle.Event.ON_PAUSE -> downloadLayerRef?.onPause()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            downloadLayerRef?.onPause()
+        }
+    }
 
     LaunchedEffect(Unit) {
         val result = storeRepository.getAllStores()
@@ -170,8 +192,9 @@ fun MapScreen(
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             AndroidView(
                 factory = { ctx ->
-                    val mapView = createMapView(ctx)
+                    val (mapView, layer) = createMapViewWithLayer(ctx)
                     mapViewRef = mapView
+                    downloadLayerRef = layer
 
                     val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
                         override fun onLongPress(e: MotionEvent) {
@@ -203,7 +226,18 @@ fun MapScreen(
                     mapView
                 },
                 modifier = Modifier.fillMaxSize(),
-                update = { mapView -> mapViewRef = mapView }
+                update = { mapView ->
+                    mapViewRef = mapView
+                    // تأكد أن الطبقة تعمل أثناء ظهور الشاشة
+                    downloadLayerRef?.onResume()
+                },
+                onRelease = { mapView ->
+                    // إيقاف التحميل وتحرير الموارد عند إزالة الـ View
+                    downloadLayerRef?.onPause()
+                    mapView.destroy()
+                    mapViewRef = null
+                    downloadLayerRef = null
+                }
             )
 
             SearchBar(
@@ -442,20 +476,41 @@ private fun tryGetLastLocation(context: Context, onLocation: (Double, Double) ->
     }
 }
 
-private fun createMapView(context: Context): MapView {
+/**
+ * إنشاء MapView مع طبقة تحميل البلاطات.
+ * يُرجع الاثنين معاً لإدارة دورة الحياة بشكل صحيح.
+ */
+private fun createMapViewWithLayer(context: Context): Pair<MapView, TileDownloadLayer> {
     val mapView = MapView(context).apply {
         isClickable = true
         setBuiltInZoomControls(false)
     }
+
     val tileCache: TileCache = AndroidUtil.createTileCache(
-        context, "mapcache", mapView.model.displayModel.tileSize, 1.0f, mapView.model.frameBufferModel.overdrawFactor
+        context,
+        "mapcache",
+        mapView.model.displayModel.tileSize,
+        1.0f,
+        mapView.model.frameBufferModel.overdrawFactor
     )
-    val tileSource = OpenStreetMapMapnik.INSTANCE.apply { userAgent = "MarketMaps/1.0" }
-    val downloadLayer = TileDownloadLayer(tileCache, mapView.model.mapViewPosition, tileSource, AndroidGraphicFactory.INSTANCE)
+
+    val tileSource = OpenStreetMapMapnik.INSTANCE.apply {
+        userAgent = "MarketMaps/1.0"
+    }
+
+    val downloadLayer = TileDownloadLayer(
+        tileCache,
+        mapView.model.mapViewPosition,
+        tileSource,
+        AndroidGraphicFactory.INSTANCE
+    )
+
     mapView.layerManager.layers.add(downloadLayer)
     downloadLayer.onResume()
+
+    // موقع افتراضي: القاهرة
     mapView.model.mapViewPosition.setCenter(LatLong(30.0444, 31.2357))
     mapView.model.mapViewPosition.zoomLevel = 12.toByte()
-    mapView.tag = downloadLayer
-    return mapView
+
+    return mapView to downloadLayer
 }
