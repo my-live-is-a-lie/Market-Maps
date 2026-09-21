@@ -20,8 +20,11 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
+      # لا نستخدم حزمة tools القديمة (أصبحت غير متوفرة وتسبب فشل البناء)
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
       - name: Ensure Gradle Wrapper JAR
         run: |
@@ -36,7 +39,7 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Debug APK
+      - name: Build Debug APK (arm64-v8a only)
         run: ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: List APK outputs
@@ -47,7 +50,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: MarketMaps-debug
+          name: MarketMaps-debug-arm64
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 30
           if-no-files-found: error
