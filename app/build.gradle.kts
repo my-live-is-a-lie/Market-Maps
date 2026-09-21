@@ -17,6 +17,12 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // فترة الاختبار: ARM64 فقط (أصغر حجماً وأسرع بناءً)
+        // لاحقاً يمكن إضافة: "armeabi-v7a", "x86_64"
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -40,6 +46,19 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    packaging {
+        jniLibs {
+            // استبعاد مكتبات المعالجات الأخرى إن وُجدت في التبعيات
+            excludes += setOf(
+                "**/armeabi/**",
+                "**/armeabi-v7a/**",
+                "**/x86/**",
+                "**/x86_64/**",
+                "**/mips/**"
+            )
+        }
     }
 }
 
