@@ -56,7 +56,7 @@ fun SettingsScreen(
     val prefs = remember { AppPreferences(context) }
 
     val offlineMode by prefs.offlineMode.collectAsState(initial = false)
-    val mapProvider by prefs.mapProvider.collectAsState(initial = MapProvider.GOOGLE)
+    val mapProvider by prefs.mapProvider.collectAsState(initial = MapProvider.MAPSFORGE)
     var mapDownloaded by remember { mutableStateOf(MapDownloader.isEgyptMapDownloaded(context)) }
     var isDownloading by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
@@ -89,44 +89,39 @@ fun SettingsScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(8.dp)) {
                     MapProviderOption(
-                        title = "خرائط جوجل (موصى به)",
-                        subtitle = "أدق وأكثر وضوحاً — يحتاج إنترنت",
-                        selected = mapProvider == MapProvider.GOOGLE,
-                        onClick = {
-                            scope.launch {
-                                prefs.setMapProvider(MapProvider.GOOGLE)
-                                prefs.setOfflineMode(false)
-                                Toast.makeText(context, "تم اختيار خرائط جوجل", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    )
-                    MapProviderOption(
-                        title = "Mapsforge",
-                        subtitle = "يعمل بدون إنترنت بعد تحميل الخريطة",
+                        title = "OpenStreetMap (موصى به حالياً)",
+                        subtitle = "مجاني بالكامل — بدون بطاقة أو مفتاح. يعمل بالإنترنت.",
                         selected = mapProvider == MapProvider.MAPSFORGE,
                         onClick = {
                             scope.launch {
                                 prefs.setMapProvider(MapProvider.MAPSFORGE)
-                                Toast.makeText(context, "تم اختيار Mapsforge", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "تم اختيار OpenStreetMap", Toast.LENGTH_SHORT).show()
                             }
+                        }
+                    )
+                    MapProviderOption(
+                        title = "خرائط جوجل (لاحقاً)",
+                        subtitle = "أدق، لكن يحتاج مفتاح API وحساب فوترة ببطاقة. عطّل حالياً حتى تتوفر البطاقة.",
+                        selected = mapProvider == MapProvider.GOOGLE,
+                        onClick = {
+                            Toast.makeText(
+                                context,
+                                "خرائط جوجل تحتاج بطاقة دفع. استخدم OpenStreetMap الآن.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            // لا نفعّل جوجل تلقائياً بدون مفتاح
                         }
                     )
                 }
             }
 
             Text(
-                text = "ملاحظة: خرائط جوجل تحتاج مفتاح API من Google Cloud. راجع ملف README.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Text(
-                text = "الخريطة بدون إنترنت (Mapsforge)",
+                text = "الخريطة بدون إنترنت",
                 style = MaterialTheme.typography.titleLarge
             )
 
             Text(
-                text = "تحميل خريطة مصر (~173 ميجا) لاستخدام Mapsforge بدون اتصال.",
+                text = "حمّل خريطة مصر (~173 ميجا) لاستخدام التطبيق بدون إنترنت. الجودة أقل من وضع الإنترنت عند التكبير الشديد.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -193,41 +188,39 @@ fun SettingsScreen(
                 }
             }
 
-            if (mapProvider == MapProvider.MAPSFORGE) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("وضع بدون إنترنت", style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                text = if (mapDownloaded)
-                                    "عند التفعيل تُستخدم الخريطة المحمّلة"
-                                else
-                                    "حمّل الخريطة أولاً",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = offlineMode && mapDownloaded,
-                            enabled = mapDownloaded && !isDownloading,
-                            onCheckedChange = { enabled ->
-                                scope.launch {
-                                    prefs.setOfflineMode(enabled)
-                                    Toast.makeText(
-                                        context,
-                                        if (enabled) "وضع بدون إنترنت" else "وضع الإنترنت",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("وضع بدون إنترنت", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = if (mapDownloaded)
+                                "عند التفعيل تُستخدم الخريطة المحمّلة (جودة أقل عند التكبير)"
+                            else
+                                "حمّل الخريطة أولاً",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Switch(
+                        checked = offlineMode && mapDownloaded,
+                        enabled = mapDownloaded && !isDownloading,
+                        onCheckedChange = { enabled ->
+                            scope.launch {
+                                prefs.setOfflineMode(enabled)
+                                Toast.makeText(
+                                    context,
+                                    if (enabled) "وضع بدون إنترنت" else "وضع الإنترنت (أوضح)",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    )
                 }
             }
 

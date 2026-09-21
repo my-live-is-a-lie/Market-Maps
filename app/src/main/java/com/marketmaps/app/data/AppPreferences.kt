@@ -13,10 +13,14 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "market_maps_prefs")
 
-/** مزود الخريطة: جوجل (افتراضي) أو Mapsforge */
+/**
+ * مزود الخريطة:
+ * MAPSFORGE = افتراضي (OpenStreetMap مجاني، بدون بطاقة)
+ * GOOGLE = لاحقاً عند توفر مفتاح API وبطاقة
+ */
 enum class MapProvider {
-    GOOGLE,
-    MAPSFORGE
+    MAPSFORGE,
+    GOOGLE
 }
 
 class AppPreferences(private val context: Context) {
@@ -49,11 +53,11 @@ class AppPreferences(private val context: Context) {
         prefs[mapFileNameKey]
     }
 
-    /** الافتراضي: خرائط جوجل */
+    /** الافتراضي: Mapsforge (مجاني بدون بطاقة) */
     val mapProvider: Flow<MapProvider> = context.dataStore.data.map { prefs ->
         when (prefs[mapProviderKey]) {
-            "MAPSFORGE" -> MapProvider.MAPSFORGE
-            else -> MapProvider.GOOGLE
+            "GOOGLE" -> MapProvider.GOOGLE
+            else -> MapProvider.MAPSFORGE
         }
     }
 
