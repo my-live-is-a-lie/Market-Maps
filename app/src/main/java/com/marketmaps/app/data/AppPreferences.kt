@@ -13,9 +13,6 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "market_maps_prefs")
 
-/**
- * حفظ إعدادات التطبيق: هل اكتمل أول استخدام، وآخر موقع للخريطة.
- */
 class AppPreferences(private val context: Context) {
 
     private val onboardingDoneKey = booleanPreferencesKey("onboarding_done")
@@ -23,6 +20,8 @@ class AppPreferences(private val context: Context) {
     private val lastLonKey = doublePreferencesKey("last_lon")
     private val lastZoomKey = doublePreferencesKey("last_zoom")
     private val areaLabelKey = stringPreferencesKey("area_label")
+    private val offlineModeKey = booleanPreferencesKey("offline_mode")
+    private val mapFileNameKey = stringPreferencesKey("map_file_name")
 
     val onboardingDone: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[onboardingDoneKey] ?: false
@@ -33,6 +32,14 @@ class AppPreferences(private val context: Context) {
         val lon = prefs[lastLonKey]
         val zoom = prefs[lastZoomKey] ?: 14.0
         if (lat != null && lon != null) Triple(lat, lon, zoom) else null
+    }
+
+    val offlineMode: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[offlineModeKey] ?: false
+    }
+
+    val mapFileName: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[mapFileNameKey]
     }
 
     suspend fun setOnboardingDone(done: Boolean = true) {
@@ -46,5 +53,13 @@ class AppPreferences(private val context: Context) {
             prefs[lastZoomKey] = zoom
             if (areaLabel.isNotBlank()) prefs[areaLabelKey] = areaLabel
         }
+    }
+
+    suspend fun setOfflineMode(enabled: Boolean) {
+        context.dataStore.edit { it[offlineModeKey] = enabled }
+    }
+
+    suspend fun setMapFileName(name: String) {
+        context.dataStore.edit { it[mapFileNameKey] = name }
     }
 }
