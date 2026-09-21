@@ -7,8 +7,16 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.ui.map.MapScreen
+import com.marketmaps.app.ui.onboarding.OnboardingScreen
 import com.marketmaps.app.ui.theme.MarketMapsTheme
 
 class MainActivity : ComponentActivity() {
@@ -21,8 +29,20 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // عرض شاشة الخريطة مباشرة
-                    MapScreen()
+                    val context = LocalContext.current
+                    val prefs = remember { AppPreferences(context) }
+                    val onboardingDone by prefs.onboardingDone.collectAsState(initial = false)
+
+                    // حالة محلية لإخفاء شاشة الإعداد فوراً بعد الإكمال دون انتظار إعادة تشغيل
+                    var localDone by remember { mutableStateOf(false) }
+
+                    if (onboardingDone || localDone) {
+                        MapScreen()
+                    } else {
+                        OnboardingScreen(
+                            onFinished = { localDone = true }
+                        )
+                    }
                 }
             }
         }
