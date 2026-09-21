@@ -10,7 +10,7 @@ import org.mapsforge.core.graphics.Bitmap
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 
 /**
- * أيقونات علامات ملوّنة — حجم أكبر لسهولة الرؤية.
+ * أيقونات علامات — حجم كبير + موقع المستخدم بالأحمر.
  */
 object MarkerIconHelper {
 
@@ -42,13 +42,14 @@ object MarkerIconHelper {
 
     fun getMarkerBitmap(category: String): Bitmap {
         val color = colorForCategory(category)
-        val key = "store_$color"
-        return cache.getOrPut(key) { createPinBitmap(color, 120, 160) }
+        val key = "store_v2_$color"
+        // حجم أكبر بكثير (حوالي ضعف السابق)
+        return cache.getOrPut(key) { createPinBitmap(color, 168, 224) }
     }
 
-    /** علامة الموقع الحالي (أزرق) */
+    /** علامة الموقع الحالي — حمراء */
     fun getUserLocationBitmap(): Bitmap {
-        return cache.getOrPut("user") { createUserDotBitmap() }
+        return cache.getOrPut("user_red_v2") { createUserPinBitmap() }
     }
 
     private fun createPinBitmap(color: Int, width: Int, height: Int): Bitmap {
@@ -62,14 +63,63 @@ object MarkerIconHelper {
 
         val shadow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            this.color = Color.argb(70, 0, 0, 0)
+            this.color = Color.argb(80, 0, 0, 0)
         }
 
-        canvas.drawCircle(width / 2f + 3f, height * 0.36f + 3f, width * 0.34f, shadow)
+        canvas.drawCircle(width / 2f + 4f, height * 0.34f + 4f, width * 0.36f, shadow)
+
+        val headRadius = width * 0.38f
+        val headCx = width / 2f
+        val headCy = height * 0.32f
+        canvas.drawCircle(headCx, headCy, headRadius, paint)
+
+        val path = Path().apply {
+            moveTo(headCx - headRadius * 0.78f, headCy + headRadius * 0.35f)
+            lineTo(headCx + headRadius * 0.78f, headCy + headRadius * 0.35f)
+            lineTo(headCx, height * 0.96f)
+            close()
+        }
+        canvas.drawPath(path, paint)
+
+        val inner = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            this.color = Color.WHITE
+        }
+        canvas.drawCircle(headCx, headCy, headRadius * 0.38f, inner)
+
+        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 5f
+            this.color = Color.argb(220, 255, 255, 255)
+        }
+        canvas.drawCircle(headCx, headCy, headRadius - 2.5f, stroke)
+
+        val drawable = BitmapDrawable(null, androidBmp)
+        return AndroidGraphicFactory.convertToBitmap(drawable)
+    }
+
+    /** دبوس أحمر لموقع المستخدم */
+    private fun createUserPinBitmap(): Bitmap {
+        val width = 140
+        val height = 180
+        val color = Color.parseColor("#E53935")
+        val androidBmp = AndroidBitmap.createBitmap(width, height, AndroidBitmap.Config.ARGB_8888)
+        val canvas = Canvas(androidBmp)
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            this.color = color
+        }
+        val shadow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            this.color = Color.argb(90, 0, 0, 0)
+        }
+
+        canvas.drawCircle(width / 2f + 3f, height * 0.34f + 3f, width * 0.34f, shadow)
 
         val headRadius = width * 0.36f
         val headCx = width / 2f
-        val headCy = height * 0.34f
+        val headCy = height * 0.32f
         canvas.drawCircle(headCx, headCy, headRadius, paint)
 
         val path = Path().apply {
@@ -84,45 +134,13 @@ object MarkerIconHelper {
             style = Paint.Style.FILL
             this.color = Color.WHITE
         }
-        canvas.drawCircle(headCx, headCy, headRadius * 0.4f, inner)
+        canvas.drawCircle(headCx, headCy, headRadius * 0.35f, inner)
 
-        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 4f
-            this.color = Color.argb(200, 255, 255, 255)
-        }
-        canvas.drawCircle(headCx, headCy, headRadius - 2f, stroke)
-
-        val drawable = BitmapDrawable(null, androidBmp)
-        return AndroidGraphicFactory.convertToBitmap(drawable)
-    }
-
-    private fun createUserDotBitmap(): Bitmap {
-        val size = 64
-        val androidBmp = AndroidBitmap.createBitmap(size, size, AndroidBitmap.Config.ARGB_8888)
-        val canvas = Canvas(androidBmp)
-        val cx = size / 2f
-        val cy = size / 2f
-
-        // هالة شفافة
-        val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val center = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = Color.argb(60, 33, 150, 243)
+            this.color = color
         }
-        canvas.drawCircle(cx, cy, size * 0.48f, halo)
-
-        val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 4f
-            color = Color.WHITE
-        }
-        canvas.drawCircle(cx, cy, size * 0.28f, ring)
-
-        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.FILL
-            color = Color.parseColor("#2196F3")
-        }
-        canvas.drawCircle(cx, cy, size * 0.22f, fill)
+        canvas.drawCircle(headCx, headCy, headRadius * 0.18f, center)
 
         val drawable = BitmapDrawable(null, androidBmp)
         return AndroidGraphicFactory.convertToBitmap(drawable)

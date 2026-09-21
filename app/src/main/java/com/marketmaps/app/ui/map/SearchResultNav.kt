@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -18,8 +19,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
+/**
+ * شريط تنقل مضغوط — يظهر فقط عند أكثر من نتيجة.
+ * يُفضَّل وضعه في أسفل اليسار فوق شريط المقياس قليلاً.
+ */
 @Composable
 fun SearchResultNav(
     currentIndex: Int,
@@ -31,55 +37,55 @@ fun SearchResultNav(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (total <= 0 || currentIndex < 0) return
+    if (total <= 1 || currentIndex < 0) return
 
     Column(
         modifier = modifier
+            .widthIn(max = 200.dp)
             .background(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-                shape = RoundedCornerShape(16.dp)
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                shape = RoundedCornerShape(12.dp)
             )
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.padding(start = 8.dp)
+            modifier = Modifier.padding(start = 4.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = storeName,
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1
-                )
-                if (!distanceText.isNullOrBlank()) {
-                    Text(
-                        text = distanceText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
+            Text(
+                text = storeName,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
             IconButton(
                 onClick = onDismiss,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(28.dp)
             ) {
                 Icon(
                     Icons.Default.Close,
-                    contentDescription = "إغلاق التنقل",
-                    modifier = Modifier.size(18.dp)
+                    contentDescription = "إغلاق",
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
+        if (!distanceText.isNullOrBlank()) {
+            Text(
+                text = distanceText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.Center
         ) {
             IconButton(
                 onClick = onPrevious,
                 enabled = currentIndex > 0,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(36.dp)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
@@ -90,17 +96,14 @@ fun SearchResultNav(
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                 )
             }
-
             Text(
-                text = "${currentIndex + 1} / $total",
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(horizontal = 4.dp)
+                text = "${currentIndex + 1}/$total",
+                style = MaterialTheme.typography.labelMedium
             )
-
             IconButton(
                 onClick = onNext,
                 enabled = currentIndex < total - 1,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(36.dp)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
