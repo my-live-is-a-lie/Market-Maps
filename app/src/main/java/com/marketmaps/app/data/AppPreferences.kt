@@ -13,11 +13,6 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "market_maps_prefs")
 
-/**
- * مزود الخريطة:
- * MAPSFORGE = افتراضي (OpenStreetMap مجاني، بدون بطاقة)
- * GOOGLE = لاحقاً عند توفر مفتاح API وبطاقة
- */
 enum class MapProvider {
     MAPSFORGE,
     GOOGLE
@@ -33,6 +28,9 @@ class AppPreferences(private val context: Context) {
     private val offlineModeKey = booleanPreferencesKey("offline_mode")
     private val mapFileNameKey = stringPreferencesKey("map_file_name")
     private val mapProviderKey = stringPreferencesKey("map_provider")
+    private val rememberFilterKey = booleanPreferencesKey("remember_filter")
+    private val filterTypeKey = stringPreferencesKey("filter_type")
+    private val filterSubKey = stringPreferencesKey("filter_sub")
 
     val onboardingDone: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[onboardingDoneKey] ?: false
@@ -53,12 +51,24 @@ class AppPreferences(private val context: Context) {
         prefs[mapFileNameKey]
     }
 
-    /** الافتراضي: Mapsforge (مجاني بدون بطاقة) */
     val mapProvider: Flow<MapProvider> = context.dataStore.data.map { prefs ->
         when (prefs[mapProviderKey]) {
             "GOOGLE" -> MapProvider.GOOGLE
             else -> MapProvider.MAPSFORGE
         }
+    }
+
+    /** تذكر آخر فلتر عند فتح التطبيق */
+    val rememberFilter: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[rememberFilterKey] ?: false
+    }
+
+    val savedFilterType: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[filterTypeKey] ?: "الكل"
+    }
+
+    val savedFilterSub: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[filterSubKey] ?: "الكل"
     }
 
     suspend fun setOnboardingDone(done: Boolean = true) {
@@ -84,5 +94,16 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setMapProvider(provider: MapProvider) {
         context.dataStore.edit { it[mapProviderKey] = provider.name }
+    }
+
+    suspend fun setRememberFilter(enabled: Boolean) {
+        context.dataStore.edit { it[rememberFilterKey] = enabled }
+    }
+
+    suspend fun saveFilter(type: String, sub: String) {
+        context.dataStore.edit { prefs ->
+            prefs[filterTypeKey] = type
+            prefs[filterSubKey] = sub
+        }
     }
 }
