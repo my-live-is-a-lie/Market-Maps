@@ -4,7 +4,6 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.drawable.Drawable
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.widget.Toast
@@ -65,11 +64,9 @@ import com.marketmaps.app.data.MapDownloader
 import com.marketmaps.app.data.Store
 import com.marketmaps.app.data.StoreRepository
 import kotlinx.coroutines.launch
-import org.mapsforge.core.graphics.Bitmap
 import org.mapsforge.core.model.LatLong
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 import org.mapsforge.map.android.view.MapView
-import org.mapsforge.map.layer.download.TileDownloadLayer
 import org.mapsforge.map.layer.overlay.Marker
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -542,12 +539,14 @@ private fun addMarkersToMap(context: Context, mapView: MapView, stores: List<Sto
     val layersToRemove = mapView.layerManager.layers.filterIsInstance<Marker>()
     layersToRemove.forEach { mapView.layerManager.layers.remove(it) }
 
-    val drawable: Drawable? = ContextCompat.getDrawable(context, android.R.drawable.ic_menu_mylocation)
-    val bitmap: Bitmap? = drawable?.let { AndroidGraphicFactory.convertToBitmap(it) }
-    if (bitmap == null) return
-
     stores.forEach { store ->
-        val marker = Marker(LatLong(store.latitude, store.longitude), bitmap, 0, -bitmap.height / 2)
+        val bitmap = MarkerIconHelper.getMarkerBitmap(store.category)
+        val marker = Marker(
+            LatLong(store.latitude, store.longitude),
+            bitmap,
+            0,
+            -bitmap.height / 2
+        )
         mapView.layerManager.layers.add(marker)
     }
 }
