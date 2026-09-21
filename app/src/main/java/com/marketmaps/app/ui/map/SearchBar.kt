@@ -131,13 +131,8 @@ fun SearchBar(
                                         .padding(16.dp)
                                 ) {
                                     Text(
-                                        text = item.store.name,
+                                        text = "${item.store.category} ${item.store.name}".trim(),
                                         style = MaterialTheme.typography.titleMedium
-                                    )
-                                    Text(
-                                        text = item.store.category,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     if (item.distanceMeters >= 0) {
                                         Spacer(modifier = Modifier.height(4.dp))
@@ -218,8 +213,8 @@ fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
 
 fun formatDistance(meters: Double): String {
     return if (meters < 1000) {
-        "${meters.toInt()} متر"
+        "يبعد ${meters.toInt()} متر"
     } else {
-        String.format("%.1f كم", meters / 1000)
+        String.format("يبعد %.1f كم", meters / 1000)
     }
 }
