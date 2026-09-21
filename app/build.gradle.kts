@@ -13,16 +13,22 @@ android {
         applicationId = "com.marketmaps.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // فترة الاختبار: ARM64 فقط (أصغر حجماً وأسرع بناءً)
-        // لاحقاً يمكن إضافة: "armeabi-v7a", "x86_64"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
+
+        // مفتاح خرائط جوجل — ضعه في local.properties كمفتاح MAPS_API_KEY=...
+        // أو غيّر القيمة أدناه مؤقتاً للاختبار
+        val mapsKey = project.findProperty("MAPS_API_KEY") as String?
+            ?: (project.rootProject.file("local.properties").takeIf { it.exists() }?.let { f ->
+                f.readLines().find { it.startsWith("MAPS_API_KEY=") }?.substringAfter("=")
+            } ?: "")
+        manifestPlaceholders["MAPS_API_KEY"] = mapsKey
     }
 
     buildTypes {
@@ -80,12 +86,16 @@ dependencies {
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
-    // Mapsforge — أحدث إصدار منشور على Maven Central
+    // Mapsforge (أوفلاين)
     implementation("org.mapsforge:mapsforge-map-android:0.25.0")
     implementation("org.mapsforge:mapsforge-map:0.25.0")
     implementation("org.mapsforge:mapsforge-themes:0.25.0")
     implementation("org.mapsforge:mapsforge-map-reader:0.25.0")
     implementation("com.caverock:androidsvg:1.4")
+
+    // Google Maps
+    implementation("com.google.android.gms:play-services-maps:19.0.0")
+    implementation("com.google.maps.android:maps-compose:6.2.1")
 
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
