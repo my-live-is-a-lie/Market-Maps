@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.Store
 import com.marketmaps.app.data.StoreRepository
 import kotlinx.coroutines.launch
@@ -81,6 +83,8 @@ fun MapScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val storeRepository = remember { StoreRepository() }
+    val appPreferences = remember { AppPreferences(context) }
+    val savedLocation by appPreferences.lastLocation.collectAsState(initial = null)
 
     remember {
         AndroidGraphicFactory.createInstance(context.applicationContext)
@@ -104,7 +108,6 @@ fun MapScreen(
     var selectedStore by remember { mutableStateOf<Store?>(null) }
     var storeToEdit by remember { mutableStateOf<Store?>(null) }
 
-    // نتائج البحث النشطة للتنقل بالأسهم
     var navResults by remember { mutableStateOf<List<StoreWithDistance>>(emptyList()) }
     var navIndex by remember { mutableStateOf(-1) }
 
@@ -152,6 +155,14 @@ fun MapScreen(
             userLat = lat
             userLon = lon
         }
+    }
+
+    // عند توفر الموقع المحفوظ والخريطة: انتقل إليه
+    LaunchedEffect(mapViewRef, savedLocation) {
+        val mapView = mapViewRef ?: return@LaunchedEffect
+        val loc = savedLocation ?: return@LaunchedEffect
+        mapView.model.mapViewPosition.setCenter(LatLong(loc.first, loc.second))
+        mapView.model.mapViewPosition.zoomLevel = loc.third.toInt().toByte()
     }
 
     LaunchedEffect(mapViewRef, stores) {
@@ -205,7 +216,10 @@ fun MapScreen(
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             AndroidView(
                 factory = { ctx ->
-                    val (mapView, layer) = createMapViewWithLayer(ctx)
+                    val initialLat = savedLocation?.first ?: 30.0444
+                    val initialLon = savedLocation?.second ?: 31.2357
+                    val initialZoom = (savedLocation?.third ?: 14.0).toInt().toByte()
+                    val (mapView, layer) = createMapViewWithLayer(ctx, initialLat, initialLon, initialZoom)
                     mapViewRef = mapView
                     downloadLayerRef = layer
 
@@ -272,7 +286,6 @@ fun MapScreen(
                 modifier = Modifier.align(Alignment.TopCenter)
             )
 
-            // أسهم التنقل بين نتائج البحث (أسفل يمين)
             if (navResults.isNotEmpty() && navIndex in navResults.indices) {
                 val current = navResults[navIndex]
                 val distanceText = if (current.distanceMeters >= 0) {
@@ -515,7 +528,12 @@ private fun tryGetLastLocation(context: Context, onLocation: (Double, Double) ->
     }
 }
 
-private fun createMapViewWithLayer(context: Context): Pair<MapView, TileDownloadLayer> {
+private fun createMapViewWithLayer(
+    context: Context,
+    initialLat: Double = 30.0444,
+    initialLon: Double = 31.2357,
+    initialZoom: Byte = 12
+): Pair<MapView, TileDownloadLayer> {
     val mapView = MapView(context).apply {
         isClickable = true
         setBuiltInZoomControls(false)
@@ -543,8 +561,8 @@ private fun createMapViewWithLayer(context: Context): Pair<MapView, TileDownload
     mapView.layerManager.layers.add(downloadLayer)
     downloadLayer.onResume()
 
-    mapView.model.mapViewPosition.setCenter(LatLong(30.0444, 31.2357))
-    mapView.model.mapViewPosition.zoomLevel = 12.toByte()
+    mapView.model.mapViewPosition.setCenter(LatLong(initialLat, initialLon))
+    mapView.model.mapViewPosition.zoomLevel = initialZoom
 
     return mapView to downloadLayer
 }
