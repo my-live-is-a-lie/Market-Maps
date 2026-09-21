@@ -18,9 +18,12 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'
 
-      # لا نستخدم حزمة tools القديمة (أصبحت غير متوفرة وتسبب فشل البناء)
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -39,8 +42,21 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # إعادة محاولة تلقائية عند فشل الشبكة (مثل 429 من Maven)
       - name: Build Debug APK (arm64-v8a only)
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+        run: |
+          set +e
+          for i in 1 2 3; do
+            echo "=== محاولة البناء رقم $i ==="
+            ./gradlew assembleDebug --stacktrace --no-daemon
+            EXIT=$?
+            if [ $EXIT -eq 0 ]; then
+              exit 0
+            fi
+            echo "فشل البناء (رمز $EXIT). انتظار قبل إعادة المحاولة..."
+            sleep $((i * 45))
+          done
+          exit 1
 
       - name: List APK outputs
         if: success()
