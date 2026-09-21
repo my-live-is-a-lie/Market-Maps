@@ -149,8 +149,8 @@ fun filterAndSortStores(
 }
 
 /** حساب المسافة بالمتر باستخدام صيغة Haversine */
-private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val r = 6371000.0 // نصف قطر الأرض بالمتر
+fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val r = 6371000.0
     val dLat = Math.toRadians(lat2 - lat1)
     val dLon = Math.toRadians(lon2 - lon1)
     val a = sin(dLat / 2) * sin(dLat / 2) +
@@ -160,7 +160,7 @@ private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): D
     return r * c
 }
 
-private fun formatDistance(meters: Double): String {
+fun formatDistance(meters: Double): String {
     return if (meters < 1000) {
         "${meters.toInt()} متر"
     } else {
