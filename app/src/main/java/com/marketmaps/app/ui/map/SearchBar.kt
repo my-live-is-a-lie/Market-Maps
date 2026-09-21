@@ -1,6 +1,7 @@
 package com.marketmaps.app.ui.map
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,15 +13,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,6 +40,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.marketmaps.app.data.CategoryData
 import com.marketmaps.app.data.Store
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -50,10 +55,15 @@ fun SearchBar(
     onResultClick: (Store) -> Unit,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
+    filterType: String,
+    filterSub: String,
+    onFilterTypeChange: (String) -> Unit,
+    onOpenFilterDialog: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val quickFilters = remember { listOf("الكل") + CategoryData.categories.map { it.name } }
 
     LaunchedEffect(expanded) {
         if (expanded) {
@@ -92,7 +102,19 @@ fun SearchBar(
                         }
                     },
                     trailingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null)
+                        Row {
+                            IconButton(onClick = onOpenFilterDialog) {
+                                Icon(
+                                    Icons.Default.FilterList,
+                                    contentDescription = "فلتر",
+                                    tint = if (filterType != "الكل" || filterSub != "الكل")
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(Icons.Default.Search, contentDescription = null)
+                        }
                     },
                     singleLine = true,
                     shape = RoundedCornerShape(28.dp),
@@ -103,7 +125,26 @@ fun SearchBar(
                 )
             }
 
-            if (query.isNotBlank()) {
+            // فلاتر سريعة أفقية
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                quickFilters.forEach { name ->
+                    FilterChip(
+                        selected = filterType == name,
+                        onClick = {
+                            onFilterTypeChange(name)
+                        },
+                        label = { Text(name) }
+                    )
+                }
+            }
+
+            if (query.isNotBlank() || filterType != "الكل" || filterSub != "الكل") {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -156,6 +197,23 @@ fun SearchBar(
                 horizontalArrangement = Arrangement.End
             ) {
                 FloatingActionButton(
+                    onClick = onOpenFilterDialog,
+                    modifier = Modifier
+                        .padding(end = 8.dp)
+                        .size(48.dp),
+                    containerColor = if (filterType != "الكل" || filterSub != "الكل")
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = if (filterType != "الكل" || filterSub != "الكل")
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    else
+                        MaterialTheme.colorScheme.onSecondaryContainer,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.FilterList, contentDescription = "فلتر")
+                }
+                FloatingActionButton(
                     onClick = { onExpandedChange(true) },
                     modifier = Modifier.size(48.dp),
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -178,16 +236,32 @@ fun filterAndSortStores(
     stores: List<Store>,
     query: String,
     userLat: Double?,
-    userLon: Double?
+    userLon: Double?,
+    filterType: String = "الكل",
+    filterSub: String = "الكل"
 ): List<StoreWithDistance> {
-    if (query.isBlank()) return emptyList()
+    var filtered = stores
 
-    val lowerQuery = query.trim().lowercase()
+    if (filterType != "الكل") {
+        filtered = filtered.filter { store ->
+            store.category.contains(filterType, ignoreCase = true)
+        }
+    }
+    if (filterSub != "الكل") {
+        filtered = filtered.filter { store ->
+            store.category.contains(filterSub, ignoreCase = true)
+        }
+    }
 
-    val filtered = stores.filter { store ->
-        store.name.lowercase().contains(lowerQuery) ||
-                store.category.lowercase().contains(lowerQuery) ||
-                store.description.lowercase().contains(lowerQuery)
+    if (query.isNotBlank()) {
+        val lowerQuery = query.trim().lowercase()
+        filtered = filtered.filter { store ->
+            store.name.lowercase().contains(lowerQuery) ||
+                    store.category.lowercase().contains(lowerQuery) ||
+                    store.description.lowercase().contains(lowerQuery)
+        }
+    } else if (filterType == "الكل" && filterSub == "الكل") {
+        return emptyList()
     }
 
     return if (userLat != null && userLon != null) {
