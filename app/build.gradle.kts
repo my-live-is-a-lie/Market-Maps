@@ -64,6 +64,9 @@ dependencies {
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.8.5")
 
+    // DataStore (لحفظ إعدادات أول استخدام وآخر موقع)
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
     // Mapsforge
     implementation("org.mapsforge:mapsforge-map-android:0.30.0")
     implementation("org.mapsforge:mapsforge-map:0.30.0")
