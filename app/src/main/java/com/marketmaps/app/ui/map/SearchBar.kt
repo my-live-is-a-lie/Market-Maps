@@ -1,6 +1,5 @@
 package com.marketmaps.app.ui.map
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -70,7 +69,6 @@ fun SearchBar(
     val keyboard = LocalSoftwareKeyboardController.current
     val quickFilters = remember { listOf("الكل") + CategoryData.categories.map { it.name } }
 
-    // لون خلفية شريط البحث (داكن واضح فوق الخريطة)
     val barColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val barContent = MaterialTheme.colorScheme.onSurface
 
@@ -95,7 +93,10 @@ fun SearchBar(
             ) {
                 OutlinedTextField(
                     value = query,
-                    onValueChange = onQueryChange,
+                    onValueChange = { text ->
+                        // منع سطور يدوية؛ الالتفاف يتم تلقائياً عند طول النص
+                        onQueryChange(text.replace("\n", " "))
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
@@ -105,7 +106,6 @@ fun SearchBar(
                             color = barContent.copy(alpha = 0.55f)
                         )
                     },
-                    // في RTL: leading يظهر يميناً — زر X
                     leadingIcon = {
                         IconButton(
                             onClick = {
@@ -120,7 +120,6 @@ fun SearchBar(
                             )
                         }
                     },
-                    // في RTL: trailing يظهر يساراً — أيقونة بحث + فلتر فقط عند التوسيع
                     trailingIcon = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = onOpenFilterDialog) {
@@ -143,7 +142,9 @@ fun SearchBar(
                             )
                         }
                     },
-                    singleLine = true,
+                    singleLine = false,
+                    maxLines = 3,
+                    minLines = 1,
                     shape = RoundedCornerShape(28.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = barColor,
@@ -161,7 +162,6 @@ fun SearchBar(
                 )
             }
 
-            // فلاتر سريعة — خلفية مثل شريط البحث، والمحدد بلون أيقونة المكان
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -250,7 +250,6 @@ fun SearchBar(
                 }
             }
         } else {
-            // مطوي: زر البحث فقط — بدون زر فلتر
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
