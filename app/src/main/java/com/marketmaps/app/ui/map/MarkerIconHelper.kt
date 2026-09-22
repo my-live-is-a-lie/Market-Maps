@@ -15,6 +15,10 @@ import kotlin.math.pow
 
 /**
  * أيقونات مخصصة بحجم ديناميكي حسب مستوى التكبير / مقياس المسافة.
+ * الأحجام مطابقة لصور المرجع:
+ * - 50 metter icon size → فقاعة صغيرة
+ * - 100 metter icon size → فقاعة أصغر
+ * - 200 metter 500 ft icon size → دائرة دقيقة
  */
 object MarkerIconHelper {
 
@@ -24,11 +28,11 @@ object MarkerIconHelper {
 
     /** أوضاع العرض حسب مقياس الخريطة */
     enum class DisplayMode {
-        /** ~50م — فقاعة كبيرة */
+        /** ~50م — فقاعة (مثل صورة 50 metter icon size) */
         BUBBLE_LARGE,
-        /** ~100م — فقاعة متوسطة */
+        /** ~100م — فقاعة أصغر (مثل صورة 100 metter icon size) */
         BUBBLE_MEDIUM,
-        /** ~200م — دائرة ملوّنة فقط */
+        /** ~200م — دائرة ملوّنة (مثل صورة 200 metter 500 ft icon size) */
         CIRCLE,
         /** أبعد من 200م — لا تُعرض علامات الأماكن */
         HIDDEN
@@ -38,34 +42,29 @@ object MarkerIconHelper {
         appContext = context.applicationContext
     }
 
-    /**
-     * تقدير أمتار لكل بكسل عند خط عرض معيّن ومستوى تكبير OSM.
-     */
     fun metersPerPixel(latitude: Double, zoom: Int): Double {
         val latRad = Math.toRadians(latitude)
         return 156543.03392 * cos(latRad) / 2.0.pow(zoom.toDouble())
     }
 
-    /**
-     * تحويل مستوى التكبير إلى وضع عرض الأيقونة.
-     * مبني على مقياس شريط المسافة التقريبي في مصر (~خط عرض 30°).
-     */
     fun displayModeForZoom(zoom: Int, latitude: Double = 30.0): DisplayMode {
-        // مقياس تقريبي لشريط ~100 بكسل على الشاشة
         val approxScaleMeters = metersPerPixel(latitude, zoom) * 100.0
         return when {
-            approxScaleMeters <= 70 -> DisplayMode.BUBBLE_LARGE   // حوالي 50م
-            approxScaleMeters <= 140 -> DisplayMode.BUBBLE_MEDIUM // حوالي 100م
-            approxScaleMeters <= 280 -> DisplayMode.CIRCLE        // حوالي 200م
+            approxScaleMeters <= 70 -> DisplayMode.BUBBLE_LARGE
+            approxScaleMeters <= 140 -> DisplayMode.BUBBLE_MEDIUM
+            approxScaleMeters <= 280 -> DisplayMode.CIRCLE
             else -> DisplayMode.HIDDEN
         }
     }
 
+    /**
+     * أحجام بالبكسل مطابقة تقريباً للصور المرجعية على الشاشة.
+     */
     fun sizeForMode(mode: DisplayMode): Int {
         return when (mode) {
-            DisplayMode.BUBBLE_LARGE -> 168
-            DisplayMode.BUBBLE_MEDIUM -> 100
-            DisplayMode.CIRCLE -> 36
+            DisplayMode.BUBBLE_LARGE -> 48   // 50م
+            DisplayMode.BUBBLE_MEDIUM -> 28  // 100م
+            DisplayMode.CIRCLE -> 14         // 200م
             DisplayMode.HIDDEN -> 0
         }
     }
@@ -129,17 +128,16 @@ object MarkerIconHelper {
         return MapsforgeAndroidBitmap(androidBmp)
     }
 
-    /** للتوافق مع الاستدعاءات القديمة */
     fun getMarkerBitmap(category: String): Bitmap {
         return getMarkerBitmap(category, DisplayMode.BUBBLE_LARGE)
-            ?: MapsforgeAndroidBitmap(composeCircle(colorForCategory(category), 36))
+            ?: MapsforgeAndroidBitmap(composeCircle(colorForCategory(category), 14))
     }
 
     fun getUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): Bitmap {
         val size = when (mode) {
-            DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 48
-            DisplayMode.BUBBLE_MEDIUM -> 100
-            DisplayMode.BUBBLE_LARGE -> 140
+            DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 16
+            DisplayMode.BUBBLE_MEDIUM -> 28
+            DisplayMode.BUBBLE_LARGE -> 44
         }
         val androidBmp = if (mode == DisplayMode.CIRCLE || mode == DisplayMode.HIDDEN) {
             composeCircle(Color.parseColor("#E53935"), size)
@@ -170,7 +168,7 @@ object MarkerIconHelper {
 
                 val innerName = if (assetExists(ctx, "markers/$iconName.svg")) iconName else "other"
                 val iconSvg = SVG.getFromAsset(ctx.assets, "markers/$innerName.svg")
-                val iconSize = (size * 0.42f).toInt().coerceAtLeast(8)
+                val iconSize = (size * 0.42f).toInt().coerceAtLeast(6)
                 iconSvg.setDocumentWidth(iconSize.toFloat())
                 iconSvg.setDocumentHeight(iconSize.toFloat())
                 val iconPic = iconSvg.renderToPicture()
