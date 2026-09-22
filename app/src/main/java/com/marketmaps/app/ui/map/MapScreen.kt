@@ -90,20 +90,17 @@ fun MapScreen(
 
     remember {
         AndroidGraphicFactory.createInstance(context.applicationContext)
+        MarkerIconHelper.init(context)
     }
 
     var layerBundle by remember { mutableStateOf<MapLayerHelper.LayerBundle?>(null) }
-
     var isMenuExpanded by remember { mutableStateOf(false) }
     var isAddMode by remember { mutableStateOf(false) }
-
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedLat by remember { mutableStateOf(0.0) }
     var selectedLon by remember { mutableStateOf(0.0) }
-
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
     var stores by remember { mutableStateOf<List<Store>>(emptyList()) }
-
     var searchQuery by remember { mutableStateOf("") }
     var searchExpanded by remember { mutableStateOf(false) }
     var filterType by remember { mutableStateOf("الكل") }
@@ -111,13 +108,10 @@ fun MapScreen(
     var showFilterDialog by remember { mutableStateOf(false) }
     var userLat by remember { mutableStateOf<Double?>(null) }
     var userLon by remember { mutableStateOf<Double?>(null) }
-
     var selectedStore by remember { mutableStateOf<Store?>(null) }
     var storeToEdit by remember { mutableStateOf<Store?>(null) }
-
     var navResults by remember { mutableStateOf<List<StoreWithDistance>>(emptyList()) }
     var navIndex by remember { mutableStateOf(-1) }
-
     var cameraTarget by remember { mutableStateOf<Triple<Double, Double, Float>?>(null) }
 
     val searchResults = remember(searchQuery, stores, userLat, userLon, filterType, filterSub) {
@@ -139,7 +133,6 @@ fun MapScreen(
 
     val isAddModeRef = remember { mutableStateOf(isAddMode) }
     isAddModeRef.value = isAddMode
-
     val storesRef = remember { mutableStateOf(stores) }
     storesRef.value = stores
 
@@ -160,20 +153,13 @@ fun MapScreen(
 
     LaunchedEffect(Unit) {
         val result = storeRepository.getAllStores()
-        if (result.isSuccess) {
-            stores = result.getOrDefault(emptyList())
-        }
-        tryGetLastLocation(context) { lat, lon ->
-            userLat = lat
-            userLon = lon
-        }
-        val remember = appPreferences.rememberFilter.first()
-        if (remember) {
+        if (result.isSuccess) stores = result.getOrDefault(emptyList())
+        tryGetLastLocation(context) { lat, lon -> userLat = lat; userLon = lon }
+        if (appPreferences.rememberFilter.first()) {
             filterType = appPreferences.savedFilterType.first()
             filterSub = appPreferences.savedFilterSub.first()
         } else {
-            filterType = "الكل"
-            filterSub = "الكل"
+            filterType = "الكل"; filterSub = "الكل"
         }
     }
 
@@ -188,59 +174,36 @@ fun MapScreen(
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
         val mapView = mapViewRef ?: return@LaunchedEffect
         val bundle = layerBundle ?: return@LaunchedEffect
-        if (offlineMode && MapDownloader.isEgyptMapDownloaded(context)) {
-            MapLayerHelper.applyOffline(context, mapView, bundle)
-        } else {
-            MapLayerHelper.applyOnline(mapView, bundle)
-        }
+        if (offlineMode && MapDownloader.isEgyptMapDownloaded(context)) MapLayerHelper.applyOffline(context, mapView, bundle)
+        else MapLayerHelper.applyOnline(mapView, bundle)
         addMarkersToMap(context, mapView, stores, userLat, userLon)
     }
 
     LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
-        mapViewRef?.let { mapView ->
-            addMarkersToMap(context, mapView, stores, userLat, userLon)
-        }
+        mapViewRef?.let { addMarkersToMap(context, it, stores, userLat, userLon) }
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
-        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (fineGranted || coarseGranted) {
-            moveToCurrentLocation(context, mapViewRef) { lat, lon ->
-                userLat = lat
-                userLon = lon
-                moveCamera(lat, lon, 16f)
-            }
-        } else {
-            Toast.makeText(context, "يجب السماح بالوصول إلى الموقع", Toast.LENGTH_LONG).show()
-        }
+        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true) {
+            moveToCurrentLocation(context, mapViewRef) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 16f) }
+        } else Toast.makeText(context, "يجب السماح بالوصول إلى الموقع", Toast.LENGTH_LONG).show()
     }
 
     fun requestLocationAndMove() {
         val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
         val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
         if (fine == PackageManager.PERMISSION_GRANTED || coarse == PackageManager.PERMISSION_GRANTED) {
-            moveToCurrentLocation(context, mapViewRef) { lat, lon ->
-                userLat = lat
-                userLon = lon
-                moveCamera(lat, lon, 16f)
-            }
-        } else {
-            locationPermissionLauncher.launch(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-            )
-        }
+            moveToCurrentLocation(context, mapViewRef) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 16f) }
+        } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
 
     fun refreshStores() {
         scope.launch {
             val refreshed = storeRepository.getAllStores()
-            if (refreshed.isSuccess) {
-                stores = refreshed.getOrDefault(emptyList())
-            }
+            if (refreshed.isSuccess) stores = refreshed.getOrDefault(emptyList())
         }
     }
 
@@ -250,35 +213,19 @@ fun MapScreen(
 
     Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-
             if (mapProvider == MapProvider.GOOGLE) {
                 GoogleMapContent(
-                    stores = stores,
-                    initialLat = initialLat,
-                    initialLon = initialLon,
-                    initialZoom = initialZoom,
-                    userLat = userLat,
-                    userLon = userLon,
-                    targetLat = cameraTarget?.first,
-                    targetLon = cameraTarget?.second,
-                    targetZoom = cameraTarget?.third,
-                    onMapLongClick = { lat, lon ->
-                        if (isAddMode) {
-                            selectedLat = lat
-                            selectedLon = lon
-                            showAddDialog = true
-                        }
-                    },
+                    stores = stores, initialLat = initialLat, initialLon = initialLon, initialZoom = initialZoom,
+                    userLat = userLat, userLon = userLon,
+                    targetLat = cameraTarget?.first, targetLon = cameraTarget?.second, targetZoom = cameraTarget?.third,
+                    onMapLongClick = { lat, lon -> if (isAddMode) { selectedLat = lat; selectedLon = lon; showAddDialog = true } },
                     onStoreClick = { store -> selectedStore = store },
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
                 AndroidView(
                     factory = { ctx ->
-                        val mapView = MapView(ctx).apply {
-                            isClickable = true
-                            setBuiltInZoomControls(false)
-                        }
+                        val mapView = MapView(ctx).apply { isClickable = true; setBuiltInZoomControls(false) }
                         val cache = MapLayerHelper.createTileCache(ctx, mapView)
                         val bundle = MapLayerHelper.LayerBundle(tileCache = cache)
                         layerBundle = bundle
@@ -286,128 +233,74 @@ fun MapScreen(
                         mapView.model.mapViewPosition.setCenter(LatLong(initialLat, initialLon))
                         mapView.model.mapViewPosition.zoomLevel = initialZoom.toInt().toByte()
                         mapViewRef = mapView
-
                         val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
                             override fun onLongPress(e: MotionEvent) {
                                 if (isAddModeRef.value) {
-                                    val projection = mapView.mapViewProjection
-                                    val latLong = projection.fromPixels(e.x.toDouble(), e.y.toDouble())
-                                    selectedLat = latLong.latitude
-                                    selectedLon = latLong.longitude
-                                    showAddDialog = true
+                                    val latLong = mapView.mapViewProjection.fromPixels(e.x.toDouble(), e.y.toDouble())
+                                    selectedLat = latLong.latitude; selectedLon = latLong.longitude; showAddDialog = true
                                 }
                             }
-
                             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                                val projection = mapView.mapViewProjection
-                                val tapped = projection.fromPixels(e.x.toDouble(), e.y.toDouble())
+                                val tapped = mapView.mapViewProjection.fromPixels(e.x.toDouble(), e.y.toDouble())
                                 val nearest = findNearestStore(storesRef.value, tapped.latitude, tapped.longitude, 80.0)
-                                if (nearest != null) {
-                                    selectedStore = nearest
-                                    return true
-                                }
+                                if (nearest != null) { selectedStore = nearest; return true }
                                 return false
                             }
                         })
-
-                        mapView.setOnTouchListener { _, event ->
-                            gestureDetector.onTouchEvent(event)
-                            false
-                        }
+                        mapView.setOnTouchListener { _, event -> gestureDetector.onTouchEvent(event); false }
                         mapView
                     },
                     modifier = Modifier.fillMaxSize(),
-                    update = { mapView ->
-                        mapViewRef = mapView
-                        layerBundle?.let { MapLayerHelper.resume(it) }
-                    },
+                    update = { mapView -> mapViewRef = mapView; layerBundle?.let { MapLayerHelper.resume(it) } },
                     onRelease = { mapView ->
                         layerBundle?.let { MapLayerHelper.destroy(it) }
-                        mapView.destroy()
-                        mapViewRef = null
-                        layerBundle = null
+                        mapView.destroy(); mapViewRef = null; layerBundle = null
                     }
                 )
             }
 
             SearchBar(
-                query = searchQuery,
-                onQueryChange = { searchQuery = it },
-                results = searchResults,
+                query = searchQuery, onQueryChange = { searchQuery = it }, results = searchResults,
                 onResultClick = { store ->
                     navResults = searchResults
                     navIndex = navResults.indexOfFirst { it.store.id == store.id }.takeIf { it >= 0 } ?: 0
                     moveCamera(store.latitude, store.longitude, 17f)
                 },
-                expanded = searchExpanded,
-                onExpandedChange = { searchExpanded = it },
-                filterType = filterType,
-                filterSub = filterSub,
-                onFilterTypeChange = { type ->
-                    filterType = type
-                    filterSub = "الكل"
-                    scope.launch { appPreferences.saveFilter(type, "الكل") }
-                },
+                expanded = searchExpanded, onExpandedChange = { searchExpanded = it },
+                filterType = filterType, filterSub = filterSub,
+                onFilterTypeChange = { type -> filterType = type; filterSub = "الكل"; scope.launch { appPreferences.saveFilter(type, "الكل") } },
                 onOpenFilterDialog = { showFilterDialog = true },
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .zIndex(if (searchExpanded) 3f else 1f)
+                modifier = Modifier.align(Alignment.TopCenter).zIndex(if (searchExpanded) 3f else 1f)
             )
 
             if (showFilterDialog) {
                 FilterDialog(
-                    initialType = filterType,
-                    initialSub = filterSub,
+                    initialType = filterType, initialSub = filterSub,
                     onDismiss = { showFilterDialog = false },
-                    onApply = { type, sub ->
-                        filterType = type
-                        filterSub = sub
-                        showFilterDialog = false
-                        scope.launch { appPreferences.saveFilter(type, sub) }
-                    },
-                    onReset = {
-                        filterType = "الكل"
-                        filterSub = "الكل"
-                        scope.launch { appPreferences.saveFilter("الكل", "الكل") }
-                    }
+                    onApply = { type, sub -> filterType = type; filterSub = sub; showFilterDialog = false; scope.launch { appPreferences.saveFilter(type, sub) } },
+                    onReset = { filterType = "الكل"; filterSub = "الكل"; scope.launch { appPreferences.saveFilter("الكل", "الكل") } }
                 )
             }
 
             if (!searchExpanded) {
                 FloatingActionButton(
                     onClick = onOpenSettings,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(top = 8.dp, start = 16.dp)
-                        .size(48.dp)
-                        .zIndex(1f),
+                    modifier = Modifier.align(Alignment.TopStart).padding(top = 8.dp, start = 16.dp).size(48.dp).zIndex(1f),
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     shape = CircleShape
-                ) {
-                    Icon(Icons.Default.Settings, contentDescription = "الإعدادات")
-                }
+                ) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") }
             }
 
             if (navResults.size > 1 && navIndex in navResults.indices) {
                 val current = navResults[navIndex]
-                val distanceText = if (current.distanceMeters >= 0) formatDistance(current.distanceMeters) else null
-                val displayName = "${current.store.category} ${current.store.name}".trim()
                 SearchResultNav(
-                    currentIndex = navIndex,
-                    total = navResults.size,
-                    storeName = displayName,
-                    distanceText = distanceText,
-                    onPrevious = { goToNavResult(navIndex - 1) },
-                    onNext = { goToNavResult(navIndex + 1) },
-                    onDismiss = {
-                        navResults = emptyList()
-                        navIndex = -1
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 16.dp, bottom = 100.dp)
-                        .zIndex(2f)
+                    currentIndex = navIndex, total = navResults.size,
+                    storeName = "${current.store.category} ${current.store.name}".trim(),
+                    distanceText = if (current.distanceMeters >= 0) formatDistance(current.distanceMeters) else null,
+                    onPrevious = { goToNavResult(navIndex - 1) }, onNext = { goToNavResult(navIndex + 1) },
+                    onDismiss = { navResults = emptyList(); navIndex = -1 },
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 100.dp).zIndex(2f)
                 )
             }
 
@@ -419,14 +312,9 @@ fun MapScreen(
             ) {
                 Text(
                     text = "اضغط مطولاً على أي مكان في الخريطة لإضافة محل",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f), RoundedCornerShape(12.dp))
-                        .padding(16.dp)
+                    style = MaterialTheme.typography.bodyMedium, color = Color.White, textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f), RoundedCornerShape(12.dp)).padding(16.dp)
                 )
             }
 
@@ -435,76 +323,42 @@ fun MapScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                AnimatedVisibility(
-                    visible = isMenuExpanded,
-                    enter = fadeIn() + slideInVertically { it },
-                    exit = fadeOut() + slideOutVertically { it }
-                ) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+                AnimatedVisibility(visible = isMenuExpanded, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         FloatingActionButton(
                             onClick = { requestLocationAndMove(); isMenuExpanded = false },
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            shape = CircleShape,
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(Icons.Default.MyLocation, contentDescription = "موقعي الحالي")
-                        }
-
+                            shape = CircleShape, modifier = Modifier.size(48.dp)
+                        ) { Icon(Icons.Default.MyLocation, contentDescription = "موقعي الحالي") }
                         FloatingActionButton(
                             onClick = { isAddMode = !isAddMode; isMenuExpanded = false },
                             containerColor = if (isAddMode) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
                             contentColor = if (isAddMode) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onTertiaryContainer,
-                            shape = CircleShape,
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isAddMode) Icons.Default.Close else Icons.Default.Add,
-                                contentDescription = if (isAddMode) "إلغاء" else "إضافة محل"
-                            )
-                        }
+                            shape = CircleShape, modifier = Modifier.size(48.dp)
+                        ) { Icon(if (isAddMode) Icons.Default.Close else Icons.Default.Add, contentDescription = null) }
                     }
                 }
-
                 FloatingActionButton(
                     onClick = { isMenuExpanded = !isMenuExpanded },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     shape = CircleShape
-                ) {
-                    Icon(
-                        imageVector = if (isMenuExpanded) Icons.Default.Close else Icons.Default.Add,
-                        contentDescription = if (isMenuExpanded) "إغلاق" else "القائمة"
-                    )
-                }
+                ) { Icon(if (isMenuExpanded) Icons.Default.Close else Icons.Default.Add, contentDescription = null) }
             }
 
             if (showAddDialog) {
                 AddStoreDialog(
-                    latitude = selectedLat,
-                    longitude = selectedLon,
+                    latitude = selectedLat, longitude = selectedLon,
                     onDismiss = { showAddDialog = false },
                     onSave = { name, categoryPath, description ->
                         scope.launch {
-                            val store = Store(
-                                name = name,
-                                category = categoryPath,
-                                description = description,
-                                latitude = selectedLat,
-                                longitude = selectedLon
-                            )
+                            val store = Store(name = name, category = categoryPath, description = description, latitude = selectedLat, longitude = selectedLon)
                             val result = storeRepository.addStore(store)
                             if (result.isSuccess) {
                                 Toast.makeText(context, "تم حفظ المحل بنجاح", Toast.LENGTH_SHORT).show()
-                                refreshStores()
-                                showAddDialog = false
-                                isAddMode = false
-                            } else {
-                                Toast.makeText(context, "فشل الحفظ: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
-                            }
+                                refreshStores(); showAddDialog = false; isAddMode = false
+                            } else Toast.makeText(context, "فشل الحفظ: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                         }
                     }
                 )
@@ -512,9 +366,7 @@ fun MapScreen(
 
             storeToEdit?.let { store ->
                 AddStoreDialog(
-                    latitude = store.latitude,
-                    longitude = store.longitude,
-                    initialStore = store,
+                    latitude = store.latitude, longitude = store.longitude, initialStore = store,
                     onDismiss = { storeToEdit = null },
                     onSave = { name, categoryPath, description ->
                         scope.launch {
@@ -522,12 +374,8 @@ fun MapScreen(
                             val result = storeRepository.updateStore(updated)
                             if (result.isSuccess) {
                                 Toast.makeText(context, "تم التحديث", Toast.LENGTH_SHORT).show()
-                                refreshStores()
-                                storeToEdit = null
-                                selectedStore = null
-                            } else {
-                                Toast.makeText(context, "فشل التحديث", Toast.LENGTH_LONG).show()
-                            }
+                                refreshStores(); storeToEdit = null; selectedStore = null
+                            } else Toast.makeText(context, "فشل التحديث", Toast.LENGTH_LONG).show()
                         }
                     }
                 )
@@ -537,24 +385,17 @@ fun MapScreen(
                 StoreDetailsDialog(
                     store = store,
                     onDismiss = { selectedStore = null },
-                    onEdit = {
-                        selectedStore = null
-                        storeToEdit = it
-                    },
+                    onEdit = { selectedStore = null; storeToEdit = it },
                     onDelete = {
                         scope.launch {
                             val result = storeRepository.deleteStore(it.id)
                             if (result.isSuccess) {
                                 Toast.makeText(context, "تم الحذف", Toast.LENGTH_SHORT).show()
                                 val deletedId = it.id
-                                refreshStores()
-                                selectedStore = null
+                                refreshStores(); selectedStore = null
                                 navResults = navResults.filter { item -> item.store.id != deletedId }
-                                if (navResults.isEmpty()) navIndex = -1
-                                else navIndex = navIndex.coerceIn(0, navResults.lastIndex)
-                            } else {
-                                Toast.makeText(context, "فشل الحذف", Toast.LENGTH_LONG).show()
-                            }
+                                if (navResults.isEmpty()) navIndex = -1 else navIndex = navIndex.coerceIn(0, navResults.lastIndex)
+                            } else Toast.makeText(context, "فشل الحذف", Toast.LENGTH_LONG).show()
                         }
                     }
                 )
@@ -568,10 +409,7 @@ private fun findNearestStore(stores: List<Store>, lat: Double, lon: Double, maxD
     var minDist = Double.MAX_VALUE
     stores.forEach { store ->
         val dist = haversineMeters(lat, lon, store.latitude, store.longitude)
-        if (dist < minDist && dist <= maxDistanceMeters) {
-            minDist = dist
-            nearest = store
-        }
+        if (dist < minDist && dist <= maxDistanceMeters) { minDist = dist; nearest = store }
     }
     return nearest
 }
@@ -580,74 +418,41 @@ private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Doub
     val r = 6371000.0
     val dLat = Math.toRadians(lat2 - lat1)
     val dLon = Math.toRadians(lon2 - lon1)
-    val a = sin(dLat / 2) * sin(dLat / 2) +
-            cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-            sin(dLon / 2) * sin(dLon / 2)
-    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-    return r * c
+    val a = sin(dLat / 2) * sin(dLat / 2) + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2) * sin(dLon / 2)
+    return r * 2 * atan2(sqrt(a), sqrt(1 - a))
 }
 
-private fun addMarkersToMap(
-    context: Context,
-    mapView: MapView,
-    stores: List<Store>,
-    userLat: Double?,
-    userLon: Double?
-) {
+private fun addMarkersToMap(context: Context, mapView: MapView, stores: List<Store>, userLat: Double?, userLon: Double?) {
     try {
-        val layersToRemove = mapView.layerManager.layers.filterIsInstance<Marker>()
-        layersToRemove.forEach { mapView.layerManager.layers.remove(it) }
-
+        mapView.layerManager.layers.filterIsInstance<Marker>().forEach { mapView.layerManager.layers.remove(it) }
         stores.forEach { store ->
             try {
                 val bitmap = MarkerIconHelper.getMarkerBitmap(store.category)
-                val h = bitmap.height
-                val marker = Marker(
-                    LatLong(store.latitude, store.longitude),
-                    bitmap,
-                    0,
-                    -h / 2
-                )
-                mapView.layerManager.layers.add(marker)
-            } catch (_: Exception) {
-            }
+                mapView.layerManager.layers.add(Marker(LatLong(store.latitude, store.longitude), bitmap, 0, -bitmap.height / 2))
+            } catch (_: Exception) {}
         }
-
         if (userLat != null && userLon != null) {
             try {
                 val userBmp = MarkerIconHelper.getUserLocationBitmap()
-                val h = userBmp.height
-                val userMarker = Marker(
-                    LatLong(userLat, userLon),
-                    userBmp,
-                    0,
-                    -h / 2
-                )
-                mapView.layerManager.layers.add(userMarker)
-            } catch (_: Exception) {
-            }
+                mapView.layerManager.layers.add(Marker(LatLong(userLat, userLon), userBmp, 0, -userBmp.height / 2))
+            } catch (_: Exception) {}
         }
-    } catch (_: Exception) {
-    }
+    } catch (_: Exception) {}
 }
 
 @SuppressLint("MissingPermission")
 private fun moveToCurrentLocation(context: Context, mapView: MapView?, onLocation: ((Double, Double) -> Unit)? = null) {
-    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-    fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
+    LocationServices.getFusedLocationProviderClient(context)
+        .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
         .addOnSuccessListener { location ->
             if (location != null) {
                 mapView?.model?.mapViewPosition?.animateTo(LatLong(location.latitude, location.longitude))
                 mapView?.model?.mapViewPosition?.zoomLevel = 16.toByte()
                 onLocation?.invoke(location.latitude, location.longitude)
                 Toast.makeText(context, "تم تحديد موقعك الحالي", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, "تعذر الحصول على الموقع، تأكد من تفعيل GPS", Toast.LENGTH_LONG).show()
-            }
+            } else Toast.makeText(context, "تعذر الحصول على الموقع، تأكد من تفعيل GPS", Toast.LENGTH_LONG).show()
         }
-        .addOnFailureListener {
-            Toast.makeText(context, "حدث خطأ أثناء تحديد الموقع", Toast.LENGTH_LONG).show()
-        }
+        .addOnFailureListener { Toast.makeText(context, "حدث خطأ أثناء تحديد الموقع", Toast.LENGTH_LONG).show() }
 }
 
 @SuppressLint("MissingPermission")
