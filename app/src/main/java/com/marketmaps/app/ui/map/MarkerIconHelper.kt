@@ -20,6 +20,9 @@ object MarkerIconHelper {
     private const val SIZE = 192
     private var appContext: Context? = null
 
+    /** اللون المشترك للصحة: مستشفى / عيادة / مختبر / صيدلية / أسنان */
+    private val HEALTH_COLOR = Color.parseColor("#E53935")
+
     /** يجب استدعاؤها مرة عند بدء الشاشة */
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -28,8 +31,8 @@ object MarkerIconHelper {
     fun colorForCategory(category: String): Int {
         val c = category.lowercase()
         return when {
-            listOf("صيدلية", "مستشفى", "عيادة", "أسنان").any { it in c } ->
-                Color.parseColor("#E53935")
+            listOf("صيدلية", "مستشفى", "عيادة", "مختبر", "أسنان").any { it in c } ->
+                HEALTH_COLOR
             listOf("مطعم", "مقهى", "كافي", "وجبات", "شعبي", "أغذية", "restaurant").any { it in c } ->
                 Color.parseColor("#FB8C00")
             listOf("بقالة", "عطارة", "سوبر").any { it in c } ->
@@ -53,6 +56,9 @@ object MarkerIconHelper {
     fun iconNameForCategory(category: String): String {
         val c = category.lowercase()
         return when {
+            "مستشفى" in c -> "hospital"
+            "عيادة" in c || "أسنان" in c -> "clinic"
+            "مختبر" in c -> "lab"
             listOf("ورشة", "سمكرة", "نجارة", "حدادة", "ميكانيكا", "كهرباء", "سباكة").any { it in c } ->
                 "workshop"
             listOf("مصنع", "بلاستيك").any { it in c } ->
@@ -90,12 +96,10 @@ object MarkerIconHelper {
 
         if (ctx != null) {
             try {
-                // 1) الفقاعة باللون المناسب
                 val bubbleSvg = SVG.getFromAsset(ctx.assets, "markers/icon_bubble.svg")
                 bubbleSvg.setDocumentWidth(SIZE.toFloat())
                 bubbleSvg.setDocumentHeight(SIZE.toFloat())
                 val bubblePic = bubbleSvg.renderToPicture()
-                // رسم الفقاعة ثم تلوينها
                 val temp = AndroidBitmap.createBitmap(SIZE, SIZE, AndroidBitmap.Config.ARGB_8888)
                 val tempCanvas = Canvas(temp)
                 tempCanvas.drawPicture(bubblePic)
@@ -104,7 +108,6 @@ object MarkerIconHelper {
                 canvas.drawBitmap(temp, 0f, 0f, paint)
                 temp.recycle()
 
-                // 2) الأيقونة الداخلية باللون الأبيض، في منتصف الجزء العلوي من الفقاعة
                 val innerName = if (assetExists(ctx, "markers/$iconName.svg")) iconName else "other"
                 val iconSvg = SVG.getFromAsset(ctx.assets, "markers/$innerName.svg")
                 val iconSize = (SIZE * 0.42f).toInt()
@@ -123,11 +126,9 @@ object MarkerIconHelper {
 
                 return bmp
             } catch (_: Exception) {
-                // سقوط للطريقة الاحتياطية
             }
         }
 
-        // احتياطي: دائرة ملونة بسيطة
         val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             style = android.graphics.Paint.Style.FILL
             color = bubbleColor

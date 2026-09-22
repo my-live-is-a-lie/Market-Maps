@@ -66,8 +66,9 @@ object CategoryData {
         Category(
             name = "مستشفى / عيادة",
             subCategories = listOf(
-                SubCategory("عام"),
-                SubCategory("تخصصي"),
+                SubCategory("مستشفى"),
+                SubCategory("عيادة"),
+                SubCategory("مختبر"),
                 SubCategory("أسنان"),
                 SubCategory("أخرى")
             )
