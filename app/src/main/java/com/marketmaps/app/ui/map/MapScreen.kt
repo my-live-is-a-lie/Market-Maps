@@ -268,7 +268,15 @@ fun MapScreen(
                 },
                 expanded = searchExpanded, onExpandedChange = { searchExpanded = it },
                 filterType = filterType, filterSub = filterSub,
-                onFilterTypeChange = { type -> filterType = type; filterSub = "الكل"; scope.launch { appPreferences.saveFilter(type, "الكل") } },
+                onFilterTypeChange = { type ->
+                    filterType = type
+                    filterSub = "الكل"
+                    scope.launch { appPreferences.saveFilter(type, "الكل") }
+                },
+                onFilterSubChange = { sub ->
+                    filterSub = sub
+                    scope.launch { appPreferences.saveFilter(filterType, sub) }
+                },
                 onOpenFilterDialog = { showFilterDialog = true },
                 modifier = Modifier.align(Alignment.TopCenter).zIndex(if (searchExpanded) 3f else 1f)
             )
@@ -277,8 +285,14 @@ fun MapScreen(
                 FilterDialog(
                     initialType = filterType, initialSub = filterSub,
                     onDismiss = { showFilterDialog = false },
-                    onApply = { type, sub -> filterType = type; filterSub = sub; showFilterDialog = false; scope.launch { appPreferences.saveFilter(type, sub) } },
-                    onReset = { filterType = "الكل"; filterSub = "الكل"; scope.launch { appPreferences.saveFilter("الكل", "الكل") } }
+                    onApply = { type, sub ->
+                        filterType = type; filterSub = sub; showFilterDialog = false
+                        scope.launch { appPreferences.saveFilter(type, sub) }
+                    },
+                    onReset = {
+                        filterType = "الكل"; filterSub = "الكل"
+                        scope.launch { appPreferences.saveFilter("الكل", "الكل") }
+                    }
                 )
             }
 
@@ -311,7 +325,7 @@ fun MapScreen(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 100.dp)
             ) {
                 Text(
-                    text = "اضغط مطولاً على أي مكان في الخريطة لإضافة محل",
+                    text = "اضغط مطولاً على أي مكان في الخريطة لإضافة موقع",
                     style = MaterialTheme.typography.bodyMedium, color = Color.White, textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f), RoundedCornerShape(12.dp)).padding(16.dp)
@@ -356,7 +370,7 @@ fun MapScreen(
                             val store = Store(name = name, category = categoryPath, description = description, latitude = selectedLat, longitude = selectedLon)
                             val result = storeRepository.addStore(store)
                             if (result.isSuccess) {
-                                Toast.makeText(context, "تم حفظ المحل بنجاح", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "تم حفظ الموقع بنجاح", Toast.LENGTH_SHORT).show()
                                 refreshStores(); showAddDialog = false; isAddMode = false
                             } else Toast.makeText(context, "فشل الحفظ: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                         }
