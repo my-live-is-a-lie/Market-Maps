@@ -1,5 +1,6 @@
 package com.marketmaps.app.ui.map
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -25,18 +26,22 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -65,6 +70,10 @@ fun SearchBar(
     val keyboard = LocalSoftwareKeyboardController.current
     val quickFilters = remember { listOf("الكل") + CategoryData.categories.map { it.name } }
 
+    // لون خلفية شريط البحث (داكن واضح فوق الخريطة)
+    val barColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    val barContent = MaterialTheme.colorScheme.onSurface
+
     LaunchedEffect(expanded) {
         if (expanded) {
             focusRequester.requestFocus()
@@ -81,7 +90,8 @@ fun SearchBar(
                     .fillMaxWidth()
                     .padding(start = 12.dp, end = 12.dp, top = 8.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                shape = RoundedCornerShape(28.dp)
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = barColor)
             ) {
                 OutlinedTextField(
                     value = query,
@@ -89,20 +99,30 @@ fun SearchBar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
-                    placeholder = { Text("ابحث عن منتج أو محل...") },
+                    placeholder = {
+                        Text(
+                            "ابحث عن منتج أو محل...",
+                            color = barContent.copy(alpha = 0.55f)
+                        )
+                    },
+                    // في RTL: leading يظهر يميناً — زر X
                     leadingIcon = {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { onQueryChange("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "مسح البحث")
+                        IconButton(
+                            onClick = {
+                                if (query.isNotEmpty()) onQueryChange("")
+                                else onExpandedChange(false)
                             }
-                        } else {
-                            IconButton(onClick = { onExpandedChange(false) }) {
-                                Icon(Icons.Default.Close, contentDescription = "إغلاق البحث")
-                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = if (query.isNotEmpty()) "مسح البحث" else "إغلاق البحث",
+                                tint = barContent
+                            )
                         }
                     },
+                    // في RTL: trailing يظهر يساراً — أيقونة بحث + فلتر فقط عند التوسيع
                     trailingIcon = {
-                        Row {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = onOpenFilterDialog) {
                                 Icon(
                                     Icons.Default.FilterList,
@@ -110,14 +130,30 @@ fun SearchBar(
                                     tint = if (filterType != "الكل" || filterSub != "الكل")
                                         MaterialTheme.colorScheme.primary
                                     else
-                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                        barContent
                                 )
                             }
-                            Icon(Icons.Default.Search, contentDescription = null)
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = null,
+                                tint = barContent,
+                                modifier = Modifier
+                                    .padding(end = 8.dp)
+                                    .size(24.dp)
+                            )
                         }
                     },
                     singleLine = true,
                     shape = RoundedCornerShape(28.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = barColor,
+                        unfocusedContainerColor = barColor,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedTextColor = barContent,
+                        unfocusedTextColor = barContent,
+                        cursorColor = MaterialTheme.colorScheme.primary
+                    ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(
                         onSearch = { keyboard?.hide() }
@@ -125,7 +161,7 @@ fun SearchBar(
                 )
             }
 
-            // فلاتر سريعة أفقية
+            // فلاتر سريعة — خلفية مثل شريط البحث، والمحدد بلون أيقونة المكان
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -134,12 +170,33 @@ fun SearchBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 quickFilters.forEach { name ->
+                    val selected = filterType == name
+                    val selectedColor = if (name == "الكل") {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color(MarkerIconHelper.colorForCategory(name))
+                    }
                     FilterChip(
-                        selected = filterType == name,
-                        onClick = {
-                            onFilterTypeChange(name)
+                        selected = selected,
+                        onClick = { onFilterTypeChange(name) },
+                        label = {
+                            Text(
+                                name,
+                                color = if (selected) Color.White else barContent
+                            )
                         },
-                        label = { Text(name) }
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = barColor,
+                            labelColor = barContent,
+                            selectedContainerColor = selectedColor,
+                            selectedLabelColor = Color.White
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selected,
+                            borderColor = barContent.copy(alpha = 0.35f),
+                            selectedBorderColor = selectedColor
+                        )
                     )
                 }
             }
@@ -151,13 +208,15 @@ fun SearchBar(
                         .padding(horizontal = 12.dp, vertical = 4.dp)
                         .heightIn(max = 280.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = barColor)
                 ) {
                     if (results.isEmpty()) {
                         Text(
                             text = "لا توجد نتائج",
                             modifier = Modifier.padding(16.dp),
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = barContent
                         )
                     } else {
                         LazyColumn {
@@ -173,7 +232,8 @@ fun SearchBar(
                                 ) {
                                     Text(
                                         text = "${item.store.category} ${item.store.name}".trim(),
-                                        style = MaterialTheme.typography.titleMedium
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = barContent
                                     )
                                     if (item.distanceMeters >= 0) {
                                         Spacer(modifier = Modifier.height(4.dp))
@@ -190,29 +250,13 @@ fun SearchBar(
                 }
             }
         } else {
+            // مطوي: زر البحث فقط — بدون زر فلتر
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp, end = 16.dp),
                 horizontalArrangement = Arrangement.End
             ) {
-                FloatingActionButton(
-                    onClick = onOpenFilterDialog,
-                    modifier = Modifier
-                        .padding(end = 8.dp)
-                        .size(48.dp),
-                    containerColor = if (filterType != "الكل" || filterSub != "الكل")
-                        MaterialTheme.colorScheme.primaryContainer
-                    else
-                        MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = if (filterType != "الكل" || filterSub != "الكل")
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    else
-                        MaterialTheme.colorScheme.onSecondaryContainer,
-                    shape = CircleShape
-                ) {
-                    Icon(Icons.Default.FilterList, contentDescription = "فلتر")
-                }
                 FloatingActionButton(
                     onClick = { onExpandedChange(true) },
                     modifier = Modifier.size(48.dp),
