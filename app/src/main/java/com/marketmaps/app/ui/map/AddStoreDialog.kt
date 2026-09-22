@@ -26,14 +26,14 @@ import com.marketmaps.app.data.CategoryData
 import com.marketmaps.app.data.Store
 
 /**
- * نافذة إضافة أو تعديل محل.
+ * نافذة إضافة أو تعديل موقع.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddStoreDialog(
     latitude: Double,
     longitude: Double,
-    initialStore: Store? = null, // إذا وُجد → وضع تعديل
+    initialStore: Store? = null,
     onDismiss: () -> Unit,
     onSave: (name: String, categoryPath: String, description: String) -> Unit
 ) {
@@ -41,8 +41,6 @@ fun AddStoreDialog(
 
     var name by remember { mutableStateOf(initialStore?.name ?: "") }
     var description by remember { mutableStateOf(initialStore?.description ?: "") }
-
-    // في وضع التعديل نعرض التصنيف كنص قابل للتعديل مباشرة لتبسيط الأمر
     var categoryText by remember { mutableStateOf(initialStore?.category ?: "") }
 
     var selectedLevel1 by remember { mutableStateOf<CategoryData.Category?>(null) }
@@ -60,7 +58,7 @@ fun AddStoreDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (isEditMode) "تعديل المحل" else "إضافة محل جديد") },
+        title = { Text(if (isEditMode) "تعديل الموقع" else "إضافة موقع جديد") },
         text = {
             Column(
                 modifier = Modifier
@@ -71,13 +69,12 @@ fun AddStoreDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("اسم المحل *") },
+                    label = { Text("اسم المكان *") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 if (isEditMode) {
-                    // في التعديل: حقل نصي بسيط للتصنيف
                     OutlinedTextField(
                         value = categoryText,
                         onValueChange = { categoryText = it },
@@ -86,7 +83,6 @@ fun AddStoreDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                 } else {
-                    // في الإضافة: التصنيف الهرمي
                     ExposedDropdownMenuBox(
                         expanded = expanded1,
                         onExpandedChange = { expanded1 = it }

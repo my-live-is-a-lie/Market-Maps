@@ -62,15 +62,36 @@ fun SearchBar(
     filterType: String,
     filterSub: String,
     onFilterTypeChange: (String) -> Unit,
+    onFilterSubChange: (String) -> Unit,
     onOpenFilterDialog: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    val quickFilters = remember { listOf("الكل") + CategoryData.categories.map { it.name } }
+
+    // أنواع الأماكن الأساسية
+    val mainFilters = remember { listOf("الكل") + CategoryData.categories.map { it.name } }
+
+    // عند تحديد نوع مكان: عرض تصنيفاته + زر الكل للعودة
+    val subFilters = remember(filterType) {
+        if (filterType == "الكل") {
+            emptyList()
+        } else {
+            val cat = CategoryData.categories.find { it.name == filterType }
+            listOf("الكل") + (cat?.subCategories?.map { it.name } ?: emptyList())
+        }
+    }
+
+    val showingSubs = filterType != "الكل"
+    val quickFilters = if (showingSubs) subFilters else mainFilters
 
     val barColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val barContent = MaterialTheme.colorScheme.onSurface
+    val typeColor = if (filterType == "الكل") {
+        MaterialTheme.colorScheme.primary
+    } else {
+        Color(MarkerIconHelper.colorForCategory(filterType))
+    }
 
     LaunchedEffect(expanded) {
         if (expanded) {
@@ -94,7 +115,6 @@ fun SearchBar(
                 OutlinedTextField(
                     value = query,
                     onValueChange = { text ->
-                        // منع سطور يدوية؛ الالتفاف يتم تلقائياً عند طول النص
                         onQueryChange(text.replace("\n", " "))
                     },
                     modifier = Modifier
@@ -162,6 +182,7 @@ fun SearchBar(
                 )
             }
 
+            // شريط الفلاتر السريعة
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -170,15 +191,32 @@ fun SearchBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 quickFilters.forEach { name ->
-                    val selected = filterType == name
-                    val selectedColor = if (name == "الكل") {
-                        MaterialTheme.colorScheme.primary
+                    val selected = if (showingSubs) {
+                        // في وضع التصنيفات: الكل = لا تصنيف فرعي، أو الاسم = filterSub
+                        if (name == "الكل") filterSub == "الكل" else filterSub == name
                     } else {
-                        Color(MarkerIconHelper.colorForCategory(name))
+                        filterType == name
+                    }
+                    val selectedColor = if (showingSubs) {
+                        if (name == "الكل") typeColor else Color(MarkerIconHelper.colorForCategory("$filterType $name"))
+                    } else {
+                        if (name == "الكل") MaterialTheme.colorScheme.primary
+                        else Color(MarkerIconHelper.colorForCategory(name))
                     }
                     FilterChip(
                         selected = selected,
-                        onClick = { onFilterTypeChange(name) },
+                        onClick = {
+                            if (showingSubs) {
+                                if (name == "الكل") {
+                                    // العودة لأنواع الأماكن الأساسية
+                                    onFilterTypeChange("الكل")
+                                } else {
+                                    onFilterSubChange(name)
+                                }
+                            } else {
+                                onFilterTypeChange(name)
+                            }
+                        },
                         label = {
                             Text(
                                 name,
