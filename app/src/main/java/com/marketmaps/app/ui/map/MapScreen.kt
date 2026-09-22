@@ -135,6 +135,10 @@ fun MapScreen(
     isAddModeRef.value = isAddMode
     val storesRef = remember { mutableStateOf(stores) }
     storesRef.value = stores
+    val userLatRef = remember { mutableStateOf(userLat) }
+    userLatRef.value = userLat
+    val userLonRef = remember { mutableStateOf(userLon) }
+    userLonRef.value = userLon
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -233,6 +237,16 @@ fun MapScreen(
                         mapView.model.mapViewPosition.setCenter(LatLong(initialLat, initialLon))
                         mapView.model.mapViewPosition.zoomLevel = initialZoom.toInt().toByte()
                         mapViewRef = mapView
+
+                        val lastZoom = intArrayOf(-1)
+                        mapView.model.mapViewPosition.addObserver {
+                            val mv = mapViewRef ?: return@addObserver
+                            val z = mv.model.mapViewPosition.zoomLevel.toInt()
+                            if (z == lastZoom[0]) return@addObserver
+                            lastZoom[0] = z
+                            addMarkersToMap(ctx, mv, storesRef.value, userLatRef.value, userLonRef.value)
+                        }
+
                         val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
                             override fun onLongPress(e: MotionEvent) {
                                 if (isAddModeRef.value) {
@@ -439,16 +453,28 @@ private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Doub
 private fun addMarkersToMap(context: Context, mapView: MapView, stores: List<Store>, userLat: Double?, userLon: Double?) {
     try {
         mapView.layerManager.layers.filterIsInstance<Marker>().forEach { mapView.layerManager.layers.remove(it) }
-        stores.forEach { store ->
-            try {
-                val bitmap = MarkerIconHelper.getMarkerBitmap(store.category)
-                mapView.layerManager.layers.add(Marker(LatLong(store.latitude, store.longitude), bitmap, 0, -bitmap.height / 2))
-            } catch (_: Exception) {}
+
+        val zoom = mapView.model.mapViewPosition.zoomLevel.toInt()
+        val centerLat = mapView.model.mapViewPosition.center.latitude
+        val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)
+
+        if (mode != MarkerIconHelper.DisplayMode.HIDDEN) {
+            stores.forEach { store ->
+                try {
+                    val bitmap = MarkerIconHelper.getMarkerBitmap(store.category, mode) ?: return@forEach
+                    mapView.layerManager.layers.add(
+                        Marker(LatLong(store.latitude, store.longitude), bitmap, 0, -bitmap.height / 2)
+                    )
+                } catch (_: Exception) {}
+            }
         }
+
         if (userLat != null && userLon != null) {
             try {
-                val userBmp = MarkerIconHelper.getUserLocationBitmap()
-                mapView.layerManager.layers.add(Marker(LatLong(userLat, userLon), userBmp, 0, -userBmp.height / 2))
+                val userBmp = MarkerIconHelper.getUserLocationBitmap(mode)
+                mapView.layerManager.layers.add(
+                    Marker(LatLong(userLat, userLon), userBmp, 0, -userBmp.height / 2)
+                )
             } catch (_: Exception) {}
         }
     } catch (_: Exception) {}
