@@ -10,22 +10,64 @@ import android.graphics.RectF
 import com.caverock.androidsvg.SVG
 import org.mapsforge.core.graphics.Bitmap
 import org.mapsforge.map.android.graphics.AndroidBitmap as MapsforgeAndroidBitmap
+import kotlin.math.cos
+import kotlin.math.pow
 
 /**
- * أيقونات مخصصة: فقاعة ملوّنة + رمز أبيض حسب نوع المكان.
- * الملفات في assets/markers/
+ * أيقونات مخصصة بحجم ديناميكي حسب مستوى التكبير / مقياس المسافة.
  */
 object MarkerIconHelper {
 
-    private const val SIZE = 192
     private var appContext: Context? = null
 
-    /** اللون المشترك للصحة: مستشفى / عيادة / مختبر / صيدلية / أسنان */
     private val HEALTH_COLOR = Color.parseColor("#E53935")
 
-    /** يجب استدعاؤها مرة عند بدء الشاشة */
+    /** أوضاع العرض حسب مقياس الخريطة */
+    enum class DisplayMode {
+        /** ~50م — فقاعة كبيرة */
+        BUBBLE_LARGE,
+        /** ~100م — فقاعة متوسطة */
+        BUBBLE_MEDIUM,
+        /** ~200م — دائرة ملوّنة فقط */
+        CIRCLE,
+        /** أبعد من 200م — لا تُعرض علامات الأماكن */
+        HIDDEN
+    }
+
     fun init(context: Context) {
         appContext = context.applicationContext
+    }
+
+    /**
+     * تقدير أمتار لكل بكسل عند خط عرض معيّن ومستوى تكبير OSM.
+     */
+    fun metersPerPixel(latitude: Double, zoom: Int): Double {
+        val latRad = Math.toRadians(latitude)
+        return 156543.03392 * cos(latRad) / 2.0.pow(zoom.toDouble())
+    }
+
+    /**
+     * تحويل مستوى التكبير إلى وضع عرض الأيقونة.
+     * مبني على مقياس شريط المسافة التقريبي في مصر (~خط عرض 30°).
+     */
+    fun displayModeForZoom(zoom: Int, latitude: Double = 30.0): DisplayMode {
+        // مقياس تقريبي لشريط ~100 بكسل على الشاشة
+        val approxScaleMeters = metersPerPixel(latitude, zoom) * 100.0
+        return when {
+            approxScaleMeters <= 70 -> DisplayMode.BUBBLE_LARGE   // حوالي 50م
+            approxScaleMeters <= 140 -> DisplayMode.BUBBLE_MEDIUM // حوالي 100م
+            approxScaleMeters <= 280 -> DisplayMode.CIRCLE        // حوالي 200م
+            else -> DisplayMode.HIDDEN
+        }
+    }
+
+    fun sizeForMode(mode: DisplayMode): Int {
+        return when (mode) {
+            DisplayMode.BUBBLE_LARGE -> 168
+            DisplayMode.BUBBLE_MEDIUM -> 100
+            DisplayMode.CIRCLE -> 36
+            DisplayMode.HIDDEN -> 0
+        }
     }
 
     fun colorForCategory(category: String): Int {
@@ -52,7 +94,6 @@ object MarkerIconHelper {
         }
     }
 
-    /** اسم ملف الأيقونة الداخلية حسب التصنيف */
     fun iconNameForCategory(category: String): String {
         val c = category.lowercase()
         return when {
@@ -77,30 +118,49 @@ object MarkerIconHelper {
         }
     }
 
-    fun getMarkerBitmap(category: String): Bitmap {
+    fun getMarkerBitmap(category: String, mode: DisplayMode): Bitmap? {
+        if (mode == DisplayMode.HIDDEN) return null
         val color = colorForCategory(category)
-        val iconName = iconNameForCategory(category)
-        val androidBmp = composeMarker(color, iconName)
+        val size = sizeForMode(mode)
+        val androidBmp = when (mode) {
+            DisplayMode.CIRCLE -> composeCircle(color, size)
+            else -> composeBubble(color, iconNameForCategory(category), size)
+        }
         return MapsforgeAndroidBitmap(androidBmp)
     }
 
-    fun getUserLocationBitmap(): Bitmap {
-        val androidBmp = composeMarker(Color.parseColor("#E53935"), "home")
+    /** للتوافق مع الاستدعاءات القديمة */
+    fun getMarkerBitmap(category: String): Bitmap {
+        return getMarkerBitmap(category, DisplayMode.BUBBLE_LARGE)
+            ?: MapsforgeAndroidBitmap(composeCircle(colorForCategory(category), 36))
+    }
+
+    fun getUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): Bitmap {
+        val size = when (mode) {
+            DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 48
+            DisplayMode.BUBBLE_MEDIUM -> 100
+            DisplayMode.BUBBLE_LARGE -> 140
+        }
+        val androidBmp = if (mode == DisplayMode.CIRCLE || mode == DisplayMode.HIDDEN) {
+            composeCircle(Color.parseColor("#E53935"), size)
+        } else {
+            composeBubble(Color.parseColor("#E53935"), "home", size)
+        }
         return MapsforgeAndroidBitmap(androidBmp)
     }
 
-    private fun composeMarker(bubbleColor: Int, iconName: String): AndroidBitmap {
-        val bmp = AndroidBitmap.createBitmap(SIZE, SIZE, AndroidBitmap.Config.ARGB_8888)
+    private fun composeBubble(bubbleColor: Int, iconName: String, size: Int): AndroidBitmap {
+        val bmp = AndroidBitmap.createBitmap(size, size, AndroidBitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
         val ctx = appContext
 
         if (ctx != null) {
             try {
                 val bubbleSvg = SVG.getFromAsset(ctx.assets, "markers/icon_bubble.svg")
-                bubbleSvg.setDocumentWidth(SIZE.toFloat())
-                bubbleSvg.setDocumentHeight(SIZE.toFloat())
+                bubbleSvg.setDocumentWidth(size.toFloat())
+                bubbleSvg.setDocumentHeight(size.toFloat())
                 val bubblePic = bubbleSvg.renderToPicture()
-                val temp = AndroidBitmap.createBitmap(SIZE, SIZE, AndroidBitmap.Config.ARGB_8888)
+                val temp = AndroidBitmap.createBitmap(size, size, AndroidBitmap.Config.ARGB_8888)
                 val tempCanvas = Canvas(temp)
                 tempCanvas.drawPicture(bubblePic)
                 val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
@@ -110,7 +170,7 @@ object MarkerIconHelper {
 
                 val innerName = if (assetExists(ctx, "markers/$iconName.svg")) iconName else "other"
                 val iconSvg = SVG.getFromAsset(ctx.assets, "markers/$innerName.svg")
-                val iconSize = (SIZE * 0.42f).toInt()
+                val iconSize = (size * 0.42f).toInt().coerceAtLeast(8)
                 iconSvg.setDocumentWidth(iconSize.toFloat())
                 iconSvg.setDocumentHeight(iconSize.toFloat())
                 val iconPic = iconSvg.renderToPicture()
@@ -119,8 +179,8 @@ object MarkerIconHelper {
                 iconCanvas.drawPicture(iconPic)
                 val whitePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
                 whitePaint.colorFilter = PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-                val left = (SIZE - iconSize) / 2f
-                val top = SIZE * 0.18f
+                val left = (size - iconSize) / 2f
+                val top = size * 0.18f
                 canvas.drawBitmap(iconBmp, left, top, whitePaint)
                 iconBmp.recycle()
 
@@ -133,14 +193,45 @@ object MarkerIconHelper {
             style = android.graphics.Paint.Style.FILL
             color = bubbleColor
         }
-        canvas.drawRoundRect(RectF(SIZE * 0.05f, SIZE * 0.05f, SIZE * 0.95f, SIZE * 0.78f), 40f, 40f, p)
+        canvas.drawRoundRect(RectF(size * 0.05f, size * 0.05f, size * 0.95f, size * 0.78f), size * 0.2f, size * 0.2f, p)
         val tip = android.graphics.Path().apply {
-            moveTo(SIZE * 0.35f, SIZE * 0.72f)
-            lineTo(SIZE * 0.65f, SIZE * 0.72f)
-            lineTo(SIZE * 0.5f, SIZE * 0.95f)
+            moveTo(size * 0.35f, size * 0.72f)
+            lineTo(size * 0.65f, size * 0.72f)
+            lineTo(size * 0.5f, size * 0.95f)
             close()
         }
         canvas.drawPath(tip, p)
+        return bmp
+    }
+
+    private fun composeCircle(color: Int, size: Int): AndroidBitmap {
+        val bmp = AndroidBitmap.createBitmap(size, size, AndroidBitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val ctx = appContext
+
+        if (ctx != null) {
+            try {
+                val circleSvg = SVG.getFromAsset(ctx.assets, "markers/circle.svg")
+                circleSvg.setDocumentWidth(size.toFloat())
+                circleSvg.setDocumentHeight(size.toFloat())
+                val pic = circleSvg.renderToPicture()
+                val temp = AndroidBitmap.createBitmap(size, size, AndroidBitmap.Config.ARGB_8888)
+                val tempCanvas = Canvas(temp)
+                tempCanvas.drawPicture(pic)
+                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+                paint.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
+                canvas.drawBitmap(temp, 0f, 0f, paint)
+                temp.recycle()
+                return bmp
+            } catch (_: Exception) {
+            }
+        }
+
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.FILL
+            this.color = color
+        }
+        canvas.drawCircle(size / 2f, size / 2f, size * 0.4f, p)
         return bmp
     }
 
