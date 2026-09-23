@@ -1,0 +1,16 @@
+mipmap-xhdpi/ic_launcher.png|mipmap-xhdpi__ic_launcher.png|6680
+mipmap-xhdpi/ic_launcher_foreground.png|mipmap-xhdpi__ic_launcher_foreground.png|14340
+mipmap-xhdpi/ic_launcher_round.png|mipmap-xhdpi__ic_launcher_round.png|11356
+mipmap-xxxhdpi/ic_launcher.png|mipmap-xxxhdpi__ic_launcher.png|19448
+mipmap-xxxhdpi/ic_launcher_foreground.png|mipmap-xxxhdpi__ic_launcher_foreground.png|43568
+mipmap-xxxhdpi/ic_launcher_round.png|mipmap-xxxhdpi__ic_launcher_round.png|29832
+mipmap-mdpi/ic_launcher.png|mipmap-mdpi__ic_launcher.png|2376
+mipmap-mdpi/ic_launcher_foreground.png|mipmap-mdpi__ic_launcher_foreground.png|5012
+mipmap-mdpi/ic_launcher_round.png|mipmap-mdpi__ic_launcher_round.png|4084
+mipmap-hdpi/ic_launcher.png|mipmap-hdpi__ic_launcher.png|4304
+mipmap-hdpi/ic_launcher_foreground.png|mipmap-hdpi__ic_launcher_foreground.png|9240
+mipmap-hdpi/ic_launcher_round.png|mipmap-hdpi__ic_launcher_round.png|7216
+mipmap-xxhdpi/ic_launcher.png|mipmap-xxhdpi__ic_launcher.png|12288
+mipmap-xxhdpi/ic_launcher_foreground.png|mipmap-xxhdpi__ic_launcher_foreground.png|27696
+mipmap-xxhdpi/ic_launcher_round.png|mipmap-xxhdpi__ic_launcher_round.png|20188
+drawable/ic_launcher_monochrome.png|drawable__ic_launcher_monochrome.png|10192
