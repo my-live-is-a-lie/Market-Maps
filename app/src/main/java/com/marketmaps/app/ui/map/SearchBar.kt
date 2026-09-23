@@ -20,7 +20,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -69,10 +69,8 @@ fun SearchBar(
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
-    // أنواع الأماكن الأساسية
     val mainFilters = remember { listOf("الكل") + CategoryData.categories.map { it.name } }
 
-    // عند تحديد نوع مكان: عرض تصنيفاته + زر الكل للعودة
     val subFilters = remember(filterType) {
         if (filterType == "الكل") {
             emptyList()
@@ -144,7 +142,7 @@ fun SearchBar(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = onOpenFilterDialog) {
                                 Icon(
-                                    Icons.Default.FilterList,
+                                    Icons.Default.List,
                                     contentDescription = "فلتر",
                                     tint = if (filterType != "الكل" || filterSub != "الكل")
                                         MaterialTheme.colorScheme.primary
@@ -182,7 +180,6 @@ fun SearchBar(
                 )
             }
 
-            // شريط الفلاتر السريعة
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -192,7 +189,6 @@ fun SearchBar(
             ) {
                 quickFilters.forEach { name ->
                     val selected = if (showingSubs) {
-                        // في وضع التصنيفات: الكل = لا تصنيف فرعي، أو الاسم = filterSub
                         if (name == "الكل") filterSub == "الكل" else filterSub == name
                     } else {
                         filterType == name
@@ -208,7 +204,6 @@ fun SearchBar(
                         onClick = {
                             if (showingSubs) {
                                 if (name == "الكل") {
-                                    // العودة لأنواع الأماكن الأساسية
                                     onFilterTypeChange("الكل")
                                 } else {
                                     onFilterSubChange(name)
