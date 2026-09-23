@@ -244,6 +244,30 @@ fun MapScreen(
 
     Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            if (mapProvider == MapProvider.GOOGLE) {
+                GoogleMapContent(
+                    initialLat = initialLat,
+                    initialLon = initialLon,
+                    initialZoom = initialZoom,
+                    stores = stores,
+                    userLat = userLat,
+                    userLon = userLon,
+                    cameraTarget = cameraTarget,
+                    isAddMode = isAddMode,
+                    onLongPress = { lat, lon ->
+                        selectedLat = lat
+                        selectedLon = lon
+                        showAddDialog = true
+                    },
+                    onMarkerClick = { store -> selectedStore = store },
+                    onCameraIdle = { lat, lon, zoom ->
+                        scope.launch {
+                            appPreferences.saveLastLocation(lat, lon, zoom.toDouble())
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
             AndroidView(
                 factory = { ctx ->
                     val mapView = MapView(ctx).apply {
@@ -302,6 +326,8 @@ fun MapScreen(
                     mapView.destroy(); mapViewRef = null; layerBundle = null
                 }
             )
+
+            } // end Mapsforge
 
             SearchBar(
                 query = searchQuery, onQueryChange = { searchQuery = it }, results = searchResults,
