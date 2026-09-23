@@ -93,6 +93,7 @@ fun MapScreen(
     val recentSearches by appPreferences.recentSearches.collectAsState(initial = emptyList())
     val recentSearchLimit by appPreferences.recentSearchLimit.collectAsState(initial = 5)
     val mapProvider by appPreferences.mapProvider.collectAsState(initial = MapProvider.MAPSFORGE)
+    val showMarkerLabels by appPreferences.showMarkerLabels.collectAsState(initial = true)
 
     remember {
         AndroidGraphicFactory.createInstance(context.applicationContext)
@@ -254,6 +255,7 @@ fun MapScreen(
                     userLon = userLon,
                     cameraTarget = cameraTarget,
                     isAddMode = isAddMode,
+                    showLabels = showMarkerLabels,
                     onLongPress = { lat, lon ->
                         selectedLat = lat
                         selectedLon = lon
