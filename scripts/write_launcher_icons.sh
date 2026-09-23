@@ -16,3 +16,4 @@ for dens in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
   done
 done
 rm -rf "$TMP"
+echo "Launcher icons installed successfully."

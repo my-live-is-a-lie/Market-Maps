@@ -12,6 +12,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install optimized launcher icons
+        run: |
+          chmod +x scripts/write_launcher_icons.sh
+          ./scripts/write_launcher_icons.sh
+          echo "=== Icon sizes after install ==="
+          find app/src/main/res -name "ic_launcher*.png" -exec ls -lh {} \;
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -27,32 +34,6 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
-
-      # الأيقونات الأصلية ~1.2MB لكل دقة — نضغطها للأبعاد الصحيحة قبل البناء
-      - name: Optimize launcher icons
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq imagemagick
-          declare -A SIZES=([mdpi]=48 [hdpi]=72 [xhdpi]=96 [xxhdpi]=144 [xxxhdpi]=192)
-          for dens in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-            dir="app/src/main/res/mipmap-${dens}"
-            size="${SIZES[$dens]}"
-            mkdir -p "$dir"
-            for name in ic_launcher ic_launcher_round; do
-              src=""
-              for cand in \
-                "$dir/${name}.png" \
-                "app/src/main/res/mipmap-xxxhdpi/${name}.png" \
-                "app/src/main/res/mipmap-xxhdpi/${name}.png"; do
-                if [ -f "$cand" ]; then src="$cand"; break; fi
-              done
-              if [ -n "$src" ]; then
-                echo "Optimizing $name ($dens) -> ${size}x${size} from $src"
-                convert "$src" -resize "${size}x${size}" -strip "PNG32:${dir}/${name}.png"
-                ls -lh "${dir}/${name}.png"
-              fi
-            done
-          done
 
       - name: Ensure Gradle Wrapper JAR
         run: |
