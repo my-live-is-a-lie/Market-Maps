@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -146,7 +146,7 @@ fun OnboardingScreen(
             enabled = !isLoadingGps,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(Icons.Default.MyLocation, contentDescription = null)
+            Icon(Icons.Default.LocationOn, contentDescription = null)
             Spacer(modifier = Modifier.padding(horizontal = 6.dp))
             Text(if (isLoadingGps) "جاري تحديد الموقع..." else "استخدام موقعي الحالي")
         }
