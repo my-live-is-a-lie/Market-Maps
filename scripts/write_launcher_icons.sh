@@ -1,9 +1,10 @@
 #!/bin/bash
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-B64="$ROOT/scripts/launcher_icons.tar.gz.b64"
 TMP=$(mktemp -d)
-base64 -d < "$B64" > "$TMP/icons.tar.gz"
+cat "$ROOT/scripts/icons_part0.b64" \
+    "$ROOT/scripts/icons_part1.b64" \
+    "$ROOT/scripts/icons_part2.b64" | base64 -d > "$TMP/icons.tar.gz"
 tar -xzf "$TMP/icons.tar.gz" -C "$TMP"
 for dens in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
   mkdir -p "$ROOT/app/src/main/res/mipmap-${dens}"
