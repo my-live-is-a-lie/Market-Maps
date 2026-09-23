@@ -86,11 +86,12 @@ fun GoogleMapContent(
         if (mode == MarkerIconHelper.DisplayMode.HIDDEN) return null
         val cacheKey = "${store.id}|${mode.name}|$showLabels|${store.name}"
         iconCache[cacheKey]?.let { return it }
-        val bmp: AndroidBitmap? = if (showLabels && mode != MarkerIconHelper.DisplayMode.CIRCLE) {
+        val rawBmp = if (showLabels && mode != MarkerIconHelper.DisplayMode.CIRCLE) {
             MarkerIconHelper.getAndroidMarkerBitmapWithLabel(store.category, store.name, mode)
         } else {
             MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
-        } ?: return null
+        }
+        val bmp = rawBmp ?: return null
         val desc = BitmapDescriptorFactory.fromBitmap(bmp)
         iconCache[cacheKey] = desc
         return desc
