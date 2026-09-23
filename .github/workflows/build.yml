@@ -1,6 +1,5 @@
 name: Build Debug APK
 
-# يعمل فقط عند التشغيل اليدوي من تبويب Actions
 on:
   workflow_dispatch:
 
@@ -11,6 +10,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Assemble MapScreen.kt
+        run: |
+          PARTS_DIR="app/src/main/java/com/marketmaps/app/ui/map"
+          cat "$PARTS_DIR/MapScreen.kt.part0" "$PARTS_DIR/MapScreen.kt.part1" > "$PARTS_DIR/MapScreen.kt"
+          wc -l "$PARTS_DIR/MapScreen.kt"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -32,7 +37,6 @@ jobs:
       - name: Ensure Gradle Wrapper JAR
         run: |
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            echo "Downloading gradle-wrapper.jar..."
             mkdir -p gradle/wrapper
             curl -sL -o gradle/wrapper/gradle-wrapper.jar \
               https://github.com/gradle/gradle/raw/v8.11.1/gradle/wrapper/gradle-wrapper.jar
@@ -50,7 +54,6 @@ jobs:
           APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
           echo "APK: $APK"
           ls -lh "$APK"
-          # ضغط سريع بـ zip (أخف من 7z بأقصى مستوى)
           zip -9 MarketMaps-debug-arm64.zip "$APK"
           ls -lh MarketMaps-debug-arm64.zip "$APK"
 
