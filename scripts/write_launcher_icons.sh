@@ -1,25 +1,55 @@
 #!/bin/bash
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TMP=$(mktemp -d)
+echo "Installing pre-sized launcher icons..."
 
-if ! command -v convert >/dev/null 2>&1; then
-  sudo apt-get update -qq
-  sudo apt-get install -y -qq imagemagick
-fi
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-xhdpi/ic_launcher.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-xhdpi__ic_launcher.png.b64" > "$ROOT/app/src/main/res/mipmap-xhdpi/ic_launcher.png"
 
-cat "$ROOT"/scripts/ic_launcher_part{0..7}.b64 | tr -d '\n' | base64 -d > "$TMP/ic_launcher.png"
-cat "$ROOT"/scripts/ic_launcher_round_part{0..10}.b64 | tr -d '\n' | base64 -d > "$TMP/ic_launcher_round.png"
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-xhdpi__ic_launcher_foreground.png.b64" > "$ROOT/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png"
 
-declare -A SIZES=([mdpi]=48 [hdpi]=72 [xhdpi]=96 [xxhdpi]=144 [xxxhdpi]=192)
-for dens in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-  size="${SIZES[$dens]}"
-  dir="$ROOT/app/src/main/res/mipmap-${dens}"
-  mkdir -p "$dir"
-  for name in ic_launcher ic_launcher_round; do
-    convert "$TMP/${name}.png" -resize "${size}x${size}" -strip "PNG32:${dir}/${name}.png"
-    echo "Wrote ${name} ${dens} ${size}x${size} $(wc -c < ${dir}/${name}.png) bytes"
-  done
-done
-rm -rf "$TMP"
-echo "Launcher icons installed successfully."
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-xhdpi/ic_launcher_round.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-xhdpi__ic_launcher_round.png.b64" > "$ROOT/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-xxhdpi/ic_launcher.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-xxhdpi__ic_launcher.png.b64" > "$ROOT/app/src/main/res/mipmap-xxhdpi/ic_launcher.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-xxhdpi__ic_launcher_foreground.png.b64" > "$ROOT/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-xxhdpi__ic_launcher_round.png.b64" > "$ROOT/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-mdpi/ic_launcher.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-mdpi__ic_launcher.png.b64" > "$ROOT/app/src/main/res/mipmap-mdpi/ic_launcher.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-mdpi__ic_launcher_foreground.png.b64" > "$ROOT/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-mdpi/ic_launcher_round.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-mdpi__ic_launcher_round.png.b64" > "$ROOT/app/src/main/res/mipmap-mdpi/ic_launcher_round.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-hdpi/ic_launcher.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-hdpi__ic_launcher.png.b64" > "$ROOT/app/src/main/res/mipmap-hdpi/ic_launcher.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-hdpi__ic_launcher_foreground.png.b64" > "$ROOT/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-hdpi/ic_launcher_round.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-hdpi__ic_launcher_round.png.b64" > "$ROOT/app/src/main/res/mipmap-hdpi/ic_launcher_round.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-xxxhdpi/ic_launcher.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-xxxhdpi__ic_launcher.png.b64" > "$ROOT/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-xxxhdpi__ic_launcher_foreground.png.b64" > "$ROOT/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png)"
+base64 -d < "$ROOT/scripts/icon_data/mipmap-xxxhdpi__ic_launcher_round.png.b64" > "$ROOT/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png"
+
+mkdir -p "$ROOT/$(dirname app/src/main/res/drawable/ic_launcher_monochrome.png)"
+base64 -d < "$ROOT/scripts/icon_data/drawable__ic_launcher_monochrome.png.b64" > "$ROOT/app/src/main/res/drawable/ic_launcher_monochrome.png"
+
+echo "Done."
+find "$ROOT/app/src/main/res" -name "ic_launcher*.png" -exec ls -lh {} \;
