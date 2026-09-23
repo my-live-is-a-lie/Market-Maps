@@ -66,6 +66,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.AppThemeMode
+import com.marketmaps.app.data.MapCatalog
 import com.marketmaps.app.data.MapDownloader
 import com.marketmaps.app.data.MapProvider
 import com.marketmaps.app.ui.theme.AccentPresets
@@ -521,16 +522,47 @@ private fun OfflineMapsSettingsScreen(
     val context = LocalContext.current
     val offlineMode by prefs.offlineMode.collectAsState(initial = false)
 
-    var mapDownloaded by remember { mutableStateOf(MapDownloader.isEgyptMapDownloaded(context)) }
+    var downloaded by remember { mutableStateOf(MapDownloader.listDownloaded(context)) }
+    var showLoadedList by remember { mutableStateOf(false) }
+    var continentId by remember { mutableStateOf<String?>(null) }
+    var selectedRegion by remember { mutableStateOf<MapCatalog.MapRegion?>(null) }
+    var continentMenu by remember { mutableStateOf(false) }
+    var countryMenu by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+
     var isDownloading by remember { mutableStateOf(false) }
-    var progress by remember { mutableIntStateOf(0) }
+    var isPaused by remember { mutableStateOf(false) }
+    var progressText by remember { mutableStateOf("") }
+    var progressPercent by remember { mutableIntStateOf(0) }
+
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf(setOf<String>()) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    fun refreshList() {
+        downloaded = MapDownloader.listDownloaded(context)
+    }
+
+    val filteredRegions = remember(continentId, searchQuery) {
+        when {
+            searchQuery.isNotBlank() -> MapCatalog.search(searchQuery)
+            continentId != null -> MapCatalog.byContinent(continentId!!)
+            else -> emptyList()
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("الخرائط المحمّلة") },
+                title = { Text(if (showLoadedList) "الخرائط المحمّلة" else "الخرائط المحمّلة") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        if (showLoadedList) {
+                            showLoadedList = false
+                            selectionMode = false
+                            selectedIds = emptySet()
+                        } else onBack()
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
                     }
                 }
@@ -545,34 +577,240 @@ private fun OfflineMapsSettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
+            if (showLoadedList) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("بحث عن منطقة أو بلد") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                val list = downloaded.filter {
+                    searchQuery.isBlank() ||
+                        it.nameAr.contains(searchQuery, true) ||
+                        it.continentAr.contains(searchQuery, true)
+                }
+                if (list.isEmpty()) {
+                    Text("لا توجد خرائط محمّلة", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    list.forEach { item ->
+                        val selected = item.fileName in selectedIds
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (selectionMode) {
+                                        selectedIds = if (selected) selectedIds - item.fileName
+                                        else selectedIds + item.fileName
+                                    }
+                                },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (selected)
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                else MaterialTheme.colorScheme.surfaceContainerHighest
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(item.nameAr, style = MaterialTheme.typography.titleMedium)
+                                    if (item.continentAr.isNotBlank()) {
+                                        Text(
+                                            item.continentAr,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Text(
+                                        "%.1f ميجا".format(item.sizeBytes / (1024.0 * 1024.0)),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (selectionMode) {
+                                    Text(if (selected) "✓" else "○", style = MaterialTheme.typography.titleLarge)
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (selectionMode && selectedIds.isNotEmpty()) {
+                        Button(
+                            onClick = { showDeleteConfirm = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("حذف المحدد (${selectedIds.size})")
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { selectionMode = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("تحديد للحذف")
+                        }
+                    }
+                }
+            } else {
+                // تحميل خريطة جديدة
+                Text("تحميل خريطة", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "المصدر المجاني يوفّر خرائط على مستوى الدولة (وليس المحافظة). اختر القارة ثم الدولة.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = {
+                        searchQuery = it
+                        if (it.isNotBlank()) continentId = null
+                    },
+                    label = { Text("بحث سريع عن دولة") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                ExposedDropdownMenuBox(
+                    expanded = continentMenu,
+                    onExpandedChange = { continentMenu = it }
+                ) {
+                    OutlinedTextField(
+                        value = MapCatalog.continents.find { it.id == continentId }?.nameAr ?: "اختر القارة",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("القارة") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = continentMenu) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = continentMenu,
+                        onDismissRequest = { continentMenu = false }
+                    ) {
+                        MapCatalog.continents.forEach { c ->
+                            DropdownMenuItem(
+                                text = { Text(c.nameAr) },
+                                onClick = {
+                                    continentId = c.id
+                                    selectedRegion = null
+                                    searchQuery = ""
+                                    continentMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                if (continentId != null || searchQuery.isNotBlank()) {
+                    ExposedDropdownMenuBox(
+                        expanded = countryMenu,
+                        onExpandedChange = { countryMenu = it }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedRegion?.nameAr ?: "اختر الدولة",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("الدولة") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = countryMenu) },
+                            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = countryMenu,
+                            onDismissRequest = { countryMenu = false }
+                        ) {
+                            filteredRegions.forEach { region ->
+                                val already = MapDownloader.isDownloaded(context, region.fileName)
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            if (already) "${region.nameAr} (محمّلة) — ~${region.approxSizeMb} ميجا"
+                                            else "${region.nameAr} — ~${region.approxSizeMb} ميجا"
+                                        )
+                                    },
+                                    onClick = {
+                                        selectedRegion = region
+                                        countryMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                selectedRegion?.let { region ->
+                    val already = MapDownloader.isDownloaded(context, region.fileName)
+                    val pending = MapDownloader.pendingTempBytes(context, region.fileName)
                     Text(
-                        text = if (mapDownloaded) "خريطة مصر محمّلة على الجهاز" else "لم يتم تحميل خريطة مصر بعد",
+                        "${region.nameAr} — ${region.continentAr} — تقريباً ${region.approxSizeMb} ميجا",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    if (pending > 0 && !already) {
+                        Text(
+                            "يمكن استئناف التحميل من %.1f ميجا".format(pending / (1024.0 * 1024.0)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
                     if (isDownloading) {
                         LinearProgressIndicator(
-                            progress = { progress / 100f },
+                            progress = { progressPercent / 100f },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Text("$progress%", style = MaterialTheme.typography.bodySmall)
-                    } else if (!mapDownloaded) {
+                        Text(progressText, style = MaterialTheme.typography.bodySmall)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    if (isPaused) {
+                                        MapDownloader.resume()
+                                        isPaused = false
+                                    } else {
+                                        MapDownloader.pause()
+                                        isPaused = true
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(if (isPaused) "استئناف" else "إيقاف مؤقت")
+                            }
+                            Button(
+                                onClick = {
+                                    MapDownloader.cancel()
+                                    isDownloading = false
+                                    isPaused = false
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("إلغاء")
+                            }
+                        }
+                    } else if (!already) {
                         Button(
                             onClick = {
                                 isDownloading = true
-                                progress = 0
+                                isPaused = false
+                                progressPercent = 0
+                                progressText = "جاري البدء..."
                                 scope.launch {
-                                    val result = MapDownloader.downloadEgyptMap(context) { p -> progress = p }
+                                    val result = MapDownloader.download(context, region) { p ->
+                                        progressPercent = p.percent
+                                        progressText = p.formatLine()
+                                    }
                                     isDownloading = false
+                                    isPaused = false
                                     if (result.isSuccess) {
-                                        mapDownloaded = true
-                                        Toast.makeText(context, "تم التحميل بنجاح", Toast.LENGTH_SHORT).show()
+                                        refreshList()
+                                        Toast.makeText(context, "تم تحميل ${region.nameAr}", Toast.LENGTH_SHORT).show()
                                     } else {
                                         Toast.makeText(
                                             context,
-                                            "فشل التحميل: ${result.exceptionOrNull()?.message}",
+                                            result.exceptionOrNull()?.message ?: "فشل التحميل",
                                             Toast.LENGTH_LONG
                                         ).show()
                                     }
@@ -580,35 +818,40 @@ private fun OfflineMapsSettingsScreen(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("تحميل خريطة مصر (~173 ميجا)")
+                            Text(if (pending > 0) "استئناف التحميل" else "تحميل ${region.nameAr}")
                         }
                     } else {
-                        OutlinedButton(
-                            onClick = {
-                                scope.launch {
-                                    MapDownloader.deleteEgyptMap(context)
-                                    mapDownloaded = false
-                                    prefs.setOfflineMode(false)
-                                    Toast.makeText(context, "تم حذف الخريطة المحلية", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("حذف الخريطة المحلية")
-                        }
+                        Text("هذه الخريطة محمّلة بالفعل", color = MaterialTheme.colorScheme.primary)
                     }
+                }
 
-                    if (mapDownloaded) {
-                        Spacer(modifier = Modifier.height(12.dp))
+                // زر قائمة المحمّل
+                OutlinedButton(
+                    onClick = {
+                        refreshList()
+                        searchQuery = ""
+                        showLoadedList = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("الخرائط المحمّلة (${downloaded.size})")
+                }
+
+                // وضع بدون إنترنت
+                val hasAny = downloaded.isNotEmpty() || MapDownloader.isEgyptMapDownloaded(context)
+                if (hasAny) {
+                    Card(modifier = Modifier.fillMaxWidth()) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("وضع بدون إنترنت", style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    text = "عرض الخريطة المحمّلة محلياً",
+                                    "عرض الخريطة المحمّلة محلياً",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -630,15 +873,33 @@ private fun OfflineMapsSettingsScreen(
                     }
                 }
             }
+        }
 
-            if (isDownloading) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    CircularProgressIndicator()
+        if (showDeleteConfirm) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showDeleteConfirm = false },
+                title = { Text("تأكيد الحذف") },
+                text = {
+                    val size = downloaded.filter { it.fileName in selectedIds }.sumOf { it.sizeBytes }
+                    Text(
+                        "سيتم حذف ${selectedIds.size} منطقة
+الحجم تقريباً %.1f ميجا".format(size / (1024.0 * 1024.0))
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        MapDownloader.deleteMaps(context, selectedIds.toList())
+                        refreshList()
+                        selectedIds = emptySet()
+                        selectionMode = false
+                        showDeleteConfirm = false
+                        Toast.makeText(context, "تم الحذف", Toast.LENGTH_SHORT).show()
+                    }) { Text("تأكيد") }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = { showDeleteConfirm = false }) { Text("إلغاء") }
                 }
-            }
+            )
         }
     }
 }
@@ -652,6 +913,13 @@ private fun SearchFilterSettingsScreen(
 ) {
     val context = LocalContext.current
     val rememberFilter by prefs.rememberFilter.collectAsState(initial = false)
+    val recentLimit by prefs.recentSearchLimit.collectAsState(initial = 5)
+    var limitMenuExpanded by remember { mutableStateOf(false) }
+
+    val limitLabel = when (recentLimit) {
+        0 -> "معطل"
+        else -> "$recentLimit نتيجة"
+    }
 
     Scaffold(
         topBar = {
@@ -702,6 +970,74 @@ private fun SearchFilterSettingsScreen(
                             }
                         }
                     )
+                }
+            }
+
+            Text("سجل البحث", style = MaterialTheme.typography.titleLarge)
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "عدد نتائج البحث السابقة في شريط البحث",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ExposedDropdownMenuBox(
+                        expanded = limitMenuExpanded,
+                        onExpandedChange = { limitMenuExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = limitLabel,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("عدد النتائج السابقة") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = limitMenuExpanded)
+                            },
+                            modifier = Modifier
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = limitMenuExpanded,
+                            onDismissRequest = { limitMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("معطل") },
+                                onClick = {
+                                    limitMenuExpanded = false
+                                    scope.launch {
+                                        prefs.setRecentSearchLimit(0)
+                                        Toast.makeText(context, "تم تعطيل سجل البحث", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            )
+                            (1..8).forEach { n ->
+                                DropdownMenuItem(
+                                    text = { Text("$n نتيجة") },
+                                    onClick = {
+                                        limitMenuExpanded = false
+                                        scope.launch {
+                                            prefs.setRecentSearchLimit(n)
+                                            Toast.makeText(context, "سيظهر $n من عمليات البحث السابقة", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                prefs.clearRecentSearches()
+                                Toast.makeText(context, "تم مسح سجل البحث", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("مسح سجل البحث")
+                    }
                 }
             }
         }
