@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.marketmaps.app.ui.theme.AccentPresets
@@ -40,16 +41,22 @@ class AppPreferences(private val context: Context) {
     private val filterSubKey = stringPreferencesKey("filter_sub")
     private val themeModeKey = stringPreferencesKey("theme_mode")
     private val accentKeyKey = stringPreferencesKey("accent_key")
+    private val recentSearchesKey = stringPreferencesKey("recent_searches")
+    private val recentSearchLimitKey = intPreferencesKey("recent_search_limit")
 
     val onboardingDone: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[onboardingDoneKey] ?: false
     }
 
     val lastLocation: Flow<Triple<Double, Double, Double>?> = context.dataStore.data.map { prefs ->
-        val lat = prefs[lastLatKey]
-        val lon = prefs[lastLonKey]
+        val lat = prefs[lastLatKey] ?: return@map null
+        val lon = prefs[lastLonKey] ?: return@map null
         val zoom = prefs[lastZoomKey] ?: 14.0
-        if (lat != null && lon != null) Triple(lat, lon, zoom) else null
+        Triple(lat, lon, zoom)
+    }
+
+    val areaLabel: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[areaLabelKey] ?: ""
     }
 
     val offlineMode: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -87,9 +94,17 @@ class AppPreferences(private val context: Context) {
         }
     }
 
-    /** dynamic | teal | blue | ... | custom:#RRGGBB */
     val accentKey: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[accentKeyKey] ?: AccentPresets.DEFAULT
+    }
+
+    val recentSearches: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        val raw = prefs[recentSearchesKey] ?: ""
+        if (raw.isBlank()) emptyList() else raw.split("||").filter { it.isNotBlank() }
+    }
+
+    val recentSearchLimit: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[recentSearchLimitKey] ?: 5).coerceIn(0, 8)
     }
 
     suspend fun setOnboardingDone(done: Boolean = true) {
@@ -134,5 +149,27 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setAccentKey(key: String) {
         context.dataStore.edit { it[accentKeyKey] = key }
+    }
+
+    suspend fun setRecentSearchLimit(limit: Int) {
+        context.dataStore.edit { it[recentSearchLimitKey] = limit.coerceIn(0, 8) }
+    }
+
+    suspend fun addRecentSearch(query: String) {
+        val q = query.trim()
+        if (q.isEmpty()) return
+        context.dataStore.edit { prefs ->
+            val limit = (prefs[recentSearchLimitKey] ?: 5).coerceIn(0, 8)
+            if (limit == 0) return@edit
+            val current = (prefs[recentSearchesKey] ?: "")
+                .split("||")
+                .filter { it.isNotBlank() && !it.equals(q, ignoreCase = true) }
+            val updated = (listOf(q) + current).take(8)
+            prefs[recentSearchesKey] = updated.joinToString("||")
+        }
+    }
+
+    suspend fun clearRecentSearches() {
+        context.dataStore.edit { it[recentSearchesKey] = "" }
     }
 }
