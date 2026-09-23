@@ -48,11 +48,11 @@ object MarkerIconHelper {
         }
     }
 
-    /** أحجام +20% عند 50م و100م */
+    /** أحجام ديناميكية: 50م أكبر بنسبة ~15% إضافية */
     fun sizeForMode(mode: DisplayMode): Int {
         return when (mode) {
-            DisplayMode.BUBBLE_LARGE -> 58   // كان 48 (+20%)
-            DisplayMode.BUBBLE_MEDIUM -> 34  // كان 28 (+20%)
+            DisplayMode.BUBBLE_LARGE -> 67   // ~50م (+15% عن 58)
+            DisplayMode.BUBBLE_MEDIUM -> 34  // ~100م
             DisplayMode.CIRCLE -> 14
             DisplayMode.HIDDEN -> 0
         }
