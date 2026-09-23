@@ -12,13 +12,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install launcher icons
-        run: |
-          chmod +x scripts/write_launcher_icons.sh
-          ./scripts/write_launcher_icons.sh
-          echo "=== Icon sizes ==="
-          find app/src/main/res -name "ic_launcher*.png" -exec ls -lh {} \;
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:

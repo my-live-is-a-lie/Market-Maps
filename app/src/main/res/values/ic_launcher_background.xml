@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- لون خلفية أيقونة التطبيق التكيفية (يطابق لون الأيقونة) -->
     <color name="ic_launcher_background">#024EE7</color>
 </resources>
