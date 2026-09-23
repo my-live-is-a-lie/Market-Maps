@@ -122,6 +122,21 @@ object MarkerIconHelper {
             ?: MapsforgeAndroidBitmap(composeCircle(colorForCategory(category), 14))
     }
 
+    fun getAndroidUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): AndroidBitmap? {
+        if (mode == DisplayMode.HIDDEN) return null
+        val size = when (mode) {
+            DisplayMode.CIRCLE -> 16
+            DisplayMode.BUBBLE_MEDIUM -> 34
+            DisplayMode.BUBBLE_LARGE -> 53
+            DisplayMode.HIDDEN -> 0
+        }
+        return if (mode == DisplayMode.CIRCLE) {
+            composeCircle(Color.parseColor("#E53935"), size)
+        } else {
+            composeBubble(Color.parseColor("#E53935"), "home", size)
+        }
+    }
+
     fun getUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): Bitmap {
         val size = when (mode) {
             DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 16
@@ -134,6 +149,68 @@ object MarkerIconHelper {
             composeBubble(Color.parseColor("#E53935"), "home", size)
         }
         return MapsforgeAndroidBitmap(androidBmp)
+    }
+
+
+    /** نسخة Android Bitmap للاستخدام مع خرائط جوجل */
+    fun getAndroidMarkerBitmap(category: String, mode: DisplayMode): AndroidBitmap? {
+        if (mode == DisplayMode.HIDDEN) return null
+        val color = colorForCategory(category)
+        val size = sizeForMode(mode)
+        return when (mode) {
+            DisplayMode.CIRCLE -> composeCircle(color, size)
+            else -> composeBubble(color, iconNameForCategory(category), size)
+        }
+    }
+
+    /**
+     * أيقونة مع اسم المكان أسفلها (مثل تسميات خرائط جوجل).
+     * تُستخدم فقط في أوضاع الفقاعة الكبيرة/المتوسطة.
+     */
+    fun getAndroidMarkerBitmapWithLabel(
+        category: String,
+        name: String,
+        mode: DisplayMode
+    ): AndroidBitmap? {
+        if (mode == DisplayMode.HIDDEN) return null
+        if (mode == DisplayMode.CIRCLE) {
+            return getAndroidMarkerBitmap(category, mode)
+        }
+        val icon = getAndroidMarkerBitmap(category, mode) ?: return null
+        val label = name.trim().ifEmpty { return icon }
+        val displayName = if (label.length > 18) label.take(17) + "…" else label
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            textSize = when (mode) {
+                DisplayMode.BUBBLE_LARGE -> 28f
+                else -> 22f
+            }
+            typeface = Typeface.DEFAULT_BOLD
+            textAlign = Paint.Align.CENTER
+        }
+        val stroke = Paint(paint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 4f
+            color = Color.WHITE
+        }
+        val textWidth = paint.measureText(displayName).toInt()
+        val textHeight = (paint.fontMetrics.bottom - paint.fontMetrics.top).toInt()
+        val pad = 6
+        val width = maxOf(icon.width, textWidth + pad * 2)
+        val height = icon.height + textHeight + pad
+        val out = AndroidBitmap.createBitmap(width, height, AndroidBitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        canvas.drawBitmap(icon, ((width - icon.width) / 2f), 0f, null)
+        val x = width / 2f
+        val y = icon.height + pad - paint.fontMetrics.top
+        canvas.drawText(displayName, x, y, stroke)
+        canvas.drawText(displayName, x, y, paint)
+        return out
+    }
+
+    fun displayModeForGoogleZoom(zoom: Float, latitude: Double = 30.0): DisplayMode {
+        return displayModeForZoom(zoom.toInt().coerceIn(1, 22), latitude)
     }
 
     private fun composeBubble(bubbleColor: Int, iconName: String, size: Int): AndroidBitmap {
