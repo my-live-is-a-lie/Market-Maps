@@ -1,6 +1,7 @@
 package com.marketmaps.app.ui.settings
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,11 +19,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -62,6 +71,15 @@ import com.marketmaps.app.data.MapProvider
 import com.marketmaps.app.ui.theme.AccentPresets
 import kotlinx.coroutines.launch
 
+/** أقسام الإعدادات الرئيسية */
+private enum class SettingsSection {
+    MAIN,
+    APPEARANCE,
+    MAP_TYPE,
+    OFFLINE_MAPS,
+    SEARCH_FILTERS
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -71,15 +89,159 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val prefs = remember { AppPreferences(context) }
 
-    val offlineMode by prefs.offlineMode.collectAsState(initial = false)
-    val mapProvider by prefs.mapProvider.collectAsState(initial = MapProvider.MAPSFORGE)
-    val rememberFilter by prefs.rememberFilter.collectAsState(initial = false)
+    var section by remember { mutableStateOf(SettingsSection.MAIN) }
+
+    // زر الرجوع في الهاتف: يرجع للقسم الرئيسي أولاً ثم يغلق الإعدادات
+    BackHandler {
+        if (section != SettingsSection.MAIN) {
+            section = SettingsSection.MAIN
+        } else {
+            onBack()
+        }
+    }
+
+    when (section) {
+        SettingsSection.MAIN -> SettingsMainScreen(
+            onBack = onBack,
+            onOpen = { section = it }
+        )
+        SettingsSection.APPEARANCE -> AppearanceSettingsScreen(
+            prefs = prefs,
+            scope = scope,
+            onBack = { section = SettingsSection.MAIN }
+        )
+        SettingsSection.MAP_TYPE -> MapTypeSettingsScreen(
+            prefs = prefs,
+            scope = scope,
+            onBack = { section = SettingsSection.MAIN }
+        )
+        SettingsSection.OFFLINE_MAPS -> OfflineMapsSettingsScreen(
+            prefs = prefs,
+            scope = scope,
+            onBack = { section = SettingsSection.MAIN }
+        )
+        SettingsSection.SEARCH_FILTERS -> SearchFilterSettingsScreen(
+            prefs = prefs,
+            scope = scope,
+            onBack = { section = SettingsSection.MAIN }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsMainScreen(
+    onBack: () -> Unit,
+    onOpen: (SettingsSection) -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("الإعدادات") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            SettingsSectionCard(
+                title = "مظهر التطبيق",
+                subtitle = "النمط الفاتح/الغامق ولون التمييز",
+                icon = Icons.Default.Settings,
+                onClick = { onOpen(SettingsSection.APPEARANCE) }
+            )
+            SettingsSectionCard(
+                title = "نوع الخريطة",
+                subtitle = "OpenStreetMap أو خرائط جوجل",
+                icon = Icons.Default.LocationOn,
+                onClick = { onOpen(SettingsSection.MAP_TYPE) }
+            )
+            SettingsSectionCard(
+                title = "الخرائط المحمّلة",
+                subtitle = "تحميل خريطة مصر للعمل بدون إنترنت",
+                icon = Icons.Default.Add,
+                onClick = { onOpen(SettingsSection.OFFLINE_MAPS) }
+            )
+            SettingsSectionCard(
+                title = "البحث والفلاتر",
+                subtitle = "تذكر آخر فلتر استخدمته",
+                icon = Icons.Default.List,
+                onClick = { onOpen(SettingsSection.SEARCH_FILTERS) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsSectionCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp)
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 14.dp)
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppearanceSettingsScreen(
+    prefs: AppPreferences,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
     val themeMode by prefs.themeMode.collectAsState(initial = AppThemeMode.LIGHT)
     val accentKey by prefs.accentKey.collectAsState(initial = AccentPresets.DEFAULT)
 
-    var mapDownloaded by remember { mutableStateOf(MapDownloader.isEgyptMapDownloaded(context)) }
-    var isDownloading by remember { mutableStateOf(false) }
-    var progress by remember { mutableIntStateOf(0) }
     var themeMenuExpanded by remember { mutableStateOf(false) }
     var customHex by remember { mutableStateOf("#00897B") }
     var showCustomHex by remember { mutableStateOf(false) }
@@ -93,7 +255,7 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("الإعدادات") },
+                title = { Text("مظهر التطبيق") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
@@ -284,9 +446,40 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+    }
+}
 
-            Text(text = "نوع الخريطة", style = MaterialTheme.typography.titleLarge)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MapTypeSettingsScreen(
+    prefs: AppPreferences,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val mapProvider by prefs.mapProvider.collectAsState(initial = MapProvider.MAPSFORGE)
 
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("نوع الخريطة") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(8.dp)) {
                     MapProviderOption(
@@ -314,9 +507,44 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+    }
+}
 
-            Text(text = "الخريطة بدون إنترنت", style = MaterialTheme.typography.titleLarge)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OfflineMapsSettingsScreen(
+    prefs: AppPreferences,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val offlineMode by prefs.offlineMode.collectAsState(initial = false)
 
+    var mapDownloaded by remember { mutableStateOf(MapDownloader.isEgyptMapDownloaded(context)) }
+    var isDownloading by remember { mutableStateOf(false) }
+    var progress by remember { mutableIntStateOf(0) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("الخرائط المحمّلة") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -403,8 +631,48 @@ fun SettingsScreen(
                 }
             }
 
-            Text(text = "البحث والفلاتر", style = MaterialTheme.typography.titleLarge)
+            if (isDownloading) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        }
+    }
+}
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchFilterSettingsScreen(
+    prefs: AppPreferences,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val rememberFilter by prefs.rememberFilter.collectAsState(initial = false)
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("البحث والفلاتر") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
@@ -434,15 +702,6 @@ fun SettingsScreen(
                             }
                         }
                     )
-                }
-            }
-
-            if (isDownloading) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    CircularProgressIndicator()
                 }
             }
         }

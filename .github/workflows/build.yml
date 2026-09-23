@@ -11,16 +11,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Restore MapScreen.kt (from last good commit + icon fix)
-        run: |
-          TARGET="app/src/main/java/com/marketmaps/app/ui/map/MapScreen.kt"
-          curl -sL "https://raw.githubusercontent.com/my-live-is-a-lie/Market-Maps/28160e6a05d7053cbbba9ac39cd49ef8c20cff7f/app/src/main/java/com/marketmaps/app/ui/map/MapScreen.kt" \
-            -o "$TARGET"
-          # استبدال أيقونات غير موجودة في material-icons-core
-          sed -i 's/MyLocation/LocationOn/g' "$TARGET"
-          echo "MapScreen lines: $(wc -l < "$TARGET")"
-          grep -n LocationOn "$TARGET" | head -5
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -52,14 +42,17 @@ jobs:
       - name: Build Debug APK (arm64-v8a only)
         run: ./gradlew assembleDebug --stacktrace --no-daemon --build-cache
 
-      - name: Compress APK (fast)
+      - name: Package APK at zip root
         if: success()
         run: |
           APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
           echo "APK: $APK"
           ls -lh "$APK"
-          zip -9 MarketMaps-debug-arm64.zip "$APK"
-          ls -lh MarketMaps-debug-arm64.zip "$APK"
+          # -j = junk paths → الملف يكون مباشرة داخل الـ zip بدون مجلدات
+          cp "$APK" ./app-debug.apk
+          zip -9 -j MarketMaps-debug-arm64.zip ./app-debug.apk
+          ls -lh MarketMaps-debug-arm64.zip
+          unzip -l MarketMaps-debug-arm64.zip
 
       - name: Upload APK Artifact
         if: success()
