@@ -43,6 +43,7 @@ class AppPreferences(private val context: Context) {
     private val accentKeyKey = stringPreferencesKey("accent_key")
     private val recentSearchesKey = stringPreferencesKey("recent_searches")
     private val recentSearchLimitKey = intPreferencesKey("recent_search_limit")
+    private val showMarkerLabelsKey = booleanPreferencesKey("show_marker_labels")
 
     val onboardingDone: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[onboardingDoneKey] ?: false
@@ -105,6 +106,11 @@ class AppPreferences(private val context: Context) {
 
     val recentSearchLimit: Flow<Int> = context.dataStore.data.map { prefs ->
         (prefs[recentSearchLimitKey] ?: 5).coerceIn(0, 8)
+    }
+
+    /** إظهار أسماء المواقع بجانب الأيقونات على الخريطة */
+    val showMarkerLabels: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[showMarkerLabelsKey] ?: true
     }
 
     suspend fun setOnboardingDone(done: Boolean = true) {
@@ -172,4 +178,9 @@ class AppPreferences(private val context: Context) {
     suspend fun clearRecentSearches() {
         context.dataStore.edit { it[recentSearchesKey] = "" }
     }
+
+    suspend fun setShowMarkerLabels(show: Boolean) {
+        context.dataStore.edit { it[showMarkerLabelsKey] = show }
+    }
 }
+
