@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
                             CrashReportScreen(
                                 crashText = crashText!!,
                                 onDismiss = {
-                                    CrashHandler.clearLastCrash(context)
+                                    CrashHandler.clear(context)
                                     crashText = null
                                 }
                             )
