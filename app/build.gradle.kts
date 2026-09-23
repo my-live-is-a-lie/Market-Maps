@@ -1,9 +1,18 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
 }
+
+val localProps = Properties()
+val localPropsFile = rootProject.file("local.properties")
+if (localPropsFile.exists()) {
+    localPropsFile.inputStream().use { localProps.load(it) }
+}
+val mapsApiKey: String = localProps.getProperty("MAPS_API_KEY") ?: ""
 
 android {
     namespace = "com.marketmaps.app"
@@ -21,6 +30,10 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
+
+        // مفتاح خرائط جوجل من local.properties (يُحقن في CI من Secret)
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
+        buildConfigField("String", "MAPS_API_KEY", ""$mapsApiKey"")
     }
 
     buildTypes {
@@ -50,6 +63,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -101,6 +115,8 @@ dependencies {
     implementation("com.caverock:androidsvg:1.4")
 
     implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("com.google.android.gms:play-services-maps:19.0.0")
+    implementation("com.google.maps.android:maps-compose:6.1.2")
 
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-firestore-ktx")
