@@ -246,7 +246,13 @@ fun MapScreen(
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             AndroidView(
                 factory = { ctx ->
-                    val mapView = MapView(ctx).apply { isClickable = true; setBuiltInZoomControls(false) }
+                    val mapView = MapView(ctx).apply {
+                        isClickable = true
+                        setBuiltInZoomControls(false)
+                        // تكبير عناصر الرسم لتحسين وضوح التسميات (خصوصاً الأوفلاين)
+                        val density = ctx.resources.displayMetrics.density
+                        model.displayModel.setUserScaleFactor((density * 1.15f).coerceIn(1.0f, 2.2f))
+                    }
                     val cache = MapLayerHelper.createTileCache(ctx, mapView)
                     val bundle = MapLayerHelper.LayerBundle(tileCache = cache)
                     layerBundle = bundle
@@ -343,16 +349,11 @@ fun MapScreen(
             }
 
             if (!searchExpanded) {
-                // في الوضع المظلم: خلفية سوداء + أيقونة بلون التمييز
-                val overlayContainer = if (MaterialTheme.colorScheme.background.luminance() < 0.5f)
-                    Color.Black else MaterialTheme.colorScheme.secondaryContainer
-                val overlayContent = if (MaterialTheme.colorScheme.background.luminance() < 0.5f)
-                    MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSecondaryContainer
                 FloatingActionButton(
                     onClick = onOpenSettings,
                     modifier = Modifier.align(Alignment.TopStart).padding(top = 8.dp, start = 16.dp).size(48.dp).zIndex(1f),
-                    containerColor = overlayContainer,
-                    contentColor = overlayContent,
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     shape = CircleShape
                 ) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") }
             }
@@ -392,10 +393,8 @@ fun MapScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         FloatingActionButton(
                             onClick = { requestLocationAndMove(); isMenuExpanded = false },
-                            containerColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f)
-                                Color.Black else MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f)
-                                MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSecondaryContainer,
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                             shape = CircleShape, modifier = Modifier.size(48.dp)
                         ) { Icon(Icons.Default.LocationOn, contentDescription = "موقعي الحالي") }
                         FloatingActionButton(
