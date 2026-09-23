@@ -881,10 +881,9 @@ private fun OfflineMapsSettingsScreen(
                 title = { Text("تأكيد الحذف") },
                 text = {
                     val size = downloaded.filter { it.fileName in selectedIds }.sumOf { it.sizeBytes }
-                    Text(
-                        "سيتم حذف ${selectedIds.size} منطقة
-الحجم تقريباً %.1f ميجا".format(size / (1024.0 * 1024.0))
-                    )
+                    val sizeMb = size / (1024.0 * 1024.0)
+                    val msg = "سيتم حذف ${selectedIds.size} منطقة\nالحجم تقريباً " + "%.1f".format(sizeMb) + " ميجا"
+                    Text(msg)
                 },
                 confirmButton = {
                     Button(onClick = {
