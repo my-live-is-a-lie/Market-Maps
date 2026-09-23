@@ -13,27 +13,30 @@ android {
         applicationId = "com.marketmaps.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // معالجات 64-bit فقط لتقليل الحجم أثناء الاختبار
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
-
-        // مفتاح خرائط جوجل — ضعه في local.properties كمفتاح MAPS_API_KEY=...
-        // أو غيّر القيمة أدناه مؤقتاً للاختبار
-        val mapsKey = project.findProperty("MAPS_API_KEY") as String?
-            ?: (project.rootProject.file("local.properties").takeIf { it.exists() }?.let { f ->
-                f.readLines().find { it.startsWith("MAPS_API_KEY=") }?.substringAfter("=")
-            } ?: "")
-        manifestPlaceholders["MAPS_API_KEY"] = mapsKey
     }
 
     buildTypes {
+        debug {
+            // تصغير Debug أيضاً لأن Workflow يبني assembleDebug
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -64,6 +67,15 @@ android {
                 "**/mips/**"
             )
         }
+        resources {
+            excludes += setOf(
+                "META-INF/LICENSE*",
+                "META-INF/NOTICE*",
+                "META-INF/*.kotlin_module",
+                "META-INF/AL2.0",
+                "META-INF/LGPL2.1"
+            )
+        }
     }
 }
 
@@ -77,6 +89,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    // extended يبقى مؤقتاً — انظر الشرح في المحادثة
     implementation("androidx.compose.material:material-icons-extended")
 
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
@@ -93,9 +106,8 @@ dependencies {
     implementation("org.mapsforge:mapsforge-map-reader:0.25.0")
     implementation("com.caverock:androidsvg:1.4")
 
-    // Google Maps
-    implementation("com.google.android.gms:play-services-maps:19.0.0")
-    implementation("com.google.maps.android:maps-compose:6.2.1")
+    // تم إزالة play-services-maps و maps-compose مؤقتاً لتقليل الحجم
+    // يُعاد إضافتها عند تفعيل خرائط جوجل لاحقاً
 
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
