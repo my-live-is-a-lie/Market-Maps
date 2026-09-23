@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.marketmaps.app.ui.theme.AccentPresets
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -18,11 +19,10 @@ enum class MapProvider {
     GOOGLE
 }
 
-/** نمط واجهة التطبيق */
 enum class AppThemeMode {
-    LIGHT,   // فاتح
-    DARK,    // غامق
-    AMOLED   // مظلم (أسود خالص)
+    LIGHT,
+    DARK,
+    AMOLED
 }
 
 class AppPreferences(private val context: Context) {
@@ -39,6 +39,7 @@ class AppPreferences(private val context: Context) {
     private val filterTypeKey = stringPreferencesKey("filter_type")
     private val filterSubKey = stringPreferencesKey("filter_sub")
     private val themeModeKey = stringPreferencesKey("theme_mode")
+    private val accentKeyKey = stringPreferencesKey("accent_key")
 
     val onboardingDone: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[onboardingDoneKey] ?: false
@@ -86,6 +87,11 @@ class AppPreferences(private val context: Context) {
         }
     }
 
+    /** dynamic | teal | blue | ... | custom:#RRGGBB */
+    val accentKey: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[accentKeyKey] ?: AccentPresets.DEFAULT
+    }
+
     suspend fun setOnboardingDone(done: Boolean = true) {
         context.dataStore.edit { it[onboardingDoneKey] = done }
     }
@@ -124,5 +130,9 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setThemeMode(mode: AppThemeMode) {
         context.dataStore.edit { it[themeModeKey] = mode.name }
+    }
+
+    suspend fun setAccentKey(key: String) {
+        context.dataStore.edit { it[accentKeyKey] = key }
     }
 }

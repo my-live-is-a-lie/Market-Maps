@@ -25,6 +25,7 @@ import com.marketmaps.app.ui.CrashReportScreen
 import com.marketmaps.app.ui.map.MapScreen
 import com.marketmaps.app.ui.onboarding.OnboardingScreen
 import com.marketmaps.app.ui.settings.SettingsScreen
+import com.marketmaps.app.ui.theme.AccentPresets
 import com.marketmaps.app.ui.theme.MarketMapsTheme
 import com.marketmaps.app.util.CrashHandler
 import kotlinx.coroutines.flow.first
@@ -38,8 +39,9 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val prefs = remember { AppPreferences(context) }
             val themeMode by prefs.themeMode.collectAsState(initial = AppThemeMode.LIGHT)
+            val accentKey by prefs.accentKey.collectAsState(initial = AccentPresets.DEFAULT)
 
-            MarketMapsTheme(themeMode = themeMode) {
+            MarketMapsTheme(themeMode = themeMode, accentKey = accentKey) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
