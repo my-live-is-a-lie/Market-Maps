@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -289,11 +290,14 @@ fun SearchBar(
                     .padding(top = 8.dp, end = 16.dp),
                 horizontalArrangement = Arrangement.End
             ) {
+                // في الوضع المظلم: خلفية سوداء + أيقونة بحث بلون التمييز
                 FloatingActionButton(
                     onClick = { onExpandedChange(true) },
                     modifier = Modifier.size(48.dp),
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    containerColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f)
+                        Color.Black else MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f)
+                        MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSecondaryContainer,
                     shape = CircleShape
                 ) {
                     Icon(Icons.Default.Search, contentDescription = "بحث")
