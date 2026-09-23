@@ -15,10 +15,6 @@ import kotlin.math.pow
 
 /**
  * أيقونات مخصصة بحجم ديناميكي حسب مستوى التكبير / مقياس المسافة.
- * الأحجام مطابقة لصور المرجع:
- * - 50 metter icon size → فقاعة صغيرة
- * - 100 metter icon size → فقاعة أصغر
- * - 200 metter 500 ft icon size → دائرة دقيقة
  */
 object MarkerIconHelper {
 
@@ -26,15 +22,10 @@ object MarkerIconHelper {
 
     private val HEALTH_COLOR = Color.parseColor("#E53935")
 
-    /** أوضاع العرض حسب مقياس الخريطة */
     enum class DisplayMode {
-        /** ~50م — فقاعة (مثل صورة 50 metter icon size) */
         BUBBLE_LARGE,
-        /** ~100م — فقاعة أصغر (مثل صورة 100 metter icon size) */
         BUBBLE_MEDIUM,
-        /** ~200م — دائرة ملوّنة (مثل صورة 200 metter 500 ft icon size) */
         CIRCLE,
-        /** أبعد من 200م — لا تُعرض علامات الأماكن */
         HIDDEN
     }
 
@@ -57,14 +48,12 @@ object MarkerIconHelper {
         }
     }
 
-    /**
-     * أحجام بالبكسل مطابقة تقريباً للصور المرجعية على الشاشة.
-     */
+    /** أحجام +20% عند 50م و100م */
     fun sizeForMode(mode: DisplayMode): Int {
         return when (mode) {
-            DisplayMode.BUBBLE_LARGE -> 48   // 50م
-            DisplayMode.BUBBLE_MEDIUM -> 28  // 100م
-            DisplayMode.CIRCLE -> 14         // 200م
+            DisplayMode.BUBBLE_LARGE -> 58   // كان 48 (+20%)
+            DisplayMode.BUBBLE_MEDIUM -> 34  // كان 28 (+20%)
+            DisplayMode.CIRCLE -> 14
             DisplayMode.HIDDEN -> 0
         }
     }
@@ -136,8 +125,8 @@ object MarkerIconHelper {
     fun getUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): Bitmap {
         val size = when (mode) {
             DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 16
-            DisplayMode.BUBBLE_MEDIUM -> 28
-            DisplayMode.BUBBLE_LARGE -> 44
+            DisplayMode.BUBBLE_MEDIUM -> 34
+            DisplayMode.BUBBLE_LARGE -> 53
         }
         val androidBmp = if (mode == DisplayMode.CIRCLE || mode == DisplayMode.HIDDEN) {
             composeCircle(Color.parseColor("#E53935"), size)
