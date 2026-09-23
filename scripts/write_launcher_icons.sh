@@ -2,15 +2,23 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP=$(mktemp -d)
-cat $ROOT/scripts/icons_part{0..7}.b64 | base64 -d > "$TMP/icons.tar.gz"
-tar -xzf "$TMP/icons.tar.gz" -C "$TMP"
+
+if ! command -v convert >/dev/null 2>&1; then
+  sudo apt-get update -qq
+  sudo apt-get install -y -qq imagemagick
+fi
+
+base64 -d "$ROOT/scripts/ic_launcher.b64" > "$TMP/ic_launcher.png"
+base64 -d "$ROOT/scripts/ic_launcher_round.b64" > "$TMP/ic_launcher_round.png"
+
+declare -A SIZES=([mdpi]=48 [hdpi]=72 [xhdpi]=96 [xxhdpi]=144 [xxxhdpi]=192)
 for dens in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-  mkdir -p "$ROOT/app/src/main/res/mipmap-${dens}"
+  size="${SIZES[$dens]}"
+  dir="$ROOT/app/src/main/res/mipmap-${dens}"
+  mkdir -p "$dir"
   for name in ic_launcher ic_launcher_round; do
-    if [ -f "$TMP/mipmap-${dens}/${name}.png" ]; then
-      cp "$TMP/mipmap-${dens}/${name}.png" "$ROOT/app/src/main/res/mipmap-${dens}/${name}.png"
-      echo "Wrote ${name} ${dens} ($(wc -c < "$ROOT/app/src/main/res/mipmap-${dens}/${name}.png") bytes)"
-    fi
+    convert "$TMP/${name}.png" -resize "${size}x${size}" -strip "PNG32:${dir}/${name}.png"
+    echo "Wrote ${name} ${dens} ${size}x${size} $(wc -c < ${dir}/${name}.png) bytes"
   done
 done
 rm -rf "$TMP"
