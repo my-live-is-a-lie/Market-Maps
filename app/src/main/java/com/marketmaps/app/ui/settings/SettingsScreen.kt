@@ -17,12 +17,17 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -42,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.marketmaps.app.data.AppPreferences
+import com.marketmaps.app.data.AppThemeMode
 import com.marketmaps.app.data.MapDownloader
 import com.marketmaps.app.data.MapProvider
 import kotlinx.coroutines.launch
@@ -58,9 +64,18 @@ fun SettingsScreen(
     val offlineMode by prefs.offlineMode.collectAsState(initial = false)
     val mapProvider by prefs.mapProvider.collectAsState(initial = MapProvider.MAPSFORGE)
     val rememberFilter by prefs.rememberFilter.collectAsState(initial = false)
+    val themeMode by prefs.themeMode.collectAsState(initial = AppThemeMode.LIGHT)
+
     var mapDownloaded by remember { mutableStateOf(MapDownloader.isEgyptMapDownloaded(context)) }
     var isDownloading by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
+    var themeMenuExpanded by remember { mutableStateOf(false) }
+
+    val themeLabel = when (themeMode) {
+        AppThemeMode.LIGHT -> "فاتح"
+        AppThemeMode.DARK -> "غامق"
+        AppThemeMode.AMOLED -> "مظلم (Amoled)"
+    }
 
     Scaffold(
         topBar = {
@@ -82,6 +97,75 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // —— نمط التطبيق ——
+            Text(
+                text = "نمط التطبيق",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "اختر مظهر الواجهة",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    ExposedDropdownMenuBox(
+                        expanded = themeMenuExpanded,
+                        onExpandedChange = { themeMenuExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = themeLabel,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("نمط التطبيق") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeMenuExpanded)
+                            },
+                            modifier = Modifier
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = themeMenuExpanded,
+                            onDismissRequest = { themeMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("فاتح") },
+                                onClick = {
+                                    themeMenuExpanded = false
+                                    scope.launch {
+                                        prefs.setThemeMode(AppThemeMode.LIGHT)
+                                        Toast.makeText(context, "تم اختيار النمط الفاتح", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("غامق") },
+                                onClick = {
+                                    themeMenuExpanded = false
+                                    scope.launch {
+                                        prefs.setThemeMode(AppThemeMode.DARK)
+                                        Toast.makeText(context, "تم اختيار النمط الغامق", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("مظلم (Amoled)") },
+                                onClick = {
+                                    themeMenuExpanded = false
+                                    scope.launch {
+                                        prefs.setThemeMode(AppThemeMode.AMOLED)
+                                        Toast.makeText(context, "تم اختيار النمط المظلم", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
             Text(
                 text = "نوع الخريطة",
                 style = MaterialTheme.typography.titleLarge
@@ -120,28 +204,19 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.titleLarge
             )
 
-            Text(
-                text = "حمّل خريطة مصر (~173 ميجا) لاستخدام التطبيق بدون إنترنت. الجودة أقل من وضع الإنترنت عند التكبير الشديد.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = if (mapDownloaded) "✓ خريطة مصر محمّلة" else "خريطة مصر غير محمّلة",
-                        style = MaterialTheme.typography.titleMedium
+                        text = if (mapDownloaded) "خريطة مصر محمّلة على الجهاز" else "لم يتم تحميل خريطة مصر بعد",
+                        style = MaterialTheme.typography.bodyMedium
                     )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
+                    Spacer(modifier = Modifier.height(8.dp))
                     if (isDownloading) {
-                        Text(text = "جاري التحميل... $progress%")
-                        Spacer(modifier = Modifier.height(8.dp))
                         LinearProgressIndicator(
                             progress = { progress / 100f },
                             modifier = Modifier.fillMaxWidth()
                         )
+                        Text("$progress%", style = MaterialTheme.typography.bodySmall)
                     } else if (!mapDownloaded) {
                         Button(
                             onClick = {
@@ -154,8 +229,7 @@ fun SettingsScreen(
                                     isDownloading = false
                                     if (result.isSuccess) {
                                         mapDownloaded = true
-                                        prefs.setMapFileName(MapDownloader.EGYPT_MAP_FILE)
-                                        Toast.makeText(context, "تم تحميل الخريطة بنجاح", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "تم التحميل بنجاح", Toast.LENGTH_SHORT).show()
                                     } else {
                                         Toast.makeText(
                                             context,
@@ -167,60 +241,54 @@ fun SettingsScreen(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("تحميل خريطة مصر")
+                            Text("تحميل خريطة مصر (~173 ميجا)")
                         }
                     } else {
                         OutlinedButton(
                             onClick = {
-                                MapDownloader.deleteEgyptMap(context)
-                                mapDownloaded = false
                                 scope.launch {
+                                    MapDownloader.deleteEgyptMap(context)
+                                    mapDownloaded = false
                                     prefs.setOfflineMode(false)
-                                    prefs.setMapFileName("")
+                                    Toast.makeText(context, "تم حذف الخريطة المحلية", Toast.LENGTH_SHORT).show()
                                 }
-                                Toast.makeText(context, "تم حذف الخريطة", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("حذف الخريطة المحمّلة")
+                            Text("حذف الخريطة المحلية")
                         }
                     }
-                }
-            }
 
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("وضع بدون إنترنت", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            text = if (mapDownloaded)
-                                "عند التفعيل تُستخدم الخريطة المحمّلة (جودة أقل عند التكبير)"
-                            else
-                                "حمّل الخريطة أولاً",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = offlineMode && mapDownloaded,
-                        enabled = mapDownloaded && !isDownloading,
-                        onCheckedChange = { enabled ->
-                            scope.launch {
-                                prefs.setOfflineMode(enabled)
-                                Toast.makeText(
-                                    context,
-                                    if (enabled) "وضع بدون إنترنت" else "وضع الإنترنت (أوضح)",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                    if (mapDownloaded) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("وضع بدون إنترنت", style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    text = "عرض الخريطة المحمّلة محلياً",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
+                            Switch(
+                                checked = offlineMode,
+                                onCheckedChange = { enabled ->
+                                    scope.launch {
+                                        prefs.setOfflineMode(enabled)
+                                        Toast.makeText(
+                                            context,
+                                            if (enabled) "تم تفعيل الوضع بدون إنترنت" else "تم تفعيل الوضع بالإنترنت",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            )
                         }
-                    )
+                    }
                 }
             }
 
