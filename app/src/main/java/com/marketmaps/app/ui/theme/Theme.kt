@@ -55,28 +55,51 @@ private fun buildDarkScheme(accent: Color, amoled: Boolean): ColorScheme {
     val onA = onAccent(accent)
     val bg = if (amoled) AmoledBackground else DarkBackground
     val surface = if (amoled) AmoledSurface else DarkSurface
-    // أزرار الخريطة: خلفية داكنة + أيقونة بلون التمييز (مثل عكس الوضع الفاتح)
-    val containerBg = if (amoled) Color.Black else Color(0xFF121212)
-    return darkColorScheme(
-        primary = accent,
-        onPrimary = onA,
-        secondary = accent,
-        onSecondary = onA,
-        tertiary = accent,
-        onTertiary = onA,
-        primaryContainer = containerBg,
-        onPrimaryContainer = accent,
-        secondaryContainer = containerBg,
-        onSecondaryContainer = accent,
-        tertiaryContainer = containerBg,
-        onTertiaryContainer = accent,
-        background = bg,
-        surface = surface,
-        onBackground = Color.White,
-        onSurface = Color.White,
-        surfaceContainerHighest = if (amoled) Color(0xFF1A1A1A) else Color(0xFF2C2C2C),
-        onSurfaceVariant = Color(0xFFB0B0B0)
-    )
+    return if (amoled) {
+        // مظلم (Amoled): خلفية سوداء + أيقونة بلون التمييز
+        darkColorScheme(
+            primary = accent,
+            onPrimary = onA,
+            secondary = accent,
+            onSecondary = onA,
+            tertiary = accent,
+            onTertiary = onA,
+            primaryContainer = Color.Black,
+            onPrimaryContainer = accent,
+            secondaryContainer = Color.Black,
+            onSecondaryContainer = accent,
+            tertiaryContainer = Color.Black,
+            onTertiaryContainer = accent,
+            background = bg,
+            surface = surface,
+            onBackground = Color.White,
+            onSurface = Color.White,
+            surfaceContainerHighest = Color(0xFF1A1A1A),
+            onSurfaceVariant = Color(0xFFB0B0B0)
+        )
+    } else {
+        // غامق: أزرار فاتحة مثل الوضع الفاتح (خلفية ملوّنة فاتحة + أيقونة داكنة)
+        darkColorScheme(
+            primary = accent,
+            onPrimary = onA,
+            secondary = accent,
+            onSecondary = onA,
+            tertiary = accent,
+            onTertiary = onA,
+            primaryContainer = lighten(accent, 0.75f),
+            onPrimaryContainer = Color(0xFF1A1A1A),
+            secondaryContainer = lighten(accent, 0.7f),
+            onSecondaryContainer = Color(0xFF1A1A1A),
+            tertiaryContainer = lighten(accent, 0.65f),
+            onTertiaryContainer = Color(0xFF1A1A1A),
+            background = bg,
+            surface = surface,
+            onBackground = Color.White,
+            onSurface = Color.White,
+            surfaceContainerHighest = Color(0xFF2C2C2C),
+            onSurfaceVariant = Color(0xFFB0B0B0)
+        )
+    }
 }
 
 @Composable
