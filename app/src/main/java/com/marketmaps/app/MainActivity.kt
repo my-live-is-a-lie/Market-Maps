@@ -2,6 +2,7 @@ package com.marketmaps.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -78,7 +79,9 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         else -> {
-                            // الخريطة تبقى حيّة تحت الإعدادات حتى لا يُفقد موضع التكبير والموقع
+                            BackHandler(enabled = showSettings) {
+                                showSettings = false
+                            }
                             Box(modifier = Modifier.fillMaxSize()) {
                                 MapScreen(onOpenSettings = { showSettings = true })
                                 if (showSettings) {
