@@ -10,6 +10,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.marketmaps.app.data.AppPreferences
+import com.marketmaps.app.data.AppThemeMode
 import com.marketmaps.app.ui.CrashReportScreen
 import com.marketmaps.app.ui.map.MapScreen
 import com.marketmaps.app.ui.onboarding.OnboardingScreen
@@ -32,15 +34,15 @@ class MainActivity : ComponentActivity() {
         CrashHandler.install(this)
         enableEdgeToEdge()
         setContent {
-            MarketMapsTheme {
+            val context = LocalContext.current
+            val prefs = remember { AppPreferences(context) }
+            val themeMode by prefs.themeMode.collectAsState(initial = AppThemeMode.LIGHT)
+
+            MarketMapsTheme(themeMode = themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val context = LocalContext.current
-                    val prefs = remember { AppPreferences(context) }
-
-                    // null = لم تُحمَّل التفضيلات بعد (يمنع وميض شاشة أول استخدام)
                     var onboardingDone by remember { mutableStateOf<Boolean?>(null) }
                     var localDone by remember { mutableStateOf(false) }
                     var showSettings by remember { mutableStateOf(false) }
@@ -56,7 +58,10 @@ class MainActivity : ComponentActivity() {
                         crashText != null -> {
                             CrashReportScreen(
                                 crashText = crashText!!,
-                                onDismiss = { crashText = null }
+                                onDismiss = {
+                                    CrashHandler.clearLastCrash(context)
+                                    crashText = null
+                                }
                             )
                         }
                         onboardingDone == null -> {
@@ -67,11 +72,15 @@ class MainActivity : ComponentActivity() {
                                 CircularProgressIndicator()
                             }
                         }
-                        !(onboardingDone == true || localDone) -> {
-                            OnboardingScreen(onFinished = { localDone = true })
-                        }
                         showSettings -> {
                             SettingsScreen(onBack = { showSettings = false })
+                        }
+                        !(onboardingDone!! || localDone) -> {
+                            OnboardingScreen(
+                                onFinished = {
+                                    localDone = true
+                                }
+                            )
                         }
                         else -> {
                             MapScreen(onOpenSettings = { showSettings = true })

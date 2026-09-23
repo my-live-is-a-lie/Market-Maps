@@ -11,11 +11,18 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "market_maps_prefs")
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "market_maps_prefs")
 
 enum class MapProvider {
     MAPSFORGE,
     GOOGLE
+}
+
+/** نمط واجهة التطبيق */
+enum class AppThemeMode {
+    LIGHT,   // فاتح
+    DARK,    // غامق
+    AMOLED   // مظلم (أسود خالص)
 }
 
 class AppPreferences(private val context: Context) {
@@ -31,6 +38,7 @@ class AppPreferences(private val context: Context) {
     private val rememberFilterKey = booleanPreferencesKey("remember_filter")
     private val filterTypeKey = stringPreferencesKey("filter_type")
     private val filterSubKey = stringPreferencesKey("filter_sub")
+    private val themeModeKey = stringPreferencesKey("theme_mode")
 
     val onboardingDone: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[onboardingDoneKey] ?: false
@@ -58,7 +66,6 @@ class AppPreferences(private val context: Context) {
         }
     }
 
-    /** تذكر آخر فلتر عند فتح التطبيق */
     val rememberFilter: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[rememberFilterKey] ?: false
     }
@@ -69,6 +76,14 @@ class AppPreferences(private val context: Context) {
 
     val savedFilterSub: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[filterSubKey] ?: "الكل"
+    }
+
+    val themeMode: Flow<AppThemeMode> = context.dataStore.data.map { prefs ->
+        when (prefs[themeModeKey]) {
+            "DARK" -> AppThemeMode.DARK
+            "AMOLED" -> AppThemeMode.AMOLED
+            else -> AppThemeMode.LIGHT
+        }
     }
 
     suspend fun setOnboardingDone(done: Boolean = true) {
@@ -105,5 +120,9 @@ class AppPreferences(private val context: Context) {
             prefs[filterTypeKey] = type
             prefs[filterSubKey] = sub
         }
+    }
+
+    suspend fun setThemeMode(mode: AppThemeMode) {
+        context.dataStore.edit { it[themeModeKey] = mode.name }
     }
 }
