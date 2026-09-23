@@ -55,7 +55,8 @@ private fun buildDarkScheme(accent: Color, amoled: Boolean): ColorScheme {
     val onA = onAccent(accent)
     val bg = if (amoled) AmoledBackground else DarkBackground
     val surface = if (amoled) AmoledSurface else DarkSurface
-    // في الوضع المظلم: الأزرار بلون التمييز نفسه حتى تبقى واضحة
+    // أزرار الخريطة: خلفية داكنة + أيقونة بلون التمييز (مثل عكس الوضع الفاتح)
+    val containerBg = if (amoled) Color.Black else Color(0xFF121212)
     return darkColorScheme(
         primary = accent,
         onPrimary = onA,
@@ -63,12 +64,12 @@ private fun buildDarkScheme(accent: Color, amoled: Boolean): ColorScheme {
         onSecondary = onA,
         tertiary = accent,
         onTertiary = onA,
-        primaryContainer = accent,
-        onPrimaryContainer = onA,
-        secondaryContainer = accent,
-        onSecondaryContainer = onA,
-        tertiaryContainer = accent,
-        onTertiaryContainer = onA,
+        primaryContainer = containerBg,
+        onPrimaryContainer = accent,
+        secondaryContainer = containerBg,
+        onSecondaryContainer = accent,
+        tertiaryContainer = containerBg,
+        onTertiaryContainer = accent,
         background = bg,
         surface = surface,
         onBackground = Color.White,
