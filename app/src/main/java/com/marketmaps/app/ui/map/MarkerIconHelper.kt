@@ -17,12 +17,17 @@ import kotlin.math.pow
 
 /**
  * أيقونات مخصصة بحجم ديناميكي حسب مستوى التكبير / مقياس المسافة.
+ * الأحجام مصممة لتكون قريبة من حجم أيقونات خرائط جوجل.
  */
 object MarkerIconHelper {
 
     private var appContext: Context? = null
 
     private val HEALTH_COLOR = Color.parseColor("#E53935")
+
+    // لون نص تسميات جوجل تقريباً
+    private val GOOGLE_LABEL_TEXT = Color.parseColor("#202124")
+    private val GOOGLE_LABEL_BG = Color.parseColor("#FFFFFF")
 
     enum class DisplayMode {
         BUBBLE_LARGE,
@@ -50,12 +55,15 @@ object MarkerIconHelper {
         }
     }
 
-    /** أحجام ديناميكية: 50م أكبر بنسبة ~15% إضافية */
+    /**
+     * أحجام أقرب لحجم أيقونات خرائط جوجل.
+     * LARGE ≈ 48-52dp على الشاشات الشائعة.
+     */
     fun sizeForMode(mode: DisplayMode): Int {
         return when (mode) {
-            DisplayMode.BUBBLE_LARGE -> 67   // ~50م (+15% عن 58)
-            DisplayMode.BUBBLE_MEDIUM -> 34  // ~100م
-            DisplayMode.CIRCLE -> 14
+            DisplayMode.BUBBLE_LARGE -> 96   // كان 67 — أكبر بكثير ليطابق جوجل
+            DisplayMode.BUBBLE_MEDIUM -> 56  // كان 34
+            DisplayMode.CIRCLE -> 20
             DisplayMode.HIDDEN -> 0
         }
     }
@@ -121,15 +129,15 @@ object MarkerIconHelper {
 
     fun getMarkerBitmap(category: String): Bitmap {
         return getMarkerBitmap(category, DisplayMode.BUBBLE_LARGE)
-            ?: MapsforgeAndroidBitmap(composeCircle(colorForCategory(category), 14))
+            ?: MapsforgeAndroidBitmap(composeCircle(colorForCategory(category), 20))
     }
 
     fun getAndroidUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): AndroidBitmap? {
         if (mode == DisplayMode.HIDDEN) return null
         val size = when (mode) {
-            DisplayMode.CIRCLE -> 16
-            DisplayMode.BUBBLE_MEDIUM -> 34
-            DisplayMode.BUBBLE_LARGE -> 53
+            DisplayMode.CIRCLE -> 22
+            DisplayMode.BUBBLE_MEDIUM -> 56
+            DisplayMode.BUBBLE_LARGE -> 80
             DisplayMode.HIDDEN -> 0
         }
         return if (mode == DisplayMode.CIRCLE) {
@@ -141,9 +149,9 @@ object MarkerIconHelper {
 
     fun getUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): Bitmap {
         val size = when (mode) {
-            DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 16
-            DisplayMode.BUBBLE_MEDIUM -> 34
-            DisplayMode.BUBBLE_LARGE -> 53
+            DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 22
+            DisplayMode.BUBBLE_MEDIUM -> 56
+            DisplayMode.BUBBLE_LARGE -> 80
         }
         val androidBmp = if (mode == DisplayMode.CIRCLE || mode == DisplayMode.HIDDEN) {
             composeCircle(Color.parseColor("#E53935"), size)
@@ -152,7 +160,6 @@ object MarkerIconHelper {
         }
         return MapsforgeAndroidBitmap(androidBmp)
     }
-
 
     /** نسخة Android Bitmap للاستخدام مع خرائط جوجل */
     fun getAndroidMarkerBitmap(category: String, mode: DisplayMode): AndroidBitmap? {
@@ -166,8 +173,11 @@ object MarkerIconHelper {
     }
 
     /**
-     * أيقونة مع اسم المكان أسفلها (مثل تسميات خرائط جوجل).
-     * تُستخدم فقط في أوضاع الفقاعة الكبيرة/المتوسطة.
+     * أيقونة + اسم المكان بأسلوب قريب جداً من تسميات خرائط جوجل:
+     * - خلفية بيضاء مستديرة خفيفة خلف النص
+     * - نص داكن (#202124)
+     * - حجم خط مناسب
+     * - تموضع مركزي تحت الأيقونة
      */
     fun getAndroidMarkerBitmapWithLabel(
         category: String,
@@ -180,34 +190,62 @@ object MarkerIconHelper {
         }
         val icon = getAndroidMarkerBitmap(category, mode) ?: return null
         val label = name.trim().ifEmpty { return icon }
-        val displayName = if (label.length > 18) label.take(17) + "…" else label
+        val displayName = if (label.length > 20) label.take(19) + "…" else label
 
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
-            textSize = when (mode) {
-                DisplayMode.BUBBLE_LARGE -> 28f
-                else -> 22f
-            }
-            typeface = Typeface.DEFAULT_BOLD
+        val textSize = when (mode) {
+            DisplayMode.BUBBLE_LARGE -> 32f
+            else -> 26f
+        }
+
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = GOOGLE_LABEL_TEXT
+            this.textSize = textSize
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
             textAlign = Paint.Align.CENTER
+            isFakeBoldText = false
         }
-        val stroke = Paint(paint).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 4f
-            color = Color.WHITE
-        }
-        val textWidth = paint.measureText(displayName).toInt()
-        val textHeight = (paint.fontMetrics.bottom - paint.fontMetrics.top).toInt()
-        val pad = 6
-        val width = maxOf(icon.width, textWidth + pad * 2)
-        val height = icon.height + textHeight + pad
+
+        val fm = textPaint.fontMetrics
+        val textWidth = textPaint.measureText(displayName)
+        val textHeight = fm.bottom - fm.top
+
+        // هوامش الخلفية البيضاء (مثل جوجل)
+        val hPad = 14f
+        val vPad = 8f
+        val bgWidth = textWidth + hPad * 2
+        val bgHeight = textHeight + vPad * 2
+        val cornerRadius = bgHeight / 2f   // شكل حبة دواء مستديرة
+
+        val gapBetweenIconAndLabel = 4f
+        val width = maxOf(icon.width.toFloat(), bgWidth).toInt()
+        val height = (icon.height + gapBetweenIconAndLabel + bgHeight).toInt()
+
         val out = AndroidBitmap.createBitmap(width, height, AndroidBitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
-        canvas.drawBitmap(icon, ((width - icon.width) / 2f), 0f, null)
-        val x = width / 2f
-        val y = icon.height + pad - paint.fontMetrics.top
-        canvas.drawText(displayName, x, y, stroke)
-        canvas.drawText(displayName, x, y, paint)
+
+        // رسم الأيقونة في الأعلى في المنتصف
+        val iconLeft = (width - icon.width) / 2f
+        canvas.drawBitmap(icon, iconLeft, 0f, null)
+
+        // خلفية بيضاء مستديرة خلف النص
+        val bgLeft = (width - bgWidth) / 2f
+        val bgTop = icon.height + gapBetweenIconAndLabel
+        val bgRect = RectF(bgLeft, bgTop, bgLeft + bgWidth, bgTop + bgHeight)
+
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = GOOGLE_LABEL_BG
+            style = Paint.Style.FILL
+            // ظل خفيف جداً ليعطي عمقاً مثل جوجل
+            setShadowLayer(3f, 0f, 1.5f, Color.argb(60, 0, 0, 0))
+        }
+        // يحتاج LAYER_TYPE_SOFTWARE ليعمل الظل على بعض الأجهزة
+        canvas.drawRoundRect(bgRect, cornerRadius, cornerRadius, bgPaint)
+
+        // النص فوق الخلفية
+        val textX = width / 2f
+        val textY = bgTop + vPad - fm.top
+        canvas.drawText(displayName, textX, textY, textPaint)
+
         return out
     }
 
@@ -236,7 +274,7 @@ object MarkerIconHelper {
 
                 val innerName = if (assetExists(ctx, "markers/$iconName.svg")) iconName else "other"
                 val iconSvg = SVG.getFromAsset(ctx.assets, "markers/$innerName.svg")
-                val iconSize = (size * 0.42f).toInt().coerceAtLeast(6)
+                val iconSize = (size * 0.42f).toInt().coerceAtLeast(8)
                 iconSvg.setDocumentWidth(iconSize.toFloat())
                 iconSvg.setDocumentHeight(iconSize.toFloat())
                 val iconPic = iconSvg.renderToPicture()
@@ -255,6 +293,7 @@ object MarkerIconHelper {
             }
         }
 
+        // fallback بسيط إذا فشل تحميل الـ SVG
         val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             style = android.graphics.Paint.Style.FILL
             color = bubbleColor
