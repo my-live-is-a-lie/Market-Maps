@@ -13,12 +13,11 @@ android {
         applicationId = "com.marketmaps.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // معالجات 64-bit فقط لتقليل الحجم أثناء الاختبار
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -26,7 +25,6 @@ android {
 
     buildTypes {
         debug {
-            // تصغير Debug أيضاً لأن Workflow يبني assembleDebug
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -89,8 +87,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    // extended يبقى مؤقتاً — انظر الشرح في المحادثة
-    implementation("androidx.compose.material:material-icons-extended")
+    // أيقونات أساسية فقط (أصغر من extended)
+    implementation("androidx.compose.material:material-icons-core")
 
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
@@ -99,15 +97,11 @@ dependencies {
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
-    // Mapsforge (أوفلاين)
     implementation("org.mapsforge:mapsforge-map-android:0.25.0")
     implementation("org.mapsforge:mapsforge-map:0.25.0")
     implementation("org.mapsforge:mapsforge-themes:0.25.0")
     implementation("org.mapsforge:mapsforge-map-reader:0.25.0")
     implementation("com.caverock:androidsvg:1.4")
-
-    // تم إزالة play-services-maps و maps-compose مؤقتاً لتقليل الحجم
-    // يُعاد إضافتها عند تفعيل خرائط جوجل لاحقاً
 
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
