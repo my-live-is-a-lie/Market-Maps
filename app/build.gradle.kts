@@ -33,7 +33,7 @@ android {
 
         // مفتاح خرائط جوجل من local.properties (يُحقن في CI من Secret)
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
-        buildConfigField("String", "MAPS_API_KEY", ""$mapsApiKey"")
+        buildConfigField("String", "MAPS_API_KEY", "\"${mapsApiKey}\"")
     }
 
     buildTypes {
