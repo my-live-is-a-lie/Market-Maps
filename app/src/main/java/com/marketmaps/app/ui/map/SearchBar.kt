@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.marketmaps.app.data.CategoryData
+import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.Store
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -65,6 +66,9 @@ fun SearchBar(
     onFilterTypeChange: (String) -> Unit,
     onFilterSubChange: (String) -> Unit,
     onOpenFilterDialog: () -> Unit,
+    recentSearches: List<String> = emptyList(),
+    onRecentClick: (String) -> Unit = {},
+    onSearchCommit: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -156,7 +160,7 @@ fun SearchBar(
                                 contentDescription = null,
                                 tint = barContent,
                                 modifier = Modifier
-                                    .padding(end = 8.dp)
+                                    .padding(start = 4.dp, end = 14.dp)
                                     .size(24.dp)
                             )
                         }
@@ -176,12 +180,51 @@ fun SearchBar(
                     ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(
-                        onSearch = { keyboard?.hide() }
+                        onSearch = {
+                            if (query.isNotBlank()) onSearchCommit(query)
+                            keyboard?.hide()
+                        }
                     )
                 )
             }
 
-            Row(
+            
+            // سجل عمليات البحث السابقة
+            if (query.isBlank() && recentSearches.isNotEmpty() && results.isEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = barColor)
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                        Text(
+                            "عمليات بحث سابقة",
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = barContent.copy(alpha = 0.7f)
+                        )
+                        recentSearches.forEach { item ->
+                            Text(
+                                text = item,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onRecentClick(item)
+                                        onQueryChange(item)
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = barContent
+                            )
+                        }
+                    }
+                }
+            }
+
+Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
