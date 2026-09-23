@@ -10,8 +10,9 @@ if ! command -v convert >/dev/null 2>&1; then
   sudo apt-get install -y -qq imagemagick
 fi
 
-tr -d '\n' < "$DATA/ic_launcher.png.b64" | base64 -d > "$TMP/ic_launcher.png"
-tr -d '\n' < "$DATA/ic_launcher_round.png.b64" | base64 -d > "$TMP/ic_launcher_round.png"
+# جمع أجزاء المصدر وفكها
+cat "$DATA"/l_*.b64 | tr -d '\n' | base64 -d > "$TMP/ic_launcher.png"
+cat "$DATA"/r_*.b64 | tr -d '\n' | base64 -d > "$TMP/ic_launcher_round.png"
 
 declare -A SIZES=([mdpi]=48 [hdpi]=72 [xhdpi]=96 [xxhdpi]=144 [xxxhdpi]=192)
 for dens in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
