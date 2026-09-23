@@ -3,6 +3,8 @@ package com.marketmaps.app.ui.map
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.Bitmap as AndroidBitmap
