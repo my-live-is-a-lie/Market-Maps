@@ -376,15 +376,6 @@ fun MapScreen(
                 )
             }
 
-            if (!searchExpanded) {
-                FloatingActionButton(
-                    onClick = onOpenSettings,
-                    modifier = Modifier.align(Alignment.TopStart).padding(top = 8.dp, start = 16.dp).size(48.dp).zIndex(1f),
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    shape = CircleShape
-                ) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") }
-            }
 
             if (navResults.size > 1 && navIndex in navResults.indices) {
                 val current = navResults[navIndex]
@@ -419,6 +410,13 @@ fun MapScreen(
             ) {
                 AnimatedVisibility(visible = isMenuExpanded, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        // الإعدادات فوق زر تحديد الموقع
+                        FloatingActionButton(
+                            onClick = { isMenuExpanded = false; onOpenSettings() },
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            shape = CircleShape, modifier = Modifier.size(48.dp)
+                        ) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") }
                         FloatingActionButton(
                             onClick = { requestLocationAndMove(); isMenuExpanded = false },
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
