@@ -90,6 +90,8 @@ fun MapScreen(
     val appPreferences = remember { AppPreferences(context) }
     val savedLocation by appPreferences.lastLocation.collectAsState(initial = null)
     val offlineMode by appPreferences.offlineMode.collectAsState(initial = false)
+    val recentSearches by appPreferences.recentSearches.collectAsState(initial = emptyList())
+    val recentSearchLimit by appPreferences.recentSearchLimit.collectAsState(initial = 5)
     val mapProvider by appPreferences.mapProvider.collectAsState(initial = MapProvider.MAPSFORGE)
 
     remember {
@@ -217,7 +219,7 @@ fun MapScreen(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true) {
-            moveToCurrentLocation(context, mapViewRef) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 16f) }
+            moveToCurrentLocation(context, mapViewRef) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 18f) }
         } else Toast.makeText(context, "يجب السماح بالوصول إلى الموقع", Toast.LENGTH_LONG).show()
     }
 
@@ -225,7 +227,7 @@ fun MapScreen(
         val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
         val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
         if (fine == PackageManager.PERMISSION_GRANTED || coarse == PackageManager.PERMISSION_GRANTED) {
-            moveToCurrentLocation(context, mapViewRef) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 16f) }
+            moveToCurrentLocation(context, mapViewRef) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 18f) }
         } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
 
@@ -314,6 +316,14 @@ fun MapScreen(
                     scope.launch { appPreferences.saveFilter(filterType, sub) }
                 },
                 onOpenFilterDialog = { showFilterDialog = true },
+                recentSearches = recentSearches.take(recentSearchLimit).takeIf { recentSearchLimit > 0 } ?: emptyList(),
+                onRecentClick = { q ->
+                    searchQuery = q
+                    scope.launch { appPreferences.addRecentSearch(q) }
+                },
+                onSearchCommit = { q ->
+                    scope.launch { appPreferences.addRecentSearch(q) }
+                },
                 modifier = Modifier.align(Alignment.TopCenter).zIndex(if (searchExpanded) 3f else 1f)
             )
 
