@@ -10,11 +10,9 @@ if ! command -v convert >/dev/null 2>&1; then
   sudo apt-get install -y -qq imagemagick
 fi
 
-# فك المصدر
 tr -d '\n' < "$DATA/ic_launcher.png.b64" | base64 -d > "$TMP/ic_launcher.png"
 tr -d '\n' < "$DATA/ic_launcher_round.png.b64" | base64 -d > "$TMP/ic_launcher_round.png"
 
-# أحجام launcher القياسية
 declare -A SIZES=([mdpi]=48 [hdpi]=72 [xhdpi]=96 [xxhdpi]=144 [xxxhdpi]=192)
 for dens in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
   size="${SIZES[$dens]}"
@@ -25,7 +23,6 @@ for dens in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
   echo "Wrote launcher ${dens} ${size}x${size}"
 done
 
-# Foreground للأيقونة التكيفية (محتوى في المنطقة الآمنة ~72%)
 declare -A FG=([xhdpi]=216 [xxhdpi]=324 [xxxhdpi]=432)
 for dens in xhdpi xxhdpi xxxhdpi; do
   canvas="${FG[$dens]}"
@@ -38,7 +35,6 @@ for dens in xhdpi xxhdpi xxxhdpi; do
   echo "Wrote foreground ${dens} ${canvas}x${canvas}"
 done
 
-# Monochrome: أبيض على شفاف من المناطق غير الزرقاء
 mkdir -p "$ROOT/app/src/main/res/drawable"
 convert "$TMP/ic_launcher.png" -resize 216x216 \
   -fuzz 25% -transparent '#024EE7' \
