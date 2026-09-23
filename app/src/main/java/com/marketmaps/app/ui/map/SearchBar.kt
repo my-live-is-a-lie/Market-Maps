@@ -333,14 +333,11 @@ Row(
                     .padding(top = 8.dp, end = 16.dp),
                 horizontalArrangement = Arrangement.End
             ) {
-                // في الوضع المظلم: خلفية سوداء + أيقونة بحث بلون التمييز
                 FloatingActionButton(
                     onClick = { onExpandedChange(true) },
                     modifier = Modifier.size(48.dp),
-                    containerColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f)
-                        Color.Black else MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f)
-                        MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSecondaryContainer,
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     shape = CircleShape
                 ) {
                     Icon(Icons.Default.Search, contentDescription = "بحث")
