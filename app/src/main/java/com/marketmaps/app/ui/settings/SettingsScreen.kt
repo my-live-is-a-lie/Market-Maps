@@ -76,6 +76,7 @@ import kotlinx.coroutines.launch
 private enum class SettingsSection {
     MAIN,
     APPEARANCE,
+    CUSTOMIZATION,
     MAP_TYPE,
     OFFLINE_MAPS,
     SEARCH_FILTERS
@@ -107,6 +108,11 @@ fun SettingsScreen(
             onOpen = { section = it }
         )
         SettingsSection.APPEARANCE -> AppearanceSettingsScreen(
+            prefs = prefs,
+            scope = scope,
+            onBack = { section = SettingsSection.MAIN }
+        )
+        SettingsSection.CUSTOMIZATION -> CustomizationSettingsScreen(
             prefs = prefs,
             scope = scope,
             onBack = { section = SettingsSection.MAIN }
@@ -160,6 +166,12 @@ private fun SettingsMainScreen(
                 subtitle = "النمط الفاتح/الغامق ولون التمييز",
                 icon = Icons.Default.Settings,
                 onClick = { onOpen(SettingsSection.APPEARANCE) }
+            )
+            SettingsSectionCard(
+                title = "التخصيص",
+                subtitle = "أسماء المواقع على الخريطة وغيرها",
+                icon = Icons.Default.List,
+                onClick = { onOpen(SettingsSection.CUSTOMIZATION) }
             )
             SettingsSectionCard(
                 title = "نوع الخريطة",
@@ -1036,6 +1048,72 @@ private fun SearchFilterSettingsScreen(
                     ) {
                         Text("مسح سجل البحث")
                     }
+                }
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomizationSettingsScreen(
+    prefs: AppPreferences,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val showLabels by prefs.showMarkerLabels.collectAsState(initial = true)
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("التخصيص") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("أسماء المواقع على الخريطة", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "عند الإيقاف تظهر الأيقونات فقط بدون كتابة الاسم بجانبها",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = showLabels,
+                        onCheckedChange = { enabled ->
+                            scope.launch {
+                                prefs.setShowMarkerLabels(enabled)
+                                Toast.makeText(
+                                    context,
+                                    if (enabled) "سيتم عرض أسماء المواقع" else "تم إخفاء الأسماء",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    )
                 }
             }
         }
