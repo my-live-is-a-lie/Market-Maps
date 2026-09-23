@@ -39,6 +39,19 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Inject Google Maps API key
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: |
+          if [ -z "$MAPS_API_KEY" ]; then
+            echo "تحذير: لم يتم العثور على Secret باسم MAPS_API_KEY — خرائط جوجل لن تعمل"
+            echo "MAPS_API_KEY=" >> local.properties
+          else
+            # لا تطبع المفتاح في السجلات
+            echo "MAPS_API_KEY=***" 
+            echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
+          fi
+
       - name: Build Debug APK (arm64-v8a only)
         run: ./gradlew assembleDebug --stacktrace --no-daemon --build-cache
 
