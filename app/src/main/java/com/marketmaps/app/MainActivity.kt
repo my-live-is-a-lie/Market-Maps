@@ -72,18 +72,19 @@ class MainActivity : ComponentActivity() {
                                 CircularProgressIndicator()
                             }
                         }
-                        showSettings -> {
-                            SettingsScreen(onBack = { showSettings = false })
-                        }
                         !(onboardingDone!! || localDone) -> {
                             OnboardingScreen(
-                                onFinished = {
-                                    localDone = true
-                                }
+                                onFinished = { localDone = true }
                             )
                         }
                         else -> {
-                            MapScreen(onOpenSettings = { showSettings = true })
+                            // الخريطة تبقى حيّة تحت الإعدادات حتى لا يُفقد موضع التكبير والموقع
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                MapScreen(onOpenSettings = { showSettings = true })
+                                if (showSettings) {
+                                    SettingsScreen(onBack = { showSettings = false })
+                                }
+                            }
                         }
                     }
                 }
