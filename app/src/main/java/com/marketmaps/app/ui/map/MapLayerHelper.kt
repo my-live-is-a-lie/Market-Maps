@@ -29,11 +29,12 @@ object MapLayerHelper {
     )
 
     fun createTileCache(context: Context, mapView: MapView): TileCache {
+        // مضاعف أعلى يقلل ظهور مربعات رمادية أثناء التحريك/التكبير
         return AndroidUtil.createTileCache(
             context,
             "mapcache",
             mapView.model.displayModel.tileSize,
-            1.0f,
+            2.5f,
             mapView.model.frameBufferModel.overdrawFactor
         )
     }
@@ -62,6 +63,7 @@ object MapLayerHelper {
         mapView.layerManager.layers.add(0, downloadLayer)
         downloadLayer.onResume()
         bundle.downloadLayer = downloadLayer
+        mapView.invalidate()
     }
 
     fun applyOffline(context: Context, mapView: MapView, bundle: LayerBundle): Boolean {
