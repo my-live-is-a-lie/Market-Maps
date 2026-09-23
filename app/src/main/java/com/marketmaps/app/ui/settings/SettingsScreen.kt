@@ -495,15 +495,14 @@ private fun MapTypeSettingsScreen(
                         }
                     )
                     MapProviderOption(
-                        title = "خرائط جوجل (لاحقاً)",
-                        subtitle = "أدق، لكن يحتاج مفتاح API وحساب فوترة ببطاقة. عطّل حالياً حتى تتوفر البطاقة.",
+                        title = "خرائط جوجل",
+                        subtitle = "أدق في التفاصيل والأسماء. تحتاج إنترنت ومفتاح API.",
                         selected = mapProvider == MapProvider.GOOGLE,
                         onClick = {
-                            Toast.makeText(
-                                context,
-                                "خرائط جوجل تحتاج بطاقة دفع. استخدم OpenStreetMap الآن.",
-                                Toast.LENGTH_LONG
-                            ).show()
+                            scope.launch {
+                                prefs.setMapProvider(MapProvider.GOOGLE)
+                                Toast.makeText(context, "تم اختيار خرائط جوجل", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     )
                 }
