@@ -28,6 +28,32 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
+      # الأيقونات الأصلية ~1.2MB لكل دقة — نضغطها للأبعاد الصحيحة قبل البناء
+      - name: Optimize launcher icons
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq imagemagick
+          declare -A SIZES=([mdpi]=48 [hdpi]=72 [xhdpi]=96 [xxhdpi]=144 [xxxhdpi]=192)
+          for dens in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            dir="app/src/main/res/mipmap-${dens}"
+            size="${SIZES[$dens]}"
+            mkdir -p "$dir"
+            for name in ic_launcher ic_launcher_round; do
+              src=""
+              for cand in \
+                "$dir/${name}.png" \
+                "app/src/main/res/mipmap-xxxhdpi/${name}.png" \
+                "app/src/main/res/mipmap-xxhdpi/${name}.png"; do
+                if [ -f "$cand" ]; then src="$cand"; break; fi
+              done
+              if [ -n "$src" ]; then
+                echo "Optimizing $name ($dens) -> ${size}x${size} from $src"
+                convert "$src" -resize "${size}x${size}" -strip "PNG32:${dir}/${name}.png"
+                ls -lh "${dir}/${name}.png"
+              fi
+            done
+          done
+
       - name: Ensure Gradle Wrapper JAR
         run: |
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
@@ -60,12 +86,9 @@ jobs:
         if: success()
         run: find app/build/outputs -name "*.apk" -ls
 
-      # APK أصلاً ملف مضغوط، لذا zip العادي لا يصغّره كثيراً.
-      # 7-Zip بمستوى 9 (LZMA2) يعطي أفضل ضغط ممكن قبل الرفع.
       - name: Compress APK with 7-Zip (maximum)
         if: success()
         run: |
-          sudo apt-get update -qq
           sudo apt-get install -y -qq p7zip-full
           APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
           echo "APK: $APK"
@@ -81,7 +104,6 @@ jobs:
         with:
           name: MarketMaps-debug-arm64
           path: MarketMaps-debug-arm64.7z
-          # الملف مضغوط مسبقاً بـ 7z — لا داعي لإعادة ضغط zip
           compression-level: 0
           retention-days: 30
           if-no-files-found: error
