@@ -27,7 +27,7 @@ object MarkerIconHelper {
 
     // لون نص تسميات جوجل تقريباً
     // ألوان قريبة من تسميات نقاط الاهتمام في خرائط جوجل (الوضع الفاتح)
-    private val GOOGLE_LABEL_TEXT = Color.parseColor("#3C4043")
+    private val GOOGLE_LABEL_TEXT = Color.parseColor("#48707F")
     private val GOOGLE_LABEL_STROKE = Color.parseColor("#FFFFFF")
 
     enum class DisplayMode {
@@ -192,8 +192,8 @@ object MarkerIconHelper {
         val displayName = if (label.length > 22) label.take(21) + "…" else label
 
         val textSize = when (mode) {
-            DisplayMode.BUBBLE_LARGE -> 30f
-            else -> 24f
+            DisplayMode.BUBBLE_LARGE -> 34f
+            else -> 28f
         }
         // سماكة الحد الأبيض حول الحروف (مظهر جوجل)
         val strokeWidth = when (mode) {
