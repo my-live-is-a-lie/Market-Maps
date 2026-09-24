@@ -26,6 +26,19 @@ enum class AppThemeMode {
     AMOLED
 }
 
+/** جانب القائمة الجانبية */
+enum class DrawerSide {
+    LEFT,
+    RIGHT
+}
+
+/** من أين يُفتح السحب من الحافة */
+enum class EdgeSwipeSide {
+    LEFT,
+    RIGHT,
+    BOTH
+}
+
 class AppPreferences(private val context: Context) {
 
     private val onboardingDoneKey = booleanPreferencesKey("onboarding_done")
@@ -44,6 +57,10 @@ class AppPreferences(private val context: Context) {
     private val recentSearchesKey = stringPreferencesKey("recent_searches")
     private val recentSearchLimitKey = intPreferencesKey("recent_search_limit")
     private val showMarkerLabelsKey = booleanPreferencesKey("show_marker_labels")
+    private val drawerSideKey = stringPreferencesKey("drawer_side")
+    private val edgeSwipeEnabledKey = booleanPreferencesKey("edge_swipe_enabled")
+    private val edgeSwipeSideKey = stringPreferencesKey("edge_swipe_side")
+    private val edgeSwipeSensitivityKey = doublePreferencesKey("edge_swipe_sensitivity")
 
     val onboardingDone: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[onboardingDoneKey] ?: false
@@ -181,6 +198,29 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setShowMarkerLabels(show: Boolean) {
         context.dataStore.edit { it[showMarkerLabelsKey] = show }
+    }
+
+    suspend fun setDrawerSide(side: DrawerSide) {
+        context.dataStore.edit { it[drawerSideKey] = side.name }
+    }
+
+    suspend fun toggleDrawerSide() {
+        context.dataStore.edit { prefs ->
+            val current = prefs[drawerSideKey]
+            prefs[drawerSideKey] = if (current == "LEFT") "RIGHT" else "LEFT"
+        }
+    }
+
+    suspend fun setEdgeSwipeEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[edgeSwipeEnabledKey] = enabled }
+    }
+
+    suspend fun setEdgeSwipeSide(side: EdgeSwipeSide) {
+        context.dataStore.edit { it[edgeSwipeSideKey] = side.name }
+    }
+
+    suspend fun setEdgeSwipeSensitivity(value: Float) {
+        context.dataStore.edit { it[edgeSwipeSensitivityKey] = value.coerceIn(0.05f, 1f).toDouble() }
     }
 }
 
