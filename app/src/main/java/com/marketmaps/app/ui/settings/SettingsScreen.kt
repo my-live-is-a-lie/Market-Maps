@@ -1323,7 +1323,9 @@ private fun GesturesSettingsScreen(
                                 .clickable { scope.launch { prefs.setDrawerSide(DrawerSide.LEFT) } }
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
-                        ) { Text("يسار") }
+                        ) {
+                            Text("يسار")
+                        }
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -1335,7 +1337,9 @@ private fun GesturesSettingsScreen(
                                 .clickable { scope.launch { prefs.setDrawerSide(DrawerSide.RIGHT) } }
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
-                        ) { Text("يمين") }
+                        ) {
+                            Text("يمين")
+                        }
                     }
                 }
             }
