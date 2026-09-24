@@ -1202,6 +1202,7 @@ private fun CustomizationSettingsScreen(
 
 
 @OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GesturesSettingsScreen(
     prefs: AppPreferences,
@@ -1233,7 +1234,9 @@ private fun GesturesSettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1242,110 +1245,144 @@ private fun GesturesSettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("تمكين القائمة الجانبية بالسحب", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "اسحب من حافة الشاشة لفتح القائمة",
+                            text = "تمكين القائمة الجانبية بالسحب",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "اسحب من حافة الشاشة لفتح القائمة",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Switch(
                         checked = edgeEnabled,
-                        onCheckedChange = { scope.launch { prefs.setEdgeSwipeEnabled(it) } }
+                        onCheckedChange = { enabled ->
+                            scope.launch { prefs.setEdgeSwipeEnabled(enabled) }
+                        }
                     )
                 }
             }
 
             if (edgeEnabled) {
-                Text("موضع السحب من الحافة", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "موضع السحب من الحافة",
+                    style = MaterialTheme.typography.titleMedium
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf(
-                        EdgeSwipeSide.LEFT to "يسار",
-                        EdgeSwipeSide.BOTH to "كلا الجانبين",
-                        EdgeSwipeSide.RIGHT to "يمين"
-                    ).forEach { (side, label) ->
-                        val selected = edgeSide == side
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(
-                                    if (selected) MaterialTheme.colorScheme.primaryContainer
-                                    else MaterialTheme.colorScheme.surfaceVariant,
-                                    RoundedCornerShape(24.dp)
-                                )
-                                .clickable { scope.launch { prefs.setEdgeSwipeSide(side) } }
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                    EdgeSideChip(
+                        label = "يسار",
+                        selected = edgeSide == EdgeSwipeSide.LEFT,
+                        onClick = { scope.launch { prefs.setEdgeSwipeSide(EdgeSwipeSide.LEFT) } },
+                        modifier = Modifier.weight(1f)
+                    )
+                    EdgeSideChip(
+                        label = "كلا الجانبين",
+                        selected = edgeSide == EdgeSwipeSide.BOTH,
+                        onClick = { scope.launch { prefs.setEdgeSwipeSide(EdgeSwipeSide.BOTH) } },
+                        modifier = Modifier.weight(1f)
+                    )
+                    EdgeSideChip(
+                        label = "يمين",
+                        selected = edgeSide == EdgeSwipeSide.RIGHT,
+                        onClick = { scope.launch { prefs.setEdgeSwipeSide(EdgeSwipeSide.RIGHT) } },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
-                Text("حساسية السحب", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "كلما زادت الحساسية يسهل فتح القائمة من مسافة أقرب للحافة",
+                    text = "حساسية السحب",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = "كلما زادت الحساسية يسهل فتح القائمة من مسافة أقرب للحافة",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Slider(
                     value = sensitivity,
-                    onValueChange = { v -> scope.launch { prefs.setEdgeSwipeSensitivity(v) } },
+                    onValueChange = { value ->
+                        scope.launch { prefs.setEdgeSwipeSensitivity(value) }
+                    },
                     valueRange = 0.05f..1f
                 )
             }
 
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("موضع القائمة الجانبية الافتراضي", style = MaterialTheme.typography.titleMedium)
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text(
-                        if (drawerSide == DrawerSide.RIGHT) "حالياً: اليمين" else "حالياً: اليسار",
+                        text = "موضع القائمة الجانبية الافتراضي",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = if (drawerSide == DrawerSide.RIGHT) "حالياً: اليمين" else "حالياً: اليسار",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(
-                                    if (drawerSide == DrawerSide.LEFT) MaterialTheme.colorScheme.primaryContainer
-                                    else MaterialTheme.colorScheme.surfaceVariant,
-                                    RoundedCornerShape(24.dp)
-                                )
-                                .clickable { scope.launch { prefs.setDrawerSide(DrawerSide.LEFT) } }
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("يسار")
-                        }
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(
-                                    if (drawerSide == DrawerSide.RIGHT) MaterialTheme.colorScheme.primaryContainer
-                                    else MaterialTheme.colorScheme.surfaceVariant,
-                                    RoundedCornerShape(24.dp)
-                                )
-                                .clickable { scope.launch { prefs.setDrawerSide(DrawerSide.RIGHT) } }
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("يمين")
-                        }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        EdgeSideChip(
+                            label = "يسار",
+                            selected = drawerSide == DrawerSide.LEFT,
+                            onClick = { scope.launch { prefs.setDrawerSide(DrawerSide.LEFT) } },
+                            modifier = Modifier.weight(1f)
+                        )
+                        EdgeSideChip(
+                            label = "يمين",
+                            selected = drawerSide == DrawerSide.RIGHT,
+                            onClick = { scope.launch { prefs.setDrawerSide(DrawerSide.RIGHT) } },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
         }
     }
 }
+
+@Composable
+private fun EdgeSideChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .background(
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                },
+                shape = RoundedCornerShape(24.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+    }
+}
+
 
 @Composable
 private fun MapProviderOption(
