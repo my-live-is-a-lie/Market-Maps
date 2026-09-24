@@ -55,6 +55,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
@@ -642,24 +643,35 @@ private fun BoxScope.MapSideMenuOverlay(
     onOpenFullSettings: () -> Unit,
     onToggleDrawerSide: () -> Unit
 ) {
-    // شرائط الحافة
+    // محاذاة مطلقة (يمين الشاشة الفعلي / يسار الشاشة الفعلي) — لا تتأثر بـ RTL
+    val panelAlign = if (drawerSide == DrawerSide.RIGHT) {
+        AbsoluteAlignment.CenterRight
+    } else {
+        AbsoluteAlignment.CenterLeft
+    }
+
+    // شرائط الحافة — أعرض وأعلى طبقة لاستقبال اللمس فوق الخريطة
     if (edgeSwipeEnabled && !open) {
-        val edgeWidthDp = (12f + edgeSwipeSensitivity * 28f).dp
+        val edgeWidthDp = (28f + edgeSwipeSensitivity * 36f).dp
+        val minDrag = 18f + (1f - edgeSwipeSensitivity) * 36f
         val allowLeft = edgeSwipeSide == EdgeSwipeSide.LEFT || edgeSwipeSide == EdgeSwipeSide.BOTH
         val allowRight = edgeSwipeSide == EdgeSwipeSide.RIGHT || edgeSwipeSide == EdgeSwipeSide.BOTH
-        val minDrag = 28f + (1f - edgeSwipeSensitivity) * 70f
+
         if (allowLeft) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.CenterStart)
+                    .align(AbsoluteAlignment.CenterLeft)
                     .fillMaxHeight()
                     .width(edgeWidthDp)
-                    .pointerInput(edgeSwipeSensitivity) {
+                    .zIndex(8f)
+                    .pointerInput(edgeSwipeSensitivity, minDrag) {
                         var total = 0f
                         detectHorizontalDragGestures(
                             onDragStart = { total = 0f },
-                            onHorizontalDrag = { _, dx ->
+                            onHorizontalDrag = { change, dx ->
+                                change.consume()
                                 total += dx
+                                // من اليسار: اسحب نحو اليمين (dx موجب)
                                 if (total > minDrag) onOpenChange(true)
                             },
                             onDragEnd = { total = 0f },
@@ -671,15 +683,18 @@ private fun BoxScope.MapSideMenuOverlay(
         if (allowRight) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
+                    .align(AbsoluteAlignment.CenterRight)
                     .fillMaxHeight()
                     .width(edgeWidthDp)
-                    .pointerInput(edgeSwipeSensitivity) {
+                    .zIndex(8f)
+                    .pointerInput(edgeSwipeSensitivity, minDrag) {
                         var total = 0f
                         detectHorizontalDragGestures(
                             onDragStart = { total = 0f },
-                            onHorizontalDrag = { _, dx ->
+                            onHorizontalDrag = { change, dx ->
+                                change.consume()
                                 total += dx
+                                // من اليمين: اسحب نحو اليسار (dx سالب)
                                 if (total < -minDrag) onOpenChange(true)
                             },
                             onDragEnd = { total = 0f },
@@ -695,16 +710,18 @@ private fun BoxScope.MapSideMenuOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .zIndex(20f)
             .background(Color.Black.copy(alpha = 0.35f))
             .clickable { onOpenChange(false) }
     )
 
-    val panelAlign = if (drawerSide == DrawerSide.RIGHT) Alignment.CenterEnd else Alignment.CenterStart
+    // عرض أكبر بنسبة ~30% (كان 0.42 → أصبح 0.55)
     Box(
         modifier = Modifier
             .align(panelAlign)
             .fillMaxHeight()
-            .fillMaxWidth(0.42f)
+            .fillMaxWidth(0.55f)
+            .zIndex(21f)
             .background(Color(0xFF121212))
     ) {
         Column(
@@ -731,6 +748,7 @@ private fun BoxScope.MapSideMenuOverlay(
                     )
                 }
                 IconButton(onClick = onToggleDrawerSide) {
+                    // السهم يشير لاتجاه النقل (من اليمين ← ينقل لليسار)
                     Icon(
                         imageVector = if (drawerSide == DrawerSide.RIGHT)
                             Icons.Default.KeyboardArrowLeft
@@ -756,3 +774,4 @@ private fun BoxScope.MapSideMenuOverlay(
         }
     }
 }
+
