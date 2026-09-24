@@ -16,13 +16,11 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          # لا نستخدم cache هنا — نترك gradle/actions/setup-gradle يتولى التخزين المؤقت
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
-          # cache مفعّل افتراضياً، ويُحفظ بعد كل بناء ناجح
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -48,31 +46,28 @@ jobs:
             echo "تحذير: لم يتم العثور على Secret باسم MAPS_API_KEY — خرائط جوجل لن تعمل"
             echo "MAPS_API_KEY=" >> local.properties
           else
-            # لا تطبع المفتاح في السجلات
-            echo "MAPS_API_KEY=***" 
+            echo "MAPS_API_KEY=***"
             echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
           fi
 
       - name: Build Debug APK (arm64-v8a only)
         run: ./gradlew assembleDebug --stacktrace --no-daemon --build-cache
 
-      - name: Package APK at zip root
+      - name: Prepare APK for upload
         if: success()
         run: |
           APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
           echo "APK: $APK"
           ls -lh "$APK"
-          # -j = junk paths → الملف يكون مباشرة داخل الـ zip بدون مجلدات
-          cp "$APK" ./app-debug.apk
-          zip -9 -j MarketMaps-debug-arm64.zip ./app-debug.apk
-          ls -lh MarketMaps-debug-arm64.zip
-          unzip -l MarketMaps-debug-arm64.zip
+          # نرفع ملف APK مباشرة — GitHub يضغطه مرة واحدة فقط عند التحميل
+          cp "$APK" ./MarketMaps-debug-arm64.apk
+          ls -lh ./MarketMaps-debug-arm64.apk
 
       - name: Upload APK Artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MarketMaps-debug-arm64
-          path: MarketMaps-debug-arm64.zip
+          path: MarketMaps-debug-arm64.apk
           if-no-files-found: error
           retention-days: 14
