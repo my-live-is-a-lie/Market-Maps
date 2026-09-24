@@ -88,13 +88,30 @@ object MapCatalog {
     fun byContinent(continentId: String): List<MapRegion> =
         regions.filter { it.continentId == continentId }
 
+    /** تطبيع بسيط للنص العربي لتسهيل البحث */
+    private fun normalize(s: String): String {
+        return s.trim()
+            .lowercase()
+            .replace("أ", "ا")
+            .replace("إ", "ا")
+            .replace("آ", "ا")
+            .replace("ة", "ه")
+            .replace("ى", "ي")
+            .replace("ؤ", "و")
+            .replace("ئ", "ي")
+            .replace("\s+".toRegex(), "")
+    }
+
     fun search(query: String): List<MapRegion> {
-        val q = query.trim().lowercase()
-        if (q.isEmpty()) return regions
-        return regions.filter {
-            it.nameAr.contains(q, ignoreCase = true) ||
-                it.nameEn.lowercase().contains(q) ||
-                it.continentAr.contains(q, ignoreCase = true)
+        val q = normalize(query)
+        if (q.isEmpty()) return emptyList()
+        return regions.filter { r ->
+            normalize(r.nameAr).contains(q) ||
+                normalize(r.nameEn).contains(q) ||
+                normalize(r.continentAr).contains(q) ||
+                normalize(r.continentId).contains(q) ||
+                normalize(r.id).contains(q) ||
+                normalize(r.fileName).contains(q)
         }
     }
 
