@@ -678,74 +678,139 @@ private fun OfflineMapsSettingsScreen(
                     value = searchQuery,
                     onValueChange = {
                         searchQuery = it
-                        if (it.isNotBlank()) continentId = null
+                        if (it.isNotBlank()) {
+                            continentId = null
+                            // اختيار تلقائي عند نتيجة واحدة
+                            val hits = MapCatalog.search(it)
+                            selectedRegion = if (hits.size == 1) hits.first() else null
+                        } else if (selectedRegion != null && continentId == null) {
+                            selectedRegion = null
+                        }
                     },
-                    label = { Text("بحث سريع عن دولة") },
+                    label = { Text("بحث سريع عن دولة (مثال: مصر)") },
+                    placeholder = { Text("اكتب اسم الدولة…") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                ExposedDropdownMenuBox(
-                    expanded = continentMenu,
-                    onExpandedChange = { continentMenu = it }
-                ) {
-                    OutlinedTextField(
-                        value = MapCatalog.continents.find { it.id == continentId }?.nameAr ?: "اختر القارة",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("القارة") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = continentMenu) },
-                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = continentMenu,
-                        onDismissRequest = { continentMenu = false }
-                    ) {
-                        MapCatalog.continents.forEach { c ->
-                            DropdownMenuItem(
-                                text = { Text(c.nameAr) },
-                                onClick = {
-                                    continentId = c.id
-                                    selectedRegion = null
-                                    searchQuery = ""
-                                    continentMenu = false
+                // نتائج البحث تظهر مباشرة كقائمة (وليس داخل قائمة منسدلة فقط)
+                if (searchQuery.isNotBlank()) {
+                    if (filteredRegions.isEmpty()) {
+                        Text(
+                            "لا توجد دولة مطابقة لـ «$searchQuery»",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Text(
+                            "نتائج البحث (${filteredRegions.size})",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        filteredRegions.forEach { region ->
+                            val already = MapDownloader.isDownloaded(context, region.fileName)
+                            val isSelected = selectedRegion?.id == region.id
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedRegion = region
+                                    },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSelected)
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    else
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(region.nameAr, style = MaterialTheme.typography.titleMedium)
+                                        Text(
+                                            "${region.continentAr} — تقريباً ${region.approxSizeMb} ميجا" +
+                                                if (already) " — محمّلة" else "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    if (isSelected) {
+                                        Text("✓", color = MaterialTheme.colorScheme.primary)
+                                    }
                                 }
-                            )
+                            }
                         }
                     }
                 }
 
-                if (continentId != null || searchQuery.isNotBlank()) {
+                // اختيار يدوي بالقارة ثم الدولة (عند عدم استخدام البحث)
+                if (searchQuery.isBlank()) {
                     ExposedDropdownMenuBox(
-                        expanded = countryMenu,
-                        onExpandedChange = { countryMenu = it }
+                        expanded = continentMenu,
+                        onExpandedChange = { continentMenu = it }
                     ) {
                         OutlinedTextField(
-                            value = selectedRegion?.nameAr ?: "اختر الدولة",
+                            value = MapCatalog.continents.find { it.id == continentId }?.nameAr ?: "اختر القارة",
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("الدولة") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = countryMenu) },
+                            label = { Text("القارة") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = continentMenu) },
                             modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
                         )
                         ExposedDropdownMenu(
-                            expanded = countryMenu,
-                            onDismissRequest = { countryMenu = false }
+                            expanded = continentMenu,
+                            onDismissRequest = { continentMenu = false }
                         ) {
-                            filteredRegions.forEach { region ->
-                                val already = MapDownloader.isDownloaded(context, region.fileName)
+                            MapCatalog.continents.forEach { c ->
                                 DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            if (already) "${region.nameAr} (محمّلة) — ~${region.approxSizeMb} ميجا"
-                                            else "${region.nameAr} — ~${region.approxSizeMb} ميجا"
-                                        )
-                                    },
+                                    text = { Text(c.nameAr) },
                                     onClick = {
-                                        selectedRegion = region
-                                        countryMenu = false
+                                        continentId = c.id
+                                        selectedRegion = null
+                                        searchQuery = ""
+                                        continentMenu = false
                                     }
                                 )
+                            }
+                        }
+                    }
+
+                    if (continentId != null) {
+                        ExposedDropdownMenuBox(
+                            expanded = countryMenu,
+                            onExpandedChange = { countryMenu = it }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedRegion?.nameAr ?: "اختر الدولة",
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("الدولة") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = countryMenu) },
+                                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = countryMenu,
+                                onDismissRequest = { countryMenu = false }
+                            ) {
+                                filteredRegions.forEach { region ->
+                                    val already = MapDownloader.isDownloaded(context, region.fileName)
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                if (already) "${region.nameAr} (محمّلة) — ~${region.approxSizeMb} ميجا"
+                                                else "${region.nameAr} — ~${region.approxSizeMb} ميجا"
+                                            )
+                                        },
+                                        onClick = {
+                                            selectedRegion = region
+                                            countryMenu = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
