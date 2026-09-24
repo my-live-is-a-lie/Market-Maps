@@ -1202,7 +1202,6 @@ private fun CustomizationSettingsScreen(
 
 
 @OptIn(ExperimentalMaterial3Api::class)
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GesturesSettingsScreen(
     prefs: AppPreferences,
