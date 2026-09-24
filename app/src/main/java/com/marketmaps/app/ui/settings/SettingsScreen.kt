@@ -1245,11 +1245,11 @@ private fun GesturesSettingsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "تمكين القائمة الجانبية بالسحب",
+                            text = "السحب من حافة الشاشة",
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            text = "اسحب من حافة الشاشة لفتح القائمة",
+                            text = "يفتح القائمة عند السحب من الحافة (منفصل عن زر الإعدادات)",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1265,7 +1265,7 @@ private fun GesturesSettingsScreen(
 
             if (edgeEnabled) {
                 Text(
-                    text = "موضع السحب من الحافة",
+                    text = "الحواف المسموح السحب منها",
                     style = MaterialTheme.typography.titleMedium
                 )
                 Row(
@@ -1318,11 +1318,11 @@ private fun GesturesSettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "موضع القائمة الجانبية الافتراضي",
+                        text = "موضع القائمة عند فتحها من زر الإعدادات",
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = if (drawerSide == DrawerSide.RIGHT) "حالياً: اليمين" else "حالياً: اليسار",
+                        text = if (drawerSide == DrawerSide.RIGHT) "عند الضغط على الإعدادات من ＋ تظهر القائمة يميناً" else "عند الضغط على الإعدادات من ＋ تظهر القائمة يساراً",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
