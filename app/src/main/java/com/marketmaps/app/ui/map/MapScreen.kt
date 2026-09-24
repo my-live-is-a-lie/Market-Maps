@@ -17,6 +17,9 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.clickable
@@ -28,6 +31,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -64,9 +68,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
@@ -90,6 +97,7 @@ import org.mapsforge.map.android.view.MapView
 import org.mapsforge.map.layer.overlay.Marker
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -510,10 +518,9 @@ fun MapScreen(
                 onOpenChange = { open ->
                     sideMenuOpen = open
                 },
-                onOpenFromEdge = { side ->
-                    // السحب من الحافة يحدد جانب الظهور حسب الحافة فقط
+                onEdgeSideSelected = { side ->
+                    // عند بدء السحب من حافة: تحديد جانب الظهور فقط (بدون فتح فوري)
                     panelSide = side
-                    sideMenuOpen = true
                 },
                 onOpenFullSettings = onOpenFullSettings,
                 onTogglePanelSide = {
@@ -662,20 +669,53 @@ private fun BoxScope.MapSideMenuOverlay(
     edgeSwipeSide: EdgeSwipeSide,
     edgeSwipeSensitivity: Float,
     onOpenChange: (Boolean) -> Unit,
-    onOpenFromEdge: (DrawerSide) -> Unit,
+    onEdgeSideSelected: (DrawerSide) -> Unit,
     onOpenFullSettings: () -> Unit,
     onTogglePanelSide: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val config = LocalConfiguration.current
+    val panelWidthPx = with(density) { (config.screenWidthDp * 0.55f).dp.toPx() }
+    // 0 = مغلقة بالكامل، 1 = مفتوحة بالكامل
+    val progress = remember { Animatable(0f) }
+    var dragging by remember { mutableStateOf(false) }
+
+    val springSpec = spring<Float>(
+        dampingRatio = Spring.DampingRatioMediumBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+
+    suspend fun settle(targetOpen: Boolean) {
+        progress.animateTo(if (targetOpen) 1f else 0f, animationSpec = springSpec)
+        onOpenChange(targetOpen)
+    }
+
+    // فتح/إغلاق من الزر أو من الخارج
+    LaunchedEffect(open) {
+        if (dragging) return@LaunchedEffect
+        val target = if (open) 1f else 0f
+        if (kotlin.math.abs(progress.value - target) > 0.01f) {
+            progress.animateTo(target, animationSpec = springSpec)
+        }
+    }
+
+    val p by progress.asState()
+    val visible = p > 0.001f
     val panelAlign = if (panelSide == DrawerSide.RIGHT) {
         AbsoluteAlignment.CenterRight
     } else {
         AbsoluteAlignment.CenterLeft
     }
+    val offsetX = if (panelSide == DrawerSide.RIGHT) {
+        ((1f - p) * panelWidthPx)
+    } else {
+        -((1f - p) * panelWidthPx)
+    }
 
-    // شرائط السحب من الحافة (لا تغطي أزرار ＋)
-    if (edgeSwipeEnabled && !open) {
+    // شرائط السحب التفاعلي من الحافة
+    if (edgeSwipeEnabled && (!open || p < 1f)) {
         val edgeWidthDp = (28f + edgeSwipeSensitivity * 36f).dp
-        val minDrag = 18f + (1f - edgeSwipeSensitivity) * 36f
         val allowLeft = edgeSwipeSide == EdgeSwipeSide.LEFT || edgeSwipeSide == EdgeSwipeSide.BOTH
         val allowRight = edgeSwipeSide == EdgeSwipeSide.RIGHT || edgeSwipeSide == EdgeSwipeSide.BOTH
         val bottomClear = 140.dp
@@ -688,17 +728,26 @@ private fun BoxScope.MapSideMenuOverlay(
                     .padding(bottom = bottomClear)
                     .width(edgeWidthDp)
                     .zIndex(5f)
-                    .pointerInput(edgeSwipeSensitivity, minDrag) {
-                        var total = 0f
+                    .pointerInput(panelWidthPx, edgeSwipeSensitivity) {
                         detectHorizontalDragGestures(
-                            onDragStart = { total = 0f },
+                            onDragStart = {
+                                dragging = true
+                                onEdgeSideSelected(DrawerSide.LEFT)
+                            },
                             onHorizontalDrag = { change, dx ->
                                 change.consume()
-                                total += dx
-                                if (total > minDrag) onOpenFromEdge(DrawerSide.LEFT)
+                                val next = (progress.value + dx / panelWidthPx).coerceIn(0f, 1f)
+                                scope.launch { progress.snapTo(next) }
                             },
-                            onDragEnd = { total = 0f },
-                            onDragCancel = { total = 0f }
+                            onDragEnd = {
+                                dragging = false
+                                val shouldOpen = progress.value >= 0.30f
+                                scope.launch { settle(shouldOpen) }
+                            },
+                            onDragCancel = {
+                                dragging = false
+                                scope.launch { settle(progress.value >= 0.30f) }
+                            }
                         )
                     }
             )
@@ -711,121 +760,134 @@ private fun BoxScope.MapSideMenuOverlay(
                     .padding(bottom = bottomClear)
                     .width(edgeWidthDp)
                     .zIndex(5f)
-                    .pointerInput(edgeSwipeSensitivity, minDrag) {
-                        var total = 0f
+                    .pointerInput(panelWidthPx, edgeSwipeSensitivity) {
                         detectHorizontalDragGestures(
-                            onDragStart = { total = 0f },
+                            onDragStart = {
+                                dragging = true
+                                onEdgeSideSelected(DrawerSide.RIGHT)
+                            },
                             onHorizontalDrag = { change, dx ->
                                 change.consume()
-                                total += dx
-                                if (total < -minDrag) onOpenFromEdge(DrawerSide.RIGHT)
+                                // من اليمين: السحب لليسار (dx سالب) يزيد التقدم
+                                val next = (progress.value - dx / panelWidthPx).coerceIn(0f, 1f)
+                                scope.launch { progress.snapTo(next) }
                             },
-                            onDragEnd = { total = 0f },
-                            onDragCancel = { total = 0f }
+                            onDragEnd = {
+                                dragging = false
+                                val shouldOpen = progress.value >= 0.30f
+                                scope.launch { settle(shouldOpen) }
+                            },
+                            onDragCancel = {
+                                dragging = false
+                                scope.launch { settle(progress.value >= 0.30f) }
+                            }
                         )
                     }
             )
         }
     }
 
-    // طبقة التعتيم مع اختفاء/ظهور تدريجي
-    AnimatedVisibility(
-        visible = open,
+    if (!visible) return
+
+    // تعتيم يتناسب مع مدى الفتح
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .zIndex(20f),
-        enter = fadeIn(animationSpec = tween(220)),
-        exit = fadeOut(animationSpec = tween(180))
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.35f))
-                .clickable { onOpenChange(false) }
-        )
-    }
+            .zIndex(20f)
+            .background(Color.Black.copy(alpha = 0.35f * p))
+            .clickable(enabled = p > 0.3f) {
+                scope.launch { settle(false) }
+            }
+    )
 
-    // القائمة تنزلق من الجانب مع حركة سلسة
-    val slideFromRight = panelSide == DrawerSide.RIGHT
-    AnimatedVisibility(
-        visible = open,
+    // اللوحة تتبع الإصبع / الحركة النابضية
+    Box(
         modifier = Modifier
             .align(panelAlign)
             .fillMaxHeight()
             .fillMaxWidth(0.55f)
-            .zIndex(21f),
-        enter = slideInHorizontally(
-            animationSpec = tween(durationMillis = 300)
-        ) { fullWidth -> if (slideFromRight) fullWidth else -fullWidth } + fadeIn(tween(200)),
-        exit = slideOutHorizontally(
-            animationSpec = tween(durationMillis = 260)
-        ) { fullWidth -> if (slideFromRight) fullWidth else -fullWidth } + fadeOut(tween(180))
+            .zIndex(21f)
+            .offset { IntOffset(offsetX.roundToInt(), 0) }
+            .background(Color(0xFF121212))
+            .pointerInput(panelSide, panelWidthPx) {
+                // سحب اللوحة نفسها للإغلاق/الفتح
+                detectHorizontalDragGestures(
+                    onDragStart = { dragging = true },
+                    onHorizontalDrag = { change, dx ->
+                        change.consume()
+                        val delta = if (panelSide == DrawerSide.RIGHT) -dx else dx
+                        val next = (progress.value + delta / panelWidthPx).coerceIn(0f, 1f)
+                        scope.launch { progress.snapTo(next) }
+                    },
+                    onDragEnd = {
+                        dragging = false
+                        scope.launch { settle(progress.value >= 0.30f) }
+                    },
+                    onDragCancel = {
+                        dragging = false
+                        scope.launch { settle(progress.value >= 0.30f) }
+                    }
+                )
+            }
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF121212))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Bottom,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Bottom,
-                horizontalAlignment = Alignment.CenterHorizontally
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // ترتيب ثابت بصرياً: إعدادات ثم نقل الجهة (بدون زر رجوع)
-                // على اليسار: نقل الجهة يسار الشاشة ثم الإعدادات بجانب الخريطة
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (panelSide == DrawerSide.LEFT) {
-                        IconButton(onClick = onTogglePanelSide) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowRight,
-                                contentDescription = "نقل القائمة لليمين",
-                                tint = Color.White,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                        IconButton(onClick = {
-                            onOpenChange(false)
-                            onOpenFullSettings()
-                        }) {
-                            Icon(
-                                Icons.Default.Settings,
-                                contentDescription = "الإعدادات",
-                                tint = Color(0xFF4CAF50),
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    } else {
-                        IconButton(onClick = {
-                            onOpenChange(false)
-                            onOpenFullSettings()
-                        }) {
-                            Icon(
-                                Icons.Default.Settings,
-                                contentDescription = "الإعدادات",
-                                tint = Color(0xFF4CAF50),
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                        IconButton(onClick = onTogglePanelSide) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowLeft,
-                                contentDescription = "نقل القائمة لليسار",
-                                tint = Color.White,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
+                if (panelSide == DrawerSide.LEFT) {
+                    IconButton(onClick = onTogglePanelSide) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowRight,
+                            contentDescription = "نقل القائمة لليمين",
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    IconButton(onClick = {
+                        scope.launch { settle(false) }
+                        onOpenFullSettings()
+                    }) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "الإعدادات",
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                } else {
+                    IconButton(onClick = {
+                        scope.launch { settle(false) }
+                        onOpenFullSettings()
+                    }) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "الإعدادات",
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    IconButton(onClick = onTogglePanelSide) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowLeft,
+                            contentDescription = "نقل القائمة لليسار",
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
                     }
                 }
             }
         }
     }
 }
+
 
 
 
