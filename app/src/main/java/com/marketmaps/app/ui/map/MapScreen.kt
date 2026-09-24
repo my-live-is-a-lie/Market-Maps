@@ -18,7 +18,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -114,6 +113,8 @@ fun MapScreen(
     val edgeSwipeSide by appPreferences.edgeSwipeSide.collectAsState(initial = EdgeSwipeSide.BOTH)
     val edgeSwipeSensitivity by appPreferences.edgeSwipeSensitivity.collectAsState(initial = 0.55f)
     var sideMenuOpen by remember { mutableStateOf(false) }
+    // جانب عرض القائمة الحالي (منفصل عن إعداد السحب من الحافة)
+    var panelSide by remember { mutableStateOf(DrawerSide.RIGHT) }
 
     remember {
         AndroidGraphicFactory.createInstance(context.applicationContext)
@@ -424,7 +425,10 @@ fun MapScreen(
             }
 
             Column(
-                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp)
+                    .zIndex(15f),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -439,7 +443,11 @@ fun MapScreen(
                                     CircleShape
                                 )
                                 .combinedClickable(
-                                    onClick = { isMenuExpanded = false; sideMenuOpen = true },
+                                    onClick = {
+                                        isMenuExpanded = false
+                                        panelSide = drawerSide
+                                        sideMenuOpen = true
+                                    },
                                     onLongClick = {
                                         isMenuExpanded = false
                                         onOpenFullSettings()
@@ -492,13 +500,24 @@ fun MapScreen(
 
             MapSideMenuOverlay(
                 open = sideMenuOpen,
-                drawerSide = drawerSide,
+                panelSide = panelSide,
                 edgeSwipeEnabled = edgeSwipeEnabled,
                 edgeSwipeSide = edgeSwipeSide,
                 edgeSwipeSensitivity = edgeSwipeSensitivity,
-                onOpenChange = { sideMenuOpen = it },
+                onOpenChange = { open ->
+                    sideMenuOpen = open
+                },
+                onOpenFromEdge = { side ->
+                    // السحب من الحافة يحدد جانب الظهور حسب الحافة فقط
+                    panelSide = side
+                    sideMenuOpen = true
+                },
                 onOpenFullSettings = onOpenFullSettings,
-                onToggleDrawerSide = { scope.launch { appPreferences.toggleDrawerSide() } }
+                onTogglePanelSide = {
+                    val next = if (panelSide == DrawerSide.RIGHT) DrawerSide.LEFT else DrawerSide.RIGHT
+                    panelSide = next
+                    scope.launch { appPreferences.setDrawerSide(next) }
+                }
             )
 
             if (showAddDialog) {
@@ -635,35 +654,42 @@ private fun tryGetLastLocation(context: Context, onLocation: (Double, Double) ->
 @Composable
 private fun BoxScope.MapSideMenuOverlay(
     open: Boolean,
-    drawerSide: DrawerSide,
+    panelSide: DrawerSide,
     edgeSwipeEnabled: Boolean,
     edgeSwipeSide: EdgeSwipeSide,
     edgeSwipeSensitivity: Float,
     onOpenChange: (Boolean) -> Unit,
+    onOpenFromEdge: (DrawerSide) -> Unit,
     onOpenFullSettings: () -> Unit,
-    onToggleDrawerSide: () -> Unit
+    onTogglePanelSide: () -> Unit
 ) {
-    // محاذاة مطلقة (يمين الشاشة الفعلي / يسار الشاشة الفعلي) — لا تتأثر بـ RTL
-    val panelAlign = if (drawerSide == DrawerSide.RIGHT) {
+    // محاذاة مطلقة ليمين/يسار الشاشة الفعلي
+    val panelAlign = if (panelSide == DrawerSide.RIGHT) {
         AbsoluteAlignment.CenterRight
     } else {
         AbsoluteAlignment.CenterLeft
     }
 
-    // شرائط الحافة — أعرض وأعلى طبقة لاستقبال اللمس فوق الخريطة
+    /**
+     * شرائط السحب من الحافة فقط (لا تغطي أزرار ＋ بالأسفل).
+     * إعداد edgeSwipeSide يحدد من أي حافة يُسمح بالفتح — منفصل عن موضع القائمة الافتراضي.
+     */
     if (edgeSwipeEnabled && !open) {
         val edgeWidthDp = (28f + edgeSwipeSensitivity * 36f).dp
         val minDrag = 18f + (1f - edgeSwipeSensitivity) * 36f
         val allowLeft = edgeSwipeSide == EdgeSwipeSide.LEFT || edgeSwipeSide == EdgeSwipeSide.BOTH
         val allowRight = edgeSwipeSide == EdgeSwipeSide.RIGHT || edgeSwipeSide == EdgeSwipeSide.BOTH
+        // ترك منطقة الأزرار السفلية حرة (~140dp)
+        val bottomClear = 140.dp
 
         if (allowLeft) {
             Box(
                 modifier = Modifier
                     .align(AbsoluteAlignment.CenterLeft)
                     .fillMaxHeight()
+                    .padding(bottom = bottomClear)
                     .width(edgeWidthDp)
-                    .zIndex(8f)
+                    .zIndex(5f)
                     .pointerInput(edgeSwipeSensitivity, minDrag) {
                         var total = 0f
                         detectHorizontalDragGestures(
@@ -671,8 +697,7 @@ private fun BoxScope.MapSideMenuOverlay(
                             onHorizontalDrag = { change, dx ->
                                 change.consume()
                                 total += dx
-                                // من اليسار: اسحب نحو اليمين (dx موجب)
-                                if (total > minDrag) onOpenChange(true)
+                                if (total > minDrag) onOpenFromEdge(DrawerSide.LEFT)
                             },
                             onDragEnd = { total = 0f },
                             onDragCancel = { total = 0f }
@@ -685,8 +710,9 @@ private fun BoxScope.MapSideMenuOverlay(
                 modifier = Modifier
                     .align(AbsoluteAlignment.CenterRight)
                     .fillMaxHeight()
+                    .padding(bottom = bottomClear)
                     .width(edgeWidthDp)
-                    .zIndex(8f)
+                    .zIndex(5f)
                     .pointerInput(edgeSwipeSensitivity, minDrag) {
                         var total = 0f
                         detectHorizontalDragGestures(
@@ -694,8 +720,7 @@ private fun BoxScope.MapSideMenuOverlay(
                             onHorizontalDrag = { change, dx ->
                                 change.consume()
                                 total += dx
-                                // من اليمين: اسحب نحو اليسار (dx سالب)
-                                if (total < -minDrag) onOpenChange(true)
+                                if (total < -minDrag) onOpenFromEdge(DrawerSide.RIGHT)
                             },
                             onDragEnd = { total = 0f },
                             onDragCancel = { total = 0f }
@@ -715,7 +740,6 @@ private fun BoxScope.MapSideMenuOverlay(
             .clickable { onOpenChange(false) }
     )
 
-    // عرض أكبر بنسبة ~30% (كان 0.42 → أصبح 0.55)
     Box(
         modifier = Modifier
             .align(panelAlign)
@@ -747,10 +771,9 @@ private fun BoxScope.MapSideMenuOverlay(
                         modifier = Modifier.size(28.dp)
                     )
                 }
-                IconButton(onClick = onToggleDrawerSide) {
-                    // السهم يشير لاتجاه النقل (من اليمين ← ينقل لليسار)
+                IconButton(onClick = onTogglePanelSide) {
                     Icon(
-                        imageVector = if (drawerSide == DrawerSide.RIGHT)
+                        imageVector = if (panelSide == DrawerSide.RIGHT)
                             Icons.Default.KeyboardArrowLeft
                         else
                             Icons.Default.KeyboardArrowRight,
@@ -761,7 +784,7 @@ private fun BoxScope.MapSideMenuOverlay(
                 }
                 IconButton(onClick = { onOpenChange(false) }) {
                     Icon(
-                        imageVector = if (drawerSide == DrawerSide.RIGHT)
+                        imageVector = if (panelSide == DrawerSide.RIGHT)
                             Icons.Default.KeyboardArrowRight
                         else
                             Icons.Default.KeyboardArrowLeft,
@@ -774,4 +797,5 @@ private fun BoxScope.MapSideMenuOverlay(
         }
     }
 }
+
 
