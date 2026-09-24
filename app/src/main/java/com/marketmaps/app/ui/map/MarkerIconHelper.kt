@@ -26,8 +26,9 @@ object MarkerIconHelper {
     private val HEALTH_COLOR = Color.parseColor("#E53935")
 
     // لون نص تسميات جوجل تقريباً
-    private val GOOGLE_LABEL_TEXT = Color.parseColor("#202124")
-    private val GOOGLE_LABEL_BG = Color.parseColor("#FFFFFF")
+    // ألوان قريبة من تسميات نقاط الاهتمام في خرائط جوجل (الوضع الفاتح)
+    private val GOOGLE_LABEL_TEXT = Color.parseColor("#3C4043")
+    private val GOOGLE_LABEL_STROKE = Color.parseColor("#FFFFFF")
 
     enum class DisplayMode {
         BUBBLE_LARGE,
@@ -173,11 +174,9 @@ object MarkerIconHelper {
     }
 
     /**
-     * أيقونة + اسم المكان بأسلوب قريب جداً من تسميات خرائط جوجل:
-     * - خلفية بيضاء مستديرة خفيفة خلف النص
-     * - نص داكن (#202124)
-     * - حجم خط مناسب
-     * - تموضع مركزي تحت الأيقونة
+     * أيقونة + اسم بأسلوب قريب من تسميات خرائط جوجل على الخريطة الفاتحة:
+     * نص داكن + حد أبيض سميك (halo) بدون خلفية بيضاء صلبة.
+     * لا يمكن نسخ خط جوجل الحصري، لكن Sans-serif/Roboto هو الأقرب على أندرويد.
      */
     fun getAndroidMarkerBitmapWithLabel(
         category: String,
@@ -190,61 +189,64 @@ object MarkerIconHelper {
         }
         val icon = getAndroidMarkerBitmap(category, mode) ?: return null
         val label = name.trim().ifEmpty { return icon }
-        val displayName = if (label.length > 20) label.take(19) + "…" else label
+        val displayName = if (label.length > 22) label.take(21) + "…" else label
 
         val textSize = when (mode) {
-            DisplayMode.BUBBLE_LARGE -> 32f
-            else -> 26f
+            DisplayMode.BUBBLE_LARGE -> 30f
+            else -> 24f
+        }
+        // سماكة الحد الأبيض حول الحروف (مظهر جوجل)
+        val strokeWidth = when (mode) {
+            DisplayMode.BUBBLE_LARGE -> 5.5f
+            else -> 4.5f
         }
 
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val typeface = try {
+            Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                ?: Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        } catch (_: Exception) {
+            Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        }
+
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = GOOGLE_LABEL_TEXT
             this.textSize = textSize
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+            this.typeface = typeface
             textAlign = Paint.Align.CENTER
-            isFakeBoldText = false
+            style = Paint.Style.FILL
+        }
+        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = GOOGLE_LABEL_STROKE
+            this.textSize = textSize
+            this.typeface = typeface
+            textAlign = Paint.Align.CENTER
+            style = Paint.Style.STROKE
+            this.strokeWidth = strokeWidth
+            strokeJoin = Paint.Join.ROUND
+            strokeMiter = 2f
         }
 
-        val fm = textPaint.fontMetrics
-        val textWidth = textPaint.measureText(displayName)
+        val fm = fillPaint.fontMetrics
+        val textWidth = fillPaint.measureText(displayName)
         val textHeight = fm.bottom - fm.top
+        // مساحة إضافية للحد الأبيض حول النص
+        val haloPad = strokeWidth + 2f
+        val gap = 2f
 
-        // هوامش الخلفية البيضاء (مثل جوجل)
-        val hPad = 14f
-        val vPad = 8f
-        val bgWidth = textWidth + hPad * 2
-        val bgHeight = textHeight + vPad * 2
-        val cornerRadius = bgHeight / 2f   // شكل حبة دواء مستديرة
-
-        val gapBetweenIconAndLabel = 4f
-        val width = maxOf(icon.width.toFloat(), bgWidth).toInt()
-        val height = (icon.height + gapBetweenIconAndLabel + bgHeight).toInt()
+        val width = maxOf(icon.width.toFloat(), textWidth + haloPad * 2).toInt().coerceAtLeast(1)
+        val height = (icon.height + gap + textHeight + haloPad).toInt().coerceAtLeast(1)
 
         val out = AndroidBitmap.createBitmap(width, height, AndroidBitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
 
-        // رسم الأيقونة في الأعلى في المنتصف
         val iconLeft = (width - icon.width) / 2f
         canvas.drawBitmap(icon, iconLeft, 0f, null)
 
-        // خلفية بيضاء مستديرة خلف النص
-        val bgLeft = (width - bgWidth) / 2f
-        val bgTop = icon.height + gapBetweenIconAndLabel
-        val bgRect = RectF(bgLeft, bgTop, bgLeft + bgWidth, bgTop + bgHeight)
-
-        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = GOOGLE_LABEL_BG
-            style = Paint.Style.FILL
-            // ظل خفيف جداً ليعطي عمقاً مثل جوجل
-            setShadowLayer(3f, 0f, 1.5f, Color.argb(60, 0, 0, 0))
-        }
-        // يحتاج LAYER_TYPE_SOFTWARE ليعمل الظل على بعض الأجهزة
-        canvas.drawRoundRect(bgRect, cornerRadius, cornerRadius, bgPaint)
-
-        // النص فوق الخلفية
         val textX = width / 2f
-        val textY = bgTop + vPad - fm.top
-        canvas.drawText(displayName, textX, textY, textPaint)
+        val textY = icon.height + gap - fm.top
+        // الحد الأبيض أولاً ثم النص الداكن فوقه
+        canvas.drawText(displayName, textX, textY, strokePaint)
+        canvas.drawText(displayName, textX, textY, fillPaint)
 
         return out
     }
