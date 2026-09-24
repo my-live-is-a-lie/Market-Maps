@@ -14,6 +14,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.clickable
@@ -663,23 +666,18 @@ private fun BoxScope.MapSideMenuOverlay(
     onOpenFullSettings: () -> Unit,
     onTogglePanelSide: () -> Unit
 ) {
-    // محاذاة مطلقة ليمين/يسار الشاشة الفعلي
     val panelAlign = if (panelSide == DrawerSide.RIGHT) {
         AbsoluteAlignment.CenterRight
     } else {
         AbsoluteAlignment.CenterLeft
     }
 
-    /**
-     * شرائط السحب من الحافة فقط (لا تغطي أزرار ＋ بالأسفل).
-     * إعداد edgeSwipeSide يحدد من أي حافة يُسمح بالفتح — منفصل عن موضع القائمة الافتراضي.
-     */
+    // شرائط السحب من الحافة (لا تغطي أزرار ＋)
     if (edgeSwipeEnabled && !open) {
         val edgeWidthDp = (28f + edgeSwipeSensitivity * 36f).dp
         val minDrag = 18f + (1f - edgeSwipeSensitivity) * 36f
         val allowLeft = edgeSwipeSide == EdgeSwipeSide.LEFT || edgeSwipeSide == EdgeSwipeSide.BOTH
         val allowRight = edgeSwipeSide == EdgeSwipeSide.RIGHT || edgeSwipeSide == EdgeSwipeSide.BOTH
-        // ترك منطقة الأزرار السفلية حرة (~140dp)
         val bottomClear = 140.dp
 
         if (allowLeft) {
@@ -730,72 +728,104 @@ private fun BoxScope.MapSideMenuOverlay(
         }
     }
 
-    if (!open) return
-
-    Box(
+    // طبقة التعتيم مع اختفاء/ظهور تدريجي
+    AnimatedVisibility(
+        visible = open,
         modifier = Modifier
             .fillMaxSize()
-            .zIndex(20f)
-            .background(Color.Black.copy(alpha = 0.35f))
-            .clickable { onOpenChange(false) }
-    )
+            .zIndex(20f),
+        enter = fadeIn(animationSpec = tween(220)),
+        exit = fadeOut(animationSpec = tween(180))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.35f))
+                .clickable { onOpenChange(false) }
+        )
+    }
 
-    Box(
+    // القائمة تنزلق من الجانب مع حركة سلسة
+    val slideFromRight = panelSide == DrawerSide.RIGHT
+    AnimatedVisibility(
+        visible = open,
         modifier = Modifier
             .align(panelAlign)
             .fillMaxHeight()
             .fillMaxWidth(0.55f)
-            .zIndex(21f)
-            .background(Color(0xFF121212))
+            .zIndex(21f),
+        enter = slideInHorizontally(
+            animationSpec = tween(durationMillis = 300)
+        ) { fullWidth -> if (slideFromRight) fullWidth else -fullWidth } + fadeIn(tween(200)),
+        exit = slideOutHorizontally(
+            animationSpec = tween(durationMillis = 260)
+        ) { fullWidth -> if (slideFromRight) fullWidth else -fullWidth } + fadeOut(tween(180))
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Bottom,
-            horizontalAlignment = Alignment.CenterHorizontally
+                .background(Color(0xFF121212))
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.Bottom,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                IconButton(onClick = {
-                    onOpenChange(false)
-                    onOpenFullSettings()
-                }) {
-                    Icon(
-                        Icons.Default.Settings,
-                        contentDescription = "الإعدادات",
-                        tint = Color(0xFF4CAF50),
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-                IconButton(onClick = onTogglePanelSide) {
-                    Icon(
-                        imageVector = if (panelSide == DrawerSide.RIGHT)
-                            Icons.Default.KeyboardArrowLeft
-                        else
-                            Icons.Default.KeyboardArrowRight,
-                        contentDescription = "تبديل جانب القائمة",
-                        tint = Color.White,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-                IconButton(onClick = { onOpenChange(false) }) {
-                    Icon(
-                        imageVector = if (panelSide == DrawerSide.RIGHT)
-                            Icons.Default.KeyboardArrowRight
-                        else
-                            Icons.Default.KeyboardArrowLeft,
-                        contentDescription = "إغلاق القائمة",
-                        tint = Color.White,
-                        modifier = Modifier.size(32.dp)
-                    )
+                // ترتيب ثابت بصرياً: إعدادات ثم نقل الجهة (بدون زر رجوع)
+                // على اليسار: نقل الجهة يسار الشاشة ثم الإعدادات بجانب الخريطة
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (panelSide == DrawerSide.LEFT) {
+                        IconButton(onClick = onTogglePanelSide) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowRight,
+                                contentDescription = "نقل القائمة لليمين",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        IconButton(onClick = {
+                            onOpenChange(false)
+                            onOpenFullSettings()
+                        }) {
+                            Icon(
+                                Icons.Default.Settings,
+                                contentDescription = "الإعدادات",
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    } else {
+                        IconButton(onClick = {
+                            onOpenChange(false)
+                            onOpenFullSettings()
+                        }) {
+                            Icon(
+                                Icons.Default.Settings,
+                                contentDescription = "الإعدادات",
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        IconButton(onClick = onTogglePanelSide) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowLeft,
+                                contentDescription = "نقل القائمة لليسار",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
+
 
 
