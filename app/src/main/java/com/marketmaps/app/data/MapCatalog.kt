@@ -99,7 +99,7 @@ object MapCatalog {
             .replace("ى", "ي")
             .replace("ؤ", "و")
             .replace("ئ", "ي")
-            .replace("\s+".toRegex(), "")
+            .replace(" ", "")
     }
 
     fun search(query: String): List<MapRegion> {
