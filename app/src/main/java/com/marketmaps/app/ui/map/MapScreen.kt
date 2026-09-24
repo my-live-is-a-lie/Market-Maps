@@ -15,12 +15,15 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -485,129 +488,17 @@ fun MapScreen(
             }
 
 
-            // شرائط رفيعة على الحافة فقط حتى لا تُعطّل لمس الخريطة
-            if (edgeSwipeEnabled && !sideMenuOpen) {
-                val edgeWidthDp = (12f + edgeSwipeSensitivity * 28f).dp
-                val allowLeft = edgeSwipeSide == EdgeSwipeSide.LEFT || edgeSwipeSide == EdgeSwipeSide.BOTH
-                val allowRight = edgeSwipeSide == EdgeSwipeSide.RIGHT || edgeSwipeSide == EdgeSwipeSide.BOTH
-                val minDrag = 28f + (1f - edgeSwipeSensitivity) * 70f
-                if (allowLeft) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .fillMaxHeight()
-                            .width(edgeWidthDp)
-                            .pointerInput(edgeSwipeSensitivity) {
-                                var total = 0f
-                                detectHorizontalDragGestures(
-                                    onDragStart = { total = 0f },
-                                    onHorizontalDrag = { _, dx ->
-                                        total += dx
-                                        if (total > minDrag) sideMenuOpen = true
-                                    },
-                                    onDragEnd = { total = 0f },
-                                    onDragCancel = { total = 0f }
-                                )
-                            }
-                    )
-                }
-                if (allowRight) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .fillMaxHeight()
-                            .width(edgeWidthDp)
-                            .pointerInput(edgeSwipeSensitivity) {
-                                var total = 0f
-                                detectHorizontalDragGestures(
-                                    onDragStart = { total = 0f },
-                                    onHorizontalDrag = { _, dx ->
-                                        total += dx
-                                        if (total < -minDrag) sideMenuOpen = true
-                                    },
-                                    onDragEnd = { total = 0f },
-                                    onDragCancel = { total = 0f }
-                                )
-                            }
-                    )
-                }
-            }
 
-            // القائمة الجانبية
-            if (sideMenuOpen) {
-                // طبقة شفافة لإغلاق القائمة بالضغط خارجها
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.35f))
-                        .clickable { sideMenuOpen = false }
-                )
-                val panelAlign = if (drawerSide == DrawerSide.RIGHT) Alignment.CenterEnd else Alignment.CenterStart
-                Box(
-                    modifier = Modifier
-                        .align(panelAlign)
-                        .fillMaxHeight()
-                        .fillMaxWidth(0.42f)
-                        .background(Color(0xFF121212))
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.Bottom,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // فتح الإعدادات الكاملة
-                            IconButton(
-                                onClick = {
-                                    sideMenuOpen = false
-                                    onOpenFullSettings()
-                                }
-                            ) {
-                                Icon(
-                                    Icons.Default.Settings,
-                                    contentDescription = "الإعدادات",
-                                    tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                            // تبديل جانب القائمة
-                            IconButton(
-                                onClick = {
-                                    scope.launch { appPreferences.toggleDrawerSide() }
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = if (drawerSide == DrawerSide.RIGHT)
-                                        Icons.Default.KeyboardArrowLeft
-                                    else
-                                        Icons.Default.KeyboardArrowRight,
-                                    contentDescription = "تبديل جانب القائمة",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
-                            // إغلاق والرجوع للخريطة
-                            IconButton(onClick = { sideMenuOpen = false }) {
-                                Icon(
-                                    imageVector = if (drawerSide == DrawerSide.RIGHT)
-                                        Icons.Default.KeyboardArrowRight
-                                    else
-                                        Icons.Default.KeyboardArrowLeft,
-                                    contentDescription = "إغلاق القائمة",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            MapSideMenuOverlay(
+                open = sideMenuOpen,
+                drawerSide = drawerSide,
+                edgeSwipeEnabled = edgeSwipeEnabled,
+                edgeSwipeSide = edgeSwipeSide,
+                edgeSwipeSensitivity = edgeSwipeSensitivity,
+                onOpenChange = { sideMenuOpen = it },
+                onOpenFullSettings = onOpenFullSettings,
+                onToggleDrawerSide = { scope.launch { appPreferences.toggleDrawerSide() } }
+            )
 
             if (showAddDialog) {
                 AddStoreDialog(
@@ -736,5 +627,132 @@ private fun tryGetLastLocation(context: Context, onLocation: (Double, Double) ->
     if (fine != PackageManager.PERMISSION_GRANTED && coarse != PackageManager.PERMISSION_GRANTED) return
     LocationServices.getFusedLocationProviderClient(context).lastLocation.addOnSuccessListener { location ->
         if (location != null) onLocation(location.latitude, location.longitude)
+    }
+}
+
+
+@Composable
+private fun BoxScope.MapSideMenuOverlay(
+    open: Boolean,
+    drawerSide: DrawerSide,
+    edgeSwipeEnabled: Boolean,
+    edgeSwipeSide: EdgeSwipeSide,
+    edgeSwipeSensitivity: Float,
+    onOpenChange: (Boolean) -> Unit,
+    onOpenFullSettings: () -> Unit,
+    onToggleDrawerSide: () -> Unit
+) {
+    // شرائط الحافة
+    if (edgeSwipeEnabled && !open) {
+        val edgeWidthDp = (12f + edgeSwipeSensitivity * 28f).dp
+        val allowLeft = edgeSwipeSide == EdgeSwipeSide.LEFT || edgeSwipeSide == EdgeSwipeSide.BOTH
+        val allowRight = edgeSwipeSide == EdgeSwipeSide.RIGHT || edgeSwipeSide == EdgeSwipeSide.BOTH
+        val minDrag = 28f + (1f - edgeSwipeSensitivity) * 70f
+        if (allowLeft) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxHeight()
+                    .width(edgeWidthDp)
+                    .pointerInput(edgeSwipeSensitivity) {
+                        var total = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { total = 0f },
+                            onHorizontalDrag = { _, dx ->
+                                total += dx
+                                if (total > minDrag) onOpenChange(true)
+                            },
+                            onDragEnd = { total = 0f },
+                            onDragCancel = { total = 0f }
+                        )
+                    }
+            )
+        }
+        if (allowRight) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .width(edgeWidthDp)
+                    .pointerInput(edgeSwipeSensitivity) {
+                        var total = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { total = 0f },
+                            onHorizontalDrag = { _, dx ->
+                                total += dx
+                                if (total < -minDrag) onOpenChange(true)
+                            },
+                            onDragEnd = { total = 0f },
+                            onDragCancel = { total = 0f }
+                        )
+                    }
+            )
+        }
+    }
+
+    if (!open) return
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.35f))
+            .clickable { onOpenChange(false) }
+    )
+
+    val panelAlign = if (drawerSide == DrawerSide.RIGHT) Alignment.CenterEnd else Alignment.CenterStart
+    Box(
+        modifier = Modifier
+            .align(panelAlign)
+            .fillMaxHeight()
+            .fillMaxWidth(0.42f)
+            .background(Color(0xFF121212))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Bottom,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = {
+                    onOpenChange(false)
+                    onOpenFullSettings()
+                }) {
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = "الإعدادات",
+                        tint = Color(0xFF4CAF50),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                IconButton(onClick = onToggleDrawerSide) {
+                    Icon(
+                        imageVector = if (drawerSide == DrawerSide.RIGHT)
+                            Icons.Default.KeyboardArrowLeft
+                        else
+                            Icons.Default.KeyboardArrowRight,
+                        contentDescription = "تبديل جانب القائمة",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+                IconButton(onClick = { onOpenChange(false) }) {
+                    Icon(
+                        imageVector = if (drawerSide == DrawerSide.RIGHT)
+                            Icons.Default.KeyboardArrowRight
+                        else
+                            Icons.Default.KeyboardArrowLeft,
+                        contentDescription = "إغلاق القائمة",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+        }
     }
 }
