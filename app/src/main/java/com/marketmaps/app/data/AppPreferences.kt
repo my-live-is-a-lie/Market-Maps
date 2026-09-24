@@ -130,6 +130,29 @@ class AppPreferences(private val context: Context) {
         prefs[showMarkerLabelsKey] ?: true
     }
 
+    val drawerSide: Flow<DrawerSide> = context.dataStore.data.map { prefs ->
+        when (prefs[drawerSideKey]) {
+            "LEFT" -> DrawerSide.LEFT
+            else -> DrawerSide.RIGHT
+        }
+    }
+
+    val edgeSwipeEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[edgeSwipeEnabledKey] ?: true
+    }
+
+    val edgeSwipeSide: Flow<EdgeSwipeSide> = context.dataStore.data.map { prefs ->
+        when (prefs[edgeSwipeSideKey]) {
+            "LEFT" -> EdgeSwipeSide.LEFT
+            "RIGHT" -> EdgeSwipeSide.RIGHT
+            else -> EdgeSwipeSide.BOTH
+        }
+    }
+
+    val edgeSwipeSensitivity: Flow<Float> = context.dataStore.data.map { prefs ->
+        (prefs[edgeSwipeSensitivityKey] ?: 0.55).toFloat().coerceIn(0.05f, 1f)
+    }
+
     suspend fun setOnboardingDone(done: Boolean = true) {
         context.dataStore.edit { it[onboardingDoneKey] = done }
     }
