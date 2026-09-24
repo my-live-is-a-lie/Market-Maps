@@ -15,12 +15,16 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,7 +35,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -46,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -64,6 +72,8 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.MapDownloader
 import com.marketmaps.app.data.MapProvider
+import com.marketmaps.app.data.DrawerSide
+import com.marketmaps.app.data.EdgeSwipeSide
 import com.marketmaps.app.data.Store
 import com.marketmaps.app.data.StoreRepository
 import kotlinx.coroutines.flow.first
@@ -81,7 +91,8 @@ import kotlin.math.sqrt
 @Composable
 fun MapScreen(
     modifier: Modifier = Modifier,
-    onOpenSettings: () -> Unit = {}
+    onOpenSettings: () -> Unit = {},
+    onOpenFullSettings: () -> Unit = onOpenSettings
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -94,6 +105,11 @@ fun MapScreen(
     val recentSearchLimit by appPreferences.recentSearchLimit.collectAsState(initial = 5)
     val mapProvider by appPreferences.mapProvider.collectAsState(initial = MapProvider.MAPSFORGE)
     val showMarkerLabels by appPreferences.showMarkerLabels.collectAsState(initial = true)
+    val drawerSide by appPreferences.drawerSide.collectAsState(initial = DrawerSide.RIGHT)
+    val edgeSwipeEnabled by appPreferences.edgeSwipeEnabled.collectAsState(initial = true)
+    val edgeSwipeSide by appPreferences.edgeSwipeSide.collectAsState(initial = EdgeSwipeSide.BOTH)
+    val edgeSwipeSensitivity by appPreferences.edgeSwipeSensitivity.collectAsState(initial = 0.55f)
+    var sideMenuOpen by remember { mutableStateOf(false) }
 
     remember {
         AndroidGraphicFactory.createInstance(context.applicationContext)
@@ -410,13 +426,29 @@ fun MapScreen(
             ) {
                 AnimatedVisibility(visible = isMenuExpanded, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        // الإعدادات فوق زر تحديد الموقع
-                        FloatingActionButton(
-                            onClick = { isMenuExpanded = false; onOpenSettings() },
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            shape = CircleShape, modifier = Modifier.size(48.dp)
-                        ) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") }
+                        // ضغط عادي: قائمة جانبية | ضغط مطول: الإعدادات مباشرة
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.secondaryContainer,
+                                    CircleShape
+                                )
+                                .combinedClickable(
+                                    onClick = { isMenuExpanded = false; sideMenuOpen = true },
+                                    onLongClick = {
+                                        isMenuExpanded = false
+                                        onOpenFullSettings()
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Settings,
+                                contentDescription = "الإعدادات — ضغط مطول للفتح المباشر",
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
                         FloatingActionButton(
                             onClick = { requestLocationAndMove(); isMenuExpanded = false },
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -449,6 +481,131 @@ fun MapScreen(
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onPrimary
                     )
+                }
+            }
+
+
+            // شرائط رفيعة على الحافة فقط حتى لا تُعطّل لمس الخريطة
+            if (edgeSwipeEnabled && !sideMenuOpen) {
+                val edgeWidthDp = (12f + edgeSwipeSensitivity * 28f).dp
+                val allowLeft = edgeSwipeSide == EdgeSwipeSide.LEFT || edgeSwipeSide == EdgeSwipeSide.BOTH
+                val allowRight = edgeSwipeSide == EdgeSwipeSide.RIGHT || edgeSwipeSide == EdgeSwipeSide.BOTH
+                val minDrag = 28f + (1f - edgeSwipeSensitivity) * 70f
+                if (allowLeft) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .fillMaxHeight()
+                            .width(edgeWidthDp)
+                            .pointerInput(edgeSwipeSensitivity) {
+                                var total = 0f
+                                detectHorizontalDragGestures(
+                                    onDragStart = { total = 0f },
+                                    onHorizontalDrag = { _, dx ->
+                                        total += dx
+                                        if (total > minDrag) sideMenuOpen = true
+                                    },
+                                    onDragEnd = { total = 0f },
+                                    onDragCancel = { total = 0f }
+                                )
+                            }
+                    )
+                }
+                if (allowRight) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .width(edgeWidthDp)
+                            .pointerInput(edgeSwipeSensitivity) {
+                                var total = 0f
+                                detectHorizontalDragGestures(
+                                    onDragStart = { total = 0f },
+                                    onHorizontalDrag = { _, dx ->
+                                        total += dx
+                                        if (total < -minDrag) sideMenuOpen = true
+                                    },
+                                    onDragEnd = { total = 0f },
+                                    onDragCancel = { total = 0f }
+                                )
+                            }
+                    )
+                }
+            }
+
+            // القائمة الجانبية
+            if (sideMenuOpen) {
+                // طبقة شفافة لإغلاق القائمة بالضغط خارجها
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.35f))
+                        .clickable { sideMenuOpen = false }
+                )
+                val panelAlign = if (drawerSide == DrawerSide.RIGHT) Alignment.CenterEnd else Alignment.CenterStart
+                Box(
+                    modifier = Modifier
+                        .align(panelAlign)
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.42f)
+                        .background(Color(0xFF121212))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.Bottom,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // فتح الإعدادات الكاملة
+                            IconButton(
+                                onClick = {
+                                    sideMenuOpen = false
+                                    onOpenFullSettings()
+                                }
+                            ) {
+                                Icon(
+                                    Icons.Default.Settings,
+                                    contentDescription = "الإعدادات",
+                                    tint = Color(0xFF4CAF50),
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                            // تبديل جانب القائمة
+                            IconButton(
+                                onClick = {
+                                    scope.launch { appPreferences.toggleDrawerSide() }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = if (drawerSide == DrawerSide.RIGHT)
+                                        Icons.Default.KeyboardArrowLeft
+                                    else
+                                        Icons.Default.KeyboardArrowRight,
+                                    contentDescription = "تبديل جانب القائمة",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                            // إغلاق والرجوع للخريطة
+                            IconButton(onClick = { sideMenuOpen = false }) {
+                                Icon(
+                                    imageVector = if (drawerSide == DrawerSide.RIGHT)
+                                        Icons.Default.KeyboardArrowRight
+                                    else
+                                        Icons.Default.KeyboardArrowLeft,
+                                    contentDescription = "إغلاق القائمة",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
