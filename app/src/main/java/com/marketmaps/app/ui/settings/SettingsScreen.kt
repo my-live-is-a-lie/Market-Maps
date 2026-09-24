@@ -46,6 +46,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -69,6 +70,8 @@ import com.marketmaps.app.data.AppThemeMode
 import com.marketmaps.app.data.MapCatalog
 import com.marketmaps.app.data.MapDownloader
 import com.marketmaps.app.data.MapProvider
+import com.marketmaps.app.data.DrawerSide
+import com.marketmaps.app.data.EdgeSwipeSide
 import com.marketmaps.app.ui.theme.AccentPresets
 import kotlinx.coroutines.launch
 
@@ -77,6 +80,7 @@ private enum class SettingsSection {
     MAIN,
     APPEARANCE,
     CUSTOMIZATION,
+    GESTURES,
     MAP_TYPE,
     OFFLINE_MAPS,
     SEARCH_FILTERS
@@ -113,6 +117,11 @@ fun SettingsScreen(
             onBack = { section = SettingsSection.MAIN }
         )
         SettingsSection.CUSTOMIZATION -> CustomizationSettingsScreen(
+            prefs = prefs,
+            scope = scope,
+            onBack = { section = SettingsSection.MAIN }
+        )
+        SettingsSection.GESTURES -> GesturesSettingsScreen(
             prefs = prefs,
             scope = scope,
             onBack = { section = SettingsSection.MAIN }
@@ -172,6 +181,12 @@ private fun SettingsMainScreen(
                 subtitle = "أسماء المواقع على الخريطة وغيرها",
                 icon = Icons.Default.List,
                 onClick = { onOpen(SettingsSection.CUSTOMIZATION) }
+            )
+            SettingsSectionCard(
+                title = "الإيماءات",
+                subtitle = "القائمة الجانبية والسحب من الحافة",
+                icon = Icons.Default.Settings,
+                onClick = { onOpen(SettingsSection.GESTURES) }
             )
             SettingsSectionCard(
                 title = "نوع الخريطة",
@@ -1179,6 +1194,149 @@ private fun CustomizationSettingsScreen(
                             }
                         }
                     )
+                }
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GesturesSettingsScreen(
+    prefs: AppPreferences,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onBack: () -> Unit
+) {
+    val edgeEnabled by prefs.edgeSwipeEnabled.collectAsState(initial = true)
+    val edgeSide by prefs.edgeSwipeSide.collectAsState(initial = EdgeSwipeSide.BOTH)
+    val sensitivity by prefs.edgeSwipeSensitivity.collectAsState(initial = 0.55f)
+    val drawerSide by prefs.drawerSide.collectAsState(initial = DrawerSide.RIGHT)
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("الإيماءات") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("تمكين القائمة الجانبية بالسحب", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "اسحب من حافة الشاشة لفتح القائمة",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = edgeEnabled,
+                        onCheckedChange = { scope.launch { prefs.setEdgeSwipeEnabled(it) } }
+                    )
+                }
+            }
+
+            if (edgeEnabled) {
+                Text("موضع السحب من الحافة", style = MaterialTheme.typography.titleMedium)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        EdgeSwipeSide.LEFT to "يسار",
+                        EdgeSwipeSide.BOTH to "كلا الجانبين",
+                        EdgeSwipeSide.RIGHT to "يمين"
+                    ).forEach { (side, label) ->
+                        val selected = edgeSide == side
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                    RoundedCornerShape(24.dp)
+                                )
+                                .clickable { scope.launch { prefs.setEdgeSwipeSide(side) } }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Text("حساسية السحب", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "كلما زادت الحساسية يسهل فتح القائمة من مسافة أقرب للحافة",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Slider(
+                    value = sensitivity,
+                    onValueChange = { v -> scope.launch { prefs.setEdgeSwipeSensitivity(v) } },
+                    valueRange = 0.05f..1f
+                )
+            }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("موضع القائمة الجانبية الافتراضي", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (drawerSide == DrawerSide.RIGHT) "حالياً: اليمين" else "حالياً: اليسار",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(
+                                    if (drawerSide == DrawerSide.LEFT) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                    RoundedCornerShape(24.dp)
+                                )
+                                .clickable { scope.launch { prefs.setDrawerSide(DrawerSide.LEFT) } }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) { Text("يسار") }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(
+                                    if (drawerSide == DrawerSide.RIGHT) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                    RoundedCornerShape(24.dp)
+                                )
+                                .clickable { scope.launch { prefs.setDrawerSide(DrawerSide.RIGHT) } }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) { Text("يمين") }
+                    }
                 }
             }
         }
