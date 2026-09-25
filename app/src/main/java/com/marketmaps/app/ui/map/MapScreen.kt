@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -848,7 +849,10 @@ private fun BoxScope.MapSideMenuOverlay(
             .fillMaxHeight()
             .fillMaxWidth(0.55f)
             .zIndex(21f)
-            .offset { IntOffset(offsetX.roundToInt(), 0) }
+            // absoluteOffset (not offset) لأنها لا تنعكس مع RTL، بعكس الـ AbsoluteAlignment أعلاه
+            // الذي يحدد جانب اللوحة فعلياً — استخدام offset العادي هنا كان يجعل اللوحة
+            // تنزلق بالاتجاه المعاكس فتظهر من اليسار ثم تتحرك لتستقر يميناً
+            .absoluteOffset { IntOffset(offsetX.roundToInt(), 0) }
             .background(Color(0xFF121212))
             .pointerInput(activeSide, panelWidthPx) {
                 detectHorizontalDragGestures(
