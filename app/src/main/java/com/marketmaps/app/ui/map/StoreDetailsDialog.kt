@@ -166,12 +166,8 @@ fun StoreDetailsBottomCard(
                             val goV = offsetY.value >= threshY
                             scope.launch {
                                 if (goH || goV) {
-                                    if (goV && offsetY.value >= abs(offsetX.value)) {
-                                        offsetY.animateTo(screenH, bounce)
-                                    } else {
-                                        val dir = if (offsetX.value >= 0f) screenW else -screenW
-                                        offsetX.animateTo(dir, bounce)
-                                    }
+                                    // إنزال الزائد فوراً قبل انتهاء حركة الإغلاق
+                                    onHeightChanged(0)
                                     onDismiss()
                                 } else {
                                     launch { offsetX.animateTo(0f, bounce) }
