@@ -152,6 +152,9 @@ fun MapScreen(
     var navResults by remember { mutableStateOf<List<StoreWithDistance>>(emptyList()) }
     var navIndex by remember { mutableStateOf(-1) }
     var cameraTarget by remember { mutableStateOf<Triple<Double, Double, Float>?>(null) }
+    val detailsCardVisible = selectedStore != null
+    val fabBottomPad = if (detailsCardVisible) 168.dp else 16.dp
+    val navBottomPad = if (detailsCardVisible) 176.dp else 100.dp
 
     val searchResults = remember(searchQuery, stores, userLat, userLon, filterType, filterSub) {
         filterAndSortStores(stores, searchQuery, userLat, userLon, filterType, filterSub)
@@ -417,7 +420,7 @@ fun MapScreen(
                     distanceText = if (current.distanceMeters >= 0) formatDistance(current.distanceMeters) else null,
                     onPrevious = { goToNavResult(navIndex - 1) }, onNext = { goToNavResult(navIndex + 1) },
                     onDismiss = { navResults = emptyList(); navIndex = -1 },
-                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 100.dp).zIndex(2f)
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = navBottomPad).zIndex(3f)
                 )
             }
 
@@ -438,7 +441,7 @@ fun MapScreen(
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(16.dp)
+                    .padding(start = 16.dp, bottom = fabBottomPad, end = 16.dp)
                     .zIndex(15f),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -565,22 +568,18 @@ fun MapScreen(
             }
 
             selectedStore?.let { store ->
-                StoreDetailsDialog(
+                val dist = if (userLat != null && userLon != null) {
+                    haversineMeters(userLat!!, userLon!!, store.latitude, store.longitude)
+                } else null
+                StoreDetailsBottomCard(
                     store = store,
+                    distanceMeters = dist,
                     onDismiss = { selectedStore = null },
                     onEdit = { selectedStore = null; storeToEdit = it },
-                    onDelete = {
-                        scope.launch {
-                            val result = storeRepository.deleteStore(it.id)
-                            if (result.isSuccess) {
-                                Toast.makeText(context, "تم الحذف", Toast.LENGTH_SHORT).show()
-                                val deletedId = it.id
-                                refreshStores(); selectedStore = null
-                                navResults = navResults.filter { item -> item.store.id != deletedId }
-                                if (navResults.isEmpty()) navIndex = -1 else navIndex = navIndex.coerceIn(0, navResults.lastIndex)
-                            } else Toast.makeText(context, "فشل الحذف", Toast.LENGTH_LONG).show()
-                        }
-                    }
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .zIndex(12f)
                 )
             }
         }
