@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -62,6 +63,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.caverock.androidsvg.SVG
 import com.marketmaps.app.data.Store
 import kotlin.math.abs
@@ -310,13 +313,21 @@ fun StoreDetailsBottomCard(
                                 }
                             )
                             if (showCoords) {
-                                CoordsPopup(
-                                    latitude = store.latitude,
-                                    longitude = store.longitude,
-                                    modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .offset(y = (-34).dp) // فوق الدبوس ومتوسطة عليه
-                                )
+                                val density = LocalDensity.current
+                                Popup(
+                                    alignment = Alignment.TopCenter,
+                                    offset = androidx.compose.ui.unit.IntOffset(
+                                        x = 0,
+                                        y = with(density) { (-6).dp.roundToPx() }
+                                    ),
+                                    onDismissRequest = { showCoords = false },
+                                    properties = PopupProperties(focusable = false)
+                                ) {
+                                    CoordsPopup(
+                                        latitude = store.latitude,
+                                        longitude = store.longitude
+                                    )
+                                }
                             }
                         }
                     }
@@ -369,7 +380,8 @@ private fun CoordsPopup(
     val scheme = MaterialTheme.colorScheme
     Surface(
         modifier = modifier
-            .widthIn(max = 168.dp)
+            .wrapContentWidth()
+            .widthIn(min = 140.dp, max = 200.dp)
             .shadow(4.dp, RoundedCornerShape(10.dp)),
         shape = RoundedCornerShape(10.dp),
         color = scheme.primaryContainer
