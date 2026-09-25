@@ -176,6 +176,10 @@ fun MapScreen(
     val fabBottomPad = (16.dp + cardLift).coerceAtLeast(0.dp)
     val navBottomPad = (if (detailsCardVisible) cardLift + 8.dp else 100.dp).coerceAtLeast(0.dp)
 
+    val highlightedStoreId = if (navResults.size > 1 && navIndex in navResults.indices) {
+        navResults[navIndex].store.id
+    } else null
+
     val searchResults = remember(searchQuery, stores, userLat, userLon, filterType, filterSub) {
         filterAndSortStores(stores, searchQuery, userLat, userLon, filterType, filterSub)
     }
@@ -265,12 +269,12 @@ fun MapScreen(
         val bundle = layerBundle ?: return@LaunchedEffect
         if (offlineMode && MapDownloader.isEgyptMapDownloaded(context)) MapLayerHelper.applyOffline(context, mapView, bundle)
         else MapLayerHelper.applyOnline(mapView, bundle)
-        addMarkersToMap(context, mapView, stores, userLat, userLon)
+        addMarkersToMap(context, mapView, stores, userLat, userLon, highlightedStoreId)
     }
 
-    LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider) {
+    LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
-        mapViewRef?.let { addMarkersToMap(context, it, stores, userLat, userLon) }
+        mapViewRef?.let { addMarkersToMap(context, it, stores, userLat, userLon, highlightedStoreId) }
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -313,6 +317,7 @@ fun MapScreen(
                     cameraTarget = cameraTarget,
                     isAddMode = isAddMode,
                     showLabels = showMarkerLabels,
+                    highlightedStoreId = highlightedStoreId,
                     onLongPress = { lat, lon ->
                         selectedLat = lat
                         selectedLon = lon
@@ -353,7 +358,7 @@ fun MapScreen(
                         val z = mv.model.mapViewPosition.zoomLevel.toInt()
                         if (z == lastZoom[0]) return@addObserver
                         lastZoom[0] = z
-                        addMarkersToMap(ctx, mv, storesRef.value, userLatRef.value, userLonRef.value)
+                        addMarkersToMap(ctx, mv, storesRef.value, userLatRef.value, userLonRef.value, null)
                     }
 
                     val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
@@ -661,7 +666,14 @@ private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Doub
     return r * 2 * atan2(sqrt(a), sqrt(1 - a))
 }
 
-private fun addMarkersToMap(context: Context, mapView: MapView, stores: List<Store>, userLat: Double?, userLon: Double?) {
+private fun addMarkersToMap(
+    context: Context,
+    mapView: MapView,
+    stores: List<Store>,
+    userLat: Double?,
+    userLon: Double?,
+    highlightedStoreId: String? = null
+) {
     try {
         mapView.layerManager.layers.filterIsInstance<Marker>().forEach { mapView.layerManager.layers.remove(it) }
 
@@ -670,9 +682,21 @@ private fun addMarkersToMap(context: Context, mapView: MapView, stores: List<Sto
         val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)
 
         if (mode != MarkerIconHelper.DisplayMode.HIDDEN) {
-            stores.forEach { store ->
+            // أولاً غير المميز، ثم المميز فوقها
+            val ordered = if (highlightedStoreId == null) stores
+            else stores.sortedBy { if (it.id == highlightedStoreId) 1 else 0 }
+            ordered.forEach { store ->
                 try {
-                    val bitmap = MarkerIconHelper.getMarkerBitmap(store.category, mode) ?: return@forEach
+                    val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
+                    var androidBmp = MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
+                        ?: return@forEach
+                    if (highlighted) {
+                        val w = (androidBmp.width * 1.2f).toInt().coerceAtLeast(1)
+                        val h = (androidBmp.height * 1.2f).toInt().coerceAtLeast(1)
+                        androidBmp = android.graphics.Bitmap.createScaledBitmap(androidBmp, w, h, true)
+                    }
+                    val bitmap: org.mapsforge.core.graphics.Bitmap =
+                        org.mapsforge.map.android.graphics.AndroidBitmap(androidBmp)
                     mapView.layerManager.layers.add(
                         Marker(LatLong(store.latitude, store.longitude), bitmap, 0, -bitmap.height / 2)
                     )
