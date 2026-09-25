@@ -150,6 +150,8 @@ fun MapScreen(
     var userLat by remember { mutableStateOf<Double?>(null) }
     var userLon by remember { mutableStateOf<Double?>(null) }
     var selectedStore by remember { mutableStateOf<Store?>(null) }
+    // نحتفظ بآخر محل لتشغيل أنيميشن الإغلاق بعد null
+    var detailsStore by remember { mutableStateOf<Store?>(null) }
     var storeToEdit by remember { mutableStateOf<Store?>(null) }
     var navResults by remember { mutableStateOf<List<StoreWithDistance>>(emptyList()) }
     var navIndex by remember { mutableStateOf(-1) }
@@ -157,6 +159,9 @@ fun MapScreen(
     var detailsCardHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val detailsCardVisible = selectedStore != null
+    LaunchedEffect(selectedStore) {
+        if (selectedStore != null) detailsStore = selectedStore
+    }
     val cardLiftTargetPx = if (detailsCardVisible) {
         val hPx = if (detailsCardHeightPx > 0) detailsCardHeightPx.toFloat()
         else with(density) { 128.dp.toPx() }
@@ -449,7 +454,7 @@ fun MapScreen(
                     distanceText = if (current.distanceMeters >= 0) formatDistance(current.distanceMeters) else null,
                     onPrevious = { goToNavResult(navIndex - 1) }, onNext = { goToNavResult(navIndex + 1) },
                     onDismiss = { navResults = emptyList(); navIndex = -1 },
-                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = navBottomPad).zIndex(3f)
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = navBottomPad).zIndex(3f)
                 )
             }
 
@@ -601,23 +606,39 @@ fun MapScreen(
                 )
             }
 
-            selectedStore?.let { store ->
-                val lat = userLat ?: savedLocation?.first
-                val lon = userLon ?: savedLocation?.second
-                val dist = if (lat != null && lon != null) {
-                    haversineMeters(lat, lon, store.latitude, store.longitude)
-                } else null
-                StoreDetailsBottomCard(
-                    store = store,
-                    distanceMeters = dist,
-                    onDismiss = { selectedStore = null; detailsCardHeightPx = 0 },
-                    onEdit = { storeToEdit = it },  // لا تغلق البطاقة عند فتح التعديل
-                    onHeightChanged = { detailsCardHeightPx = it },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
-                        .zIndex(12f)
-                )
+            AnimatedVisibility(
+                visible = selectedStore != null,
+                enter = fadeIn() + slideInVertically { it },
+                exit = fadeOut(animationSpec = tween(180)) + slideOutVertically(
+                    animationSpec = tween(220)
+                ) { it },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .zIndex(12f)
+            ) {
+                val store = selectedStore ?: detailsStore
+                if (store != null) {
+                    val lat = userLat ?: savedLocation?.first
+                    val lon = userLon ?: savedLocation?.second
+                    val dist = if (lat != null && lon != null) {
+                        haversineMeters(lat, lon, store.latitude, store.longitude)
+                    } else null
+                    StoreDetailsBottomCard(
+                        store = store,
+                        distanceMeters = dist,
+                        onDismiss = {
+                            // إنزال زر الزائد فوراً ثم إغلاق البطاقة
+                            detailsCardHeightPx = 0
+                            selectedStore = null
+                        },
+                        onEdit = { storeToEdit = it },
+                        onHeightChanged = { h ->
+                            if (selectedStore != null) detailsCardHeightPx = h
+                        },
+                        modifier = Modifier
+                            .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+                    )
+                }
             }
         }
     }
