@@ -159,7 +159,7 @@ fun MapScreen(
     val cardLiftTargetPx = if (detailsCardVisible) {
         val hPx = if (detailsCardHeightPx > 0) detailsCardHeightPx.toFloat()
         else with(density) { 128.dp.toPx() }
-        hPx + with(density) { 20.dp.toPx() }
+        hPx + with(density) { 8.dp.toPx() }
     } else 0f
     val cardLiftAnim = remember { Animatable(0f) }
     LaunchedEffect(cardLiftTargetPx) {
@@ -588,7 +588,12 @@ fun MapScreen(
                             val result = storeRepository.updateStore(updated)
                             if (result.isSuccess) {
                                 Toast.makeText(context, "تم التحديث", Toast.LENGTH_SHORT).show()
-                                refreshStores(); storeToEdit = null; selectedStore = null
+                                storeToEdit = null
+                                // أغلق ثم أعد فتح البطاقة لعرض البيانات المحدّثة
+                                selectedStore = null
+                                detailsCardHeightPx = 0
+                                refreshStores()
+                                selectedStore = updated
                             } else Toast.makeText(context, "فشل التحديث", Toast.LENGTH_LONG).show()
                         }
                     }
@@ -605,7 +610,7 @@ fun MapScreen(
                     store = store,
                     distanceMeters = dist,
                     onDismiss = { selectedStore = null; detailsCardHeightPx = 0 },
-                    onEdit = { selectedStore = null; detailsCardHeightPx = 0; storeToEdit = it },
+                    onEdit = { storeToEdit = it },  // لا تغلق البطاقة عند فتح التعديل
                     onHeightChanged = { detailsCardHeightPx = it },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
