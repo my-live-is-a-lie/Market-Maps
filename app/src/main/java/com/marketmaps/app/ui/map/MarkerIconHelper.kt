@@ -136,30 +136,60 @@ object MarkerIconHelper {
     fun getAndroidUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): AndroidBitmap? {
         if (mode == DisplayMode.HIDDEN) return null
         val size = when (mode) {
-            DisplayMode.CIRCLE -> 22
-            DisplayMode.BUBBLE_MEDIUM -> 56
-            DisplayMode.BUBBLE_LARGE -> 80
+            DisplayMode.CIRCLE -> 28
+            DisplayMode.BUBBLE_MEDIUM -> 64
+            DisplayMode.BUBBLE_LARGE -> 88
             DisplayMode.HIDDEN -> 0
         }
-        return if (mode == DisplayMode.CIRCLE) {
-            composeCircle(Color.parseColor("#E53935"), size)
-        } else {
-            composeBubble(Color.parseColor("#E53935"), "home", size)
-        }
+        return composeGoogleUserPin(size)
     }
 
     fun getUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): Bitmap {
         val size = when (mode) {
-            DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 22
-            DisplayMode.BUBBLE_MEDIUM -> 56
-            DisplayMode.BUBBLE_LARGE -> 80
+            DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 28
+            DisplayMode.BUBBLE_MEDIUM -> 64
+            DisplayMode.BUBBLE_LARGE -> 88
         }
-        val androidBmp = if (mode == DisplayMode.CIRCLE || mode == DisplayMode.HIDDEN) {
-            composeCircle(Color.parseColor("#E53935"), size)
-        } else {
-            composeBubble(Color.parseColor("#E53935"), "home", size)
+        return MapsforgeAndroidBitmap(composeGoogleUserPin(size))
+    }
+
+    /** دبوس أحمر كلاسيكي بأسلوب خرائط جوجل لموقع المستخدم */
+    private fun composeGoogleUserPin(size: Int): AndroidBitmap {
+        val bmp = AndroidBitmap.createBitmap(size, size, AndroidBitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val w = size.toFloat()
+        val h = size.toFloat()
+        // رأس الدبوس (دائرة)
+        val headCx = w / 2f
+        val headCy = h * 0.38f
+        val headR = w * 0.28f
+        // طرف الدبوس السفلي
+        val tipY = h * 0.92f
+        val path = android.graphics.Path().apply {
+            moveTo(headCx - headR * 0.92f, headCy + headR * 0.35f)
+            lineTo(headCx, tipY)
+            lineTo(headCx + headR * 0.92f, headCy + headR * 0.35f)
+            close()
         }
-        return MapsforgeAndroidBitmap(androidBmp)
+        val pinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#EA4335") // أحمر جوجل
+            style = Paint.Style.FILL
+        }
+        canvas.drawPath(path, pinPaint)
+        canvas.drawCircle(headCx, headCy, headR, pinPaint)
+        // دائرة داخلية بيضاء
+        val inner = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(headCx, headCy, headR * 0.42f, inner)
+        // نقطة مركزية زرقاء فاتحة (أسلوب جوجل أحياناً أحمر فقط؛ نستخدم أحمر غامق للنقطة)
+        val core = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#C5221F")
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(headCx, headCy, headR * 0.18f, core)
+        return bmp
     }
 
     /** نسخة Android Bitmap للاستخدام مع خرائط جوجل */
