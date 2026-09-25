@@ -18,7 +18,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.animateDpAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -157,18 +156,21 @@ fun MapScreen(
     var detailsCardHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val detailsCardVisible = selectedStore != null
-    val cardLiftTarget: androidx.compose.ui.unit.Dp = if (detailsCardVisible) {
-        val h = if (detailsCardHeightPx > 0) with(density) { detailsCardHeightPx.toDp() } else 128.dp
-        h + 20.dp // مسافة واضحة فوق البطاقة بدون تلامس
-    } else 0.dp
-    val cardLift by animateDpAsState(
-        targetValue = cardLiftTarget,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "fabCardLift"
-    )
+    val cardLiftTargetPx = if (detailsCardVisible) {
+        val h = if (detailsCardHeightPx > 0) detailsCardHeightPx.toFloat() else with(density) { 128.dp.toPx() }
+        h + with(density) { 20.dp.toPx() }
+    } else 0f
+    val cardLiftAnim = remember { Animatable(0f) }
+    LaunchedEffect(cardLiftTargetPx) {
+        cardLiftAnim.animateTo(
+            cardLiftTargetPx,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMedium
+            )
+        )
+    }
+    val cardLift = with(density) { cardLiftAnim.value.toDp() }
     val fabBottomPad = 16.dp + cardLift
     val navBottomPad = if (detailsCardVisible) cardLift + 8.dp else 100.dp
 
