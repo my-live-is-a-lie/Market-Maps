@@ -44,6 +44,7 @@ fun GoogleMapContent(
     cameraTarget: Triple<Double, Double, Float>?,
     isAddMode: Boolean,
     showLabels: Boolean = true,
+    highlightedStoreId: String? = null,
     onLongPress: (Double, Double) -> Unit,
     onMarkerClick: (Store) -> Unit,
     onCameraIdle: (Double, Double, Float) -> Unit,
@@ -94,17 +95,22 @@ fun GoogleMapContent(
 
     val iconCache = remember(mode, showLabels, mapReady) { mutableMapOf<String, BitmapDescriptor>() }
 
-    fun storeIcon(store: Store): BitmapDescriptor? {
+    fun storeIcon(store: Store, highlighted: Boolean): BitmapDescriptor? {
         if (!mapReady) return null
         if (mode == MarkerIconHelper.DisplayMode.HIDDEN) return null
-        val cacheKey = "${store.id}|${mode.name}|$showLabels|${store.name}"
+        val cacheKey = "${store.id}|${mode.name}|$showLabels|${store.name}|h=$highlighted"
         iconCache[cacheKey]?.let { return it }
         val rawBmp: AndroidBitmap? = if (showLabels && mode != MarkerIconHelper.DisplayMode.CIRCLE) {
             MarkerIconHelper.getAndroidMarkerBitmapWithLabel(store.category, store.name, mode)
         } else {
             MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
         }
-        val bmp = rawBmp ?: return null
+        var bmp = rawBmp ?: return null
+        if (highlighted) {
+            val w = (bmp.width * 1.2f).toInt().coerceAtLeast(1)
+            val h = (bmp.height * 1.2f).toInt().coerceAtLeast(1)
+            bmp = AndroidBitmap.createScaledBitmap(bmp, w, h, true)
+        }
         return try {
             val desc = BitmapDescriptorFactory.fromBitmap(bmp)
             iconCache[cacheKey] = desc
@@ -148,13 +154,15 @@ fun GoogleMapContent(
     ) {
         if (mapReady && mode != MarkerIconHelper.DisplayMode.HIDDEN) {
             stores.forEach { store ->
-                val icon = storeIcon(store) ?: return@forEach
+                val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
+                val icon = storeIcon(store, highlighted) ?: return@forEach
                 Marker(
                     state = MarkerState(position = LatLng(store.latitude, store.longitude)),
                     title = store.name,
                     snippet = store.category,
                     icon = icon,
                     anchor = markerAnchor,
+                    zIndex = if (highlighted) 2f else 0f,
                     onClick = {
                         onMarkerClick(store)
                         true
