@@ -18,6 +18,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.animateDpAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -156,12 +157,20 @@ fun MapScreen(
     var detailsCardHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val detailsCardVisible = selectedStore != null
-    val cardLift: androidx.compose.ui.unit.Dp = if (detailsCardVisible) {
-        val h = if (detailsCardHeightPx > 0) with(density) { detailsCardHeightPx.toDp() } else 132.dp
-        maxOf(h - 22.dp, 96.dp)
+    val cardLiftTarget: androidx.compose.ui.unit.Dp = if (detailsCardVisible) {
+        val h = if (detailsCardHeightPx > 0) with(density) { detailsCardHeightPx.toDp() } else 128.dp
+        h + 20.dp // مسافة واضحة فوق البطاقة بدون تلامس
     } else 0.dp
+    val cardLift by animateDpAsState(
+        targetValue = cardLiftTarget,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "fabCardLift"
+    )
     val fabBottomPad = 16.dp + cardLift
-    val navBottomPad = if (detailsCardVisible) cardLift + 12.dp else 100.dp
+    val navBottomPad = if (detailsCardVisible) cardLift + 8.dp else 100.dp
 
     val searchResults = remember(searchQuery, stores, userLat, userLon, filterType, filterSub) {
         filterAndSortStores(stores, searchQuery, userLat, userLon, filterType, filterSub)
@@ -187,7 +196,9 @@ fun MapScreen(
     val userLatRef = remember { mutableStateOf(userLat) }
     userLatRef.value = userLat
     val userLonRef = remember { mutableStateOf(userLon) }
+    val selectedStoreRef = remember { mutableStateOf(selectedStore) }
     userLonRef.value = userLon
+    selectedStoreRef.value = selectedStore
 
     fun saveCameraPosition() {
         val mv = mapViewRef ?: return
@@ -303,7 +314,10 @@ fun MapScreen(
                         selectedLon = lon
                         showAddDialog = true
                     },
-                    onMarkerClick = { store -> selectedStore = store },
+                    onMarkerClick = { store ->
+                        selectedStore = if (selectedStore?.id == store.id) null else store
+                        if (selectedStore == null) detailsCardHeightPx = 0
+                    },
                     onCameraIdle = { lat, lon, zoom ->
                         scope.launch {
                             appPreferences.saveLastLocation(lat, lon, zoom.toDouble())
@@ -348,7 +362,11 @@ fun MapScreen(
                         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                             val tapped = mapView.mapViewProjection.fromPixels(e.x.toDouble(), e.y.toDouble())
                             val nearest = findNearestStore(storesRef.value, tapped.latitude, tapped.longitude, 80.0)
-                            if (nearest != null) { selectedStore = nearest; return true }
+                            if (nearest != null) {
+                                selectedStore = if (selectedStoreRef.value?.id == nearest.id) null else nearest
+                                if (selectedStore == null) detailsCardHeightPx = 0
+                                return true
+                            }
                             return false
                         }
                     })
@@ -689,6 +707,10 @@ private fun BoxScope.MapSideMenuOverlay(
     // 0 = مغلقة بالكامل، 1 = مفتوحة بالكامل
     val progress = remember { Animatable(0f) }
     var dragging by remember { mutableStateOf(false) }
+    var activeSide by remember { mutableStateOf(panelSide) }
+    LaunchedEffect(panelSide, open) {
+        if (!dragging) activeSide = panelSide
+    }
 
     val springSpec = spring<Float>(
         dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -711,12 +733,12 @@ private fun BoxScope.MapSideMenuOverlay(
 
     val p by progress.asState()
     val visible = p > 0.001f
-    val panelAlign = if (panelSide == DrawerSide.RIGHT) {
+    val panelAlign = if (activeSide == DrawerSide.RIGHT) {
         AbsoluteAlignment.CenterRight
     } else {
         AbsoluteAlignment.CenterLeft
     }
-    val offsetX = if (panelSide == DrawerSide.RIGHT) {
+    val offsetX = if (activeSide == DrawerSide.RIGHT) {
         ((1f - p) * panelWidthPx)
     } else {
         -((1f - p) * panelWidthPx)
@@ -741,6 +763,7 @@ private fun BoxScope.MapSideMenuOverlay(
                         detectHorizontalDragGestures(
                             onDragStart = {
                                 dragging = true
+                                activeSide = DrawerSide.LEFT
                                 onEdgeSideSelected(DrawerSide.LEFT)
                             },
                             onHorizontalDrag = { change, dx ->
@@ -773,6 +796,7 @@ private fun BoxScope.MapSideMenuOverlay(
                         detectHorizontalDragGestures(
                             onDragStart = {
                                 dragging = true
+                                activeSide = DrawerSide.RIGHT
                                 onEdgeSideSelected(DrawerSide.RIGHT)
                             },
                             onHorizontalDrag = { change, dx ->
@@ -818,13 +842,12 @@ private fun BoxScope.MapSideMenuOverlay(
             .zIndex(21f)
             .offset { IntOffset(offsetX.roundToInt(), 0) }
             .background(Color(0xFF121212))
-            .pointerInput(panelSide, panelWidthPx) {
-                // سحب اللوحة نفسها للإغلاق/الفتح
+            .pointerInput(activeSide, panelWidthPx) {
                 detectHorizontalDragGestures(
                     onDragStart = { dragging = true },
                     onHorizontalDrag = { change, dx ->
                         change.consume()
-                        val delta = if (panelSide == DrawerSide.RIGHT) -dx else dx
+                        val delta = if (activeSide == DrawerSide.RIGHT) -dx else dx
                         val next = (progress.value + delta / panelWidthPx).coerceIn(0f, 1f)
                         scope.launch { progress.snapTo(next) }
                     },
@@ -851,7 +874,7 @@ private fun BoxScope.MapSideMenuOverlay(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (panelSide == DrawerSide.LEFT) {
+                if (activeSide == DrawerSide.LEFT) {
                     IconButton(onClick = onTogglePanelSide) {
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowRight,
