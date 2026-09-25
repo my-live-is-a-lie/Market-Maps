@@ -152,9 +152,15 @@ fun MapScreen(
     var navResults by remember { mutableStateOf<List<StoreWithDistance>>(emptyList()) }
     var navIndex by remember { mutableStateOf(-1) }
     var cameraTarget by remember { mutableStateOf<Triple<Double, Double, Float>?>(null) }
+    var detailsCardHeightPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
     val detailsCardVisible = selectedStore != null
-    val fabBottomPad = if (detailsCardVisible) 168.dp else 16.dp
-    val navBottomPad = if (detailsCardVisible) 176.dp else 100.dp
+    val cardLift = if (detailsCardVisible) {
+        val h = if (detailsCardHeightPx > 0) with(density) { detailsCardHeightPx.toDp() } else 132.dp
+        (h - 22.dp).coerceAtLeast(96.dp)
+    } else 0.dp
+    val fabBottomPad = 16.dp + cardLift
+    val navBottomPad = if (detailsCardVisible) cardLift + 12.dp else 100.dp
 
     val searchResults = remember(searchQuery, stores, userLat, userLon, filterType, filterSub) {
         filterAndSortStores(stores, searchQuery, userLat, userLon, filterType, filterSub)
@@ -568,17 +574,20 @@ fun MapScreen(
             }
 
             selectedStore?.let { store ->
-                val dist = if (userLat != null && userLon != null) {
-                    haversineMeters(userLat!!, userLon!!, store.latitude, store.longitude)
+                val lat = userLat ?: savedLocation?.first
+                val lon = userLon ?: savedLocation?.second
+                val dist = if (lat != null && lon != null) {
+                    haversineMeters(lat, lon, store.latitude, store.longitude)
                 } else null
                 StoreDetailsBottomCard(
                     store = store,
                     distanceMeters = dist,
-                    onDismiss = { selectedStore = null },
-                    onEdit = { selectedStore = null; storeToEdit = it },
+                    onDismiss = { selectedStore = null; detailsCardHeightPx = 0 },
+                    onEdit = { selectedStore = null; detailsCardHeightPx = 0; storeToEdit = it },
+                    onHeightChanged = { detailsCardHeightPx = it },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
                         .zIndex(12f)
                 )
             }
