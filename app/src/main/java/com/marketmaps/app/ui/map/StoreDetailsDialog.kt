@@ -187,12 +187,14 @@ fun StoreDetailsBottomCard(
                     )
                 }
         ) {
+            val scheme = MaterialTheme.colorScheme
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .shadow(10.dp, RoundedCornerShape(22.dp)),
                 shape = RoundedCornerShape(22.dp),
-                color = Color.White
+                color = scheme.surface,
+                contentColor = scheme.onSurface
             ) {
                 Column(
                     modifier = Modifier
@@ -205,7 +207,7 @@ fun StoreDetailsBottomCard(
                             .width(32.dp)
                             .height(3.dp)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(Color(0xFFD0D3D7))
+                            .background(scheme.outlineVariant)
                     )
 
                     Spacer(Modifier.height(10.dp))
@@ -228,13 +230,13 @@ fun StoreDetailsBottomCard(
                                 Box(
                                     Modifier
                                         .size(26.dp)
-                                        .background(Color(0xFF202124), RoundedCornerShape(5.dp))
+                                        .background(scheme.onSurface, RoundedCornerShape(5.dp))
                                 )
                             }
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 text = formatDistanceAr(distanceMeters),
-                                color = Color(0xFF5F6368),
+                                color = scheme.onSurfaceVariant,
                                 fontSize = 11.sp,
                                 lineHeight = 13.sp
                             )
@@ -246,7 +248,7 @@ fun StoreDetailsBottomCard(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = title,
-                                    color = Color(0xFF202124),
+                                    color = scheme.onSurface,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Start,
@@ -257,7 +259,7 @@ fun StoreDetailsBottomCard(
                                     Spacer(Modifier.height(4.dp))
                                     Text(
                                         text = store.description,
-                                        color = Color(0xFF5F6368),
+                                        color = scheme.onSurfaceVariant,
                                         fontSize = 13.sp,
                                         lineHeight = 18.sp,
                                         textAlign = TextAlign.Start,
@@ -322,12 +324,14 @@ private fun ActionCircleButton(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null
 ) {
+    val accent = MaterialTheme.colorScheme.primary
+    val onAccent = MaterialTheme.colorScheme.onPrimary
     Box(
         modifier = Modifier
             .size(28.dp)
             .shadow(1.5.dp, CircleShape)
             .clip(CircleShape)
-            .background(Color(0xFF1B8A3E))
+            .background(accent)
             .pointerInput(onClick, onLongClick) {
                 detectTapGestures(
                     onLongPress = { onLongClick?.invoke() },
@@ -337,6 +341,7 @@ private fun ActionCircleButton(
         contentAlignment = Alignment.Center
     ) {
         if (bitmap != null) {
+            // الأيقونات بيضاء في الـ SVG؛ نعرضها كما هي فوق لون التمييز
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = contentDescription,
@@ -352,28 +357,29 @@ private fun CoordsPopup(
     longitude: Double,
     modifier: Modifier = Modifier
 ) {
+    val scheme = MaterialTheme.colorScheme
     Surface(
         modifier = modifier
             .widthIn(max = 168.dp)
             .shadow(4.dp, RoundedCornerShape(10.dp)),
         shape = RoundedCornerShape(10.dp),
-        color = Color(0xFFE8F0FE)
+        color = scheme.primaryContainer
     ) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
             Text(
                 text = "احداثيات الموقع",
-                color = Color(0xFF1A73E8),
+                color = scheme.primary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
                 text = "عرض ${"%.6f".format(latitude)}",
-                color = Color(0xFF3C4043),
+                color = scheme.onPrimaryContainer,
                 fontSize = 11.sp
             )
             Text(
                 text = "طول ${"%.6f".format(longitude)}",
-                color = Color(0xFF3C4043),
+                color = scheme.onPrimaryContainer,
                 fontSize = 11.sp
             )
         }
