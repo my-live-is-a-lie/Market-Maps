@@ -45,6 +45,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminanceFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -88,16 +91,16 @@ fun StoreDetailsBottomCard(
 
     val offsetX = remember { Animatable(0f) }
     val offsetY = remember { Animatable(0f) }
-    val enterY = remember { Animatable(80f) }
-    val enterScale = remember { Animatable(0.94f) }
+    val enterY = remember { Animatable(72f) }
 
     LaunchedEffect(store.id) {
         offsetX.snapTo(0f)
         offsetY.snapTo(0f)
-        enterY.snapTo(90f)
-        enterScale.snapTo(0.94f)
-        enterY.animateTo(0f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow))
-        enterScale.animateTo(1f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow))
+        enterY.snapTo(72f)
+        enterY.animateTo(
+            0f,
+            spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+        )
     }
 
     val bounce = spring<Float>(
@@ -127,8 +130,6 @@ fun StoreDetailsBottomCard(
                 }
                 .graphicsLayer {
                     translationY = enterY.value
-                    scaleX = enterScale.value
-                    scaleY = enterScale.value
                 }
                 .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
                 .pointerInput(store.id) {
@@ -188,6 +189,10 @@ fun StoreDetailsBottomCard(
                 }
         ) {
             val scheme = MaterialTheme.colorScheme
+            val isDark = scheme.surface.luminance() < 0.45f
+            val bodyColor = if (isDark) Color.White else scheme.onSurfaceVariant
+            val titleColor = scheme.onSurface
+            val iconTint = if (isDark) Color.White else Color(0xFF202124)
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -224,6 +229,7 @@ fun StoreDetailsBottomCard(
                                 Image(
                                     bitmap = placeIcon.asImageBitmap(),
                                     contentDescription = null,
+                                    colorFilter = ColorFilter.tint(iconTint),
                                     modifier = Modifier.size(26.dp)
                                 )
                             } else {
@@ -236,7 +242,7 @@ fun StoreDetailsBottomCard(
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 text = formatDistanceAr(distanceMeters),
-                                color = scheme.onSurfaceVariant,
+                                color = bodyColor,
                                 fontSize = 11.sp,
                                 lineHeight = 13.sp
                             )
@@ -248,7 +254,7 @@ fun StoreDetailsBottomCard(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = title,
-                                    color = scheme.onSurface,
+                                    color = titleColor,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Start,
@@ -259,7 +265,7 @@ fun StoreDetailsBottomCard(
                                     Spacer(Modifier.height(4.dp))
                                     Text(
                                         text = store.description,
-                                        color = scheme.onSurfaceVariant,
+                                        color = bodyColor,
                                         fontSize = 13.sp,
                                         lineHeight = 18.sp,
                                         textAlign = TextAlign.Start,
