@@ -57,6 +57,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -155,9 +156,9 @@ fun MapScreen(
     var detailsCardHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val detailsCardVisible = selectedStore != null
-    val cardLift = if (detailsCardVisible) {
+    val cardLift: androidx.compose.ui.unit.Dp = if (detailsCardVisible) {
         val h = if (detailsCardHeightPx > 0) with(density) { detailsCardHeightPx.toDp() } else 132.dp
-        (h - 22.dp).coerceAtLeast(96.dp)
+        maxOf(h - 22.dp, 96.dp)
     } else 0.dp
     val fabBottomPad = 16.dp + cardLift
     val navBottomPad = if (detailsCardVisible) cardLift + 12.dp else 100.dp
