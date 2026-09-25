@@ -6,8 +6,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.widget.Toast
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -26,17 +26,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,211 +48,270 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.caverock.androidsvg.SVG
 import com.marketmaps.app.data.Store
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
-/**
- * بطاقة تفاصيل الموقع أسفل الشاشة (بدل النافذة المنبثقة القديمة).
- */
 @Composable
 fun StoreDetailsBottomCard(
     store: Store,
     distanceMeters: Double?,
     onDismiss: () -> Unit,
     onEdit: (Store) -> Unit,
+    onHeightChanged: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    val screenW = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
+    val screenH = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+
     var showCoords by remember { mutableStateOf(false) }
-    var offsetX by remember { mutableFloatStateOf(0f) }
-    var offsetY by remember { mutableFloatStateOf(0f) }
-    var appeared by remember { mutableStateOf(false) }
+    var dragAxis by remember { mutableStateOf<Char?>(null) } // 'H' أو 'V'
+    var cardW by remember { mutableStateOf(1f) }
+    var cardH by remember { mutableStateOf(1f) }
 
-    LaunchedEffect(Unit) { appeared = true }
+    val offsetX = remember { Animatable(0f) }
+    val offsetY = remember { Animatable(0f) }
+    val enterY = remember { Animatable(80f) }
+    val enterScale = remember { Animatable(0.94f) }
 
-    val enterScale by animateFloatAsState(
-        targetValue = if (appeared) 1f else 0.92f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "cardScale"
-    )
-    val enterAlpha by animateFloatAsState(
-        targetValue = if (appeared) 1f else 0f,
-        animationSpec = spring(stiffness = Spring.StiffnessMedium),
-        label = "cardAlpha"
-    )
-
-    val dismissThreshold = with(density) { 100.dp.toPx() }
-    val categoryIcon = remember(store.category) {
-        loadCategoryIconBitmap(context, store.category, 96)
+    LaunchedEffect(store.id) {
+        offsetX.snapTo(0f)
+        offsetY.snapTo(0f)
+        enterY.snapTo(90f)
+        enterScale.snapTo(0.94f)
+        enterY.animateTo(0f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow))
+        enterScale.animateTo(1f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow))
     }
-    val pencilIcon = remember { loadAssetSvgBitmap(context, "icons/pencil.svg", 48) }
-    val pinIcon = remember { loadAssetSvgBitmap(context, "icons/pin.svg", 48) }
+
+    val bounce = spring<Float>(
+        dampingRatio = Spring.DampingRatioMediumBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+
+    val pencilIcon = remember { loadAssetSvgBitmap(context, "icons/pencil.svg", 40) }
+    val pinIcon = remember { loadAssetSvgBitmap(context, "icons/pin.svg", 40) }
+    val placeIcon = remember(store.category) {
+        loadCategoryGlyph(context, store.category, 48)
+    }
 
     val title = if (store.category.isNotBlank()) {
         "${store.category}: ${store.name}"
-    } else {
-        store.name
-    }
-    val distanceText = formatDistanceAr(distanceMeters)
+    } else store.name
 
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .graphicsLayer {
-                scaleX = enterScale
-                scaleY = enterScale
-                alpha = enterAlpha
-            }
-            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragEnd = {
-                        if (abs(offsetX) > dismissThreshold || offsetY > dismissThreshold) {
-                            onDismiss()
-                        } else {
-                            offsetX = 0f
-                            offsetY = 0f
-                        }
-                    },
-                    onDrag = { change, drag ->
-                        change.consume()
-                        offsetX += drag.x
-                        offsetY += drag.y.coerceAtLeast(-40f) // سمح بسحب خفيف للأعلى
-                    }
-                )
-            }
-    ) {
-        Surface(
-            modifier = Modifier
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Box(
+            modifier = modifier
                 .fillMaxWidth()
-                .shadow(8.dp, RoundedCornerShape(24.dp)),
-            shape = RoundedCornerShape(24.dp),
-            color = Color.White,
-            tonalElevation = 2.dp
+                .wrapContentHeight()
+                .onGloballyPositioned { coords ->
+                    cardW = coords.size.width.toFloat().coerceAtLeast(1f)
+                    cardH = coords.size.height.toFloat().coerceAtLeast(1f)
+                    onHeightChanged(coords.size.height)
+                }
+                .graphicsLayer {
+                    translationY = enterY.value
+                    scaleX = enterScale.value
+                    scaleY = enterScale.value
+                }
+                .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
+                .pointerInput(store.id) {
+                    detectDragGestures(
+                        onDragStart = {
+                            showCoords = false
+                            dragAxis = null
+                        },
+                        onDrag = { change, drag ->
+                            change.consume()
+                            if (dragAxis == null) {
+                                val ax = abs(drag.x)
+                                val ay = abs(drag.y)
+                                dragAxis = when {
+                                    ax > ay + 6f -> 'H'
+                                    drag.y > 6f -> 'V'
+                                    else -> null
+                                }
+                            }
+                            when (dragAxis) {
+                                'H' -> scope.launch { offsetX.snapTo(offsetX.value + drag.x) }
+                                'V' -> scope.launch {
+                                    offsetY.snapTo((offsetY.value + drag.y).coerceAtLeast(0f))
+                                }
+                                else -> Unit
+                            }
+                        },
+                        onDragEnd = {
+                            val threshX = cardW * 0.28f
+                            val threshY = cardH * 0.28f
+                            val goH = abs(offsetX.value) >= threshX
+                            val goV = offsetY.value >= threshY
+                            scope.launch {
+                                if (goH || goV) {
+                                    if (goV && offsetY.value >= abs(offsetX.value)) {
+                                        offsetY.animateTo(screenH, bounce)
+                                    } else {
+                                        val dir = if (offsetX.value >= 0f) screenW else -screenW
+                                        offsetX.animateTo(dir, bounce)
+                                    }
+                                    onDismiss()
+                                } else {
+                                    launch { offsetX.animateTo(0f, bounce) }
+                                    launch { offsetY.animateTo(0f, bounce) }
+                                }
+                                dragAxis = null
+                            }
+                        },
+                        onDragCancel = {
+                            scope.launch {
+                                launch { offsetX.animateTo(0f, bounce) }
+                                launch { offsetY.animateTo(0f, bounce) }
+                                dragAxis = null
+                            }
+                        }
+                    )
+                }
         ) {
-            Column(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                    .shadow(10.dp, RoundedCornerShape(22.dp)),
+                shape = RoundedCornerShape(22.dp),
+                color = Color.White
             ) {
-                // مقبض السحب
-                Box(
+                Column(
                     modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .width(36.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color(0xFFDADCE0))
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top
+                        .fillMaxWidth()
+                        .padding(start = 14.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
                 ) {
-                    // أيقونة المكان + المسافة (يسار بصرياً في RTL = نهاية الصف)
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(end = 12.dp)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .width(32.dp)
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color(0xFFD0D3D7))
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
                     ) {
-                        if (categoryIcon != null) {
-                            Image(
-                                bitmap = categoryIcon.asImageBitmap(),
-                                contentDescription = null,
-                                modifier = Modifier.size(40.dp)
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(Color(0xFF1B1B1B), RoundedCornerShape(8.dp))
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = distanceText,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color(0xFF5F6368),
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color(0xFF202124),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (store.description.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(6.dp))
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.width(44.dp)
+                        ) {
+                            if (placeIcon != null) {
+                                Image(
+                                    bitmap = placeIcon.asImageBitmap(),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            } else {
+                                Box(
+                                    Modifier
+                                        .size(26.dp)
+                                        .background(Color(0xFF202124), RoundedCornerShape(5.dp))
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
                             Text(
-                                text = store.description,
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = formatDistanceAr(distanceMeters),
                                 color = Color(0xFF5F6368),
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis
+                                fontSize = 11.sp,
+                                lineHeight = 13.sp
                             )
                         }
+
+                        Spacer(Modifier.width(10.dp))
+
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = title,
+                                    color = Color(0xFF202124),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Start,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (store.description.isNotBlank()) {
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = store.description,
+                                        color = Color(0xFF5F6368),
+                                        fontSize = 13.sp,
+                                        lineHeight = 18.sp,
+                                        textAlign = TextAlign.Start,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(Modifier.height(10.dp))
 
-                // أزرار القلم والدبوس
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
                         ActionCircleButton(
                             bitmap = pencilIcon,
                             contentDescription = "تعديل",
-                            onClick = { showCoords = false; onEdit(store) }
-                        )
-                    }
-
-                    Box {
-                        if (showCoords) {
-                            CoordsPopup(
-                                latitude = store.latitude,
-                                longitude = store.longitude,
-                                modifier = Modifier
-                                    .align(Alignment.BottomStart)
-                                    .offset(y = (-52).dp)
-                            )
-                        }
-                        ActionCircleButton(
-                            bitmap = pinIcon,
-                            contentDescription = "إحداثيات",
-                            onClick = { showCoords = !showCoords },
-                            onLongClick = {
-                                val text = "عرض: ${store.latitude}\nطول: ${store.longitude}"
-                                copyToClipboard(context, text)
-                                Toast.makeText(context, "تم نسخ الإحداثيات", Toast.LENGTH_SHORT).show()
+                            onClick = {
                                 showCoords = false
+                                onEdit(store)
                             }
                         )
+
+                        Box {
+                            if (showCoords) {
+                                CoordsPopup(
+                                    latitude = store.latitude,
+                                    longitude = store.longitude,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .offset(x = 0.dp, y = (-44).dp)
+                                )
+                            }
+                            ActionCircleButton(
+                                bitmap = pinIcon,
+                                contentDescription = "إحداثيات",
+                                onClick = { showCoords = !showCoords },
+                                onLongClick = {
+                                    copyToClipboard(
+                                        context,
+                                        "عرض: ${store.latitude}\nطول: ${store.longitude}"
+                                    )
+                                    Toast.makeText(context, "تم نسخ الإحداثيات", Toast.LENGTH_SHORT).show()
+                                    showCoords = false
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
-
     }
 }
 
@@ -261,33 +322,25 @@ private fun ActionCircleButton(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null
 ) {
-    val green = Color(0xFF1B7A3D)
     Box(
         modifier = Modifier
-            .size(36.dp)
-            .shadow(2.dp, CircleShape)
+            .size(28.dp)
+            .shadow(1.5.dp, CircleShape)
             .clip(CircleShape)
-            .background(green)
-            .then(
-                if (onLongClick != null) {
-                    Modifier.pointerInput(Unit) {
-                        // long press + click
-                        detectTapGestures(
-                            onLongPress = { onLongClick() },
-                            onTap = { onClick() }
-                        )
-                    }
-                } else {
-                    Modifier.clickable(onClick = onClick)
-                }
-            ),
+            .background(Color(0xFF1B8A3E))
+            .pointerInput(onClick, onLongClick) {
+                detectTapGestures(
+                    onLongPress = { onLongClick?.invoke() },
+                    onTap = { onClick() }
+                )
+            },
         contentAlignment = Alignment.Center
     ) {
         if (bitmap != null) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = contentDescription,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(14.dp)
             )
         }
     }
@@ -301,38 +354,36 @@ private fun CoordsPopup(
 ) {
     Surface(
         modifier = modifier
-            .widthIn(max = 200.dp)
-            .shadow(6.dp, RoundedCornerShape(12.dp)),
-        shape = RoundedCornerShape(12.dp),
+            .widthIn(max = 168.dp)
+            .shadow(4.dp, RoundedCornerShape(10.dp)),
+        shape = RoundedCornerShape(10.dp),
         color = Color(0xFFE8F0FE)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
             Text(
                 text = "احداثيات الموقع",
-                style = MaterialTheme.typography.labelMedium,
                 color = Color(0xFF1A73E8),
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
                 text = "عرض ${"%.6f".format(latitude)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF3C4043)
+                color = Color(0xFF3C4043),
+                fontSize = 11.sp
             )
             Text(
                 text = "طول ${"%.6f".format(longitude)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF3C4043)
+                color = Color(0xFF3C4043),
+                fontSize = 11.sp
             )
         }
     }
 }
 
 private fun formatDistanceAr(meters: Double?): String {
-    if (meters == null || meters.isNaN()) return "—"
-    return when {
-        meters < 1000 -> "${meters.roundToInt()} متر"
-        else -> String.format("%.1f كم", meters / 1000.0)
-    }
+    if (meters == null || meters.isNaN() || meters < 0) return "—"
+    return if (meters < 1000) "${meters.roundToInt()} متر"
+    else String.format("%.1f كم", meters / 1000.0)
 }
 
 private fun copyToClipboard(context: Context, text: String) {
@@ -354,29 +405,27 @@ private fun loadAssetSvgBitmap(context: Context, assetPath: String, sizePx: Int)
     }
 }
 
-private fun loadCategoryIconBitmap(context: Context, category: String, sizePx: Int): Bitmap? {
+private fun loadCategoryGlyph(context: Context, category: String, sizePx: Int): Bitmap? {
     return try {
-        MarkerIconHelper.init(context)
-        MarkerIconHelper.getAndroidMarkerBitmap(
-            category,
-            MarkerIconHelper.DisplayMode.BUBBLE_MEDIUM
-        )?.let { src ->
-            Bitmap.createScaledBitmap(src, sizePx, sizePx, true)
-        }
+        val name = MarkerIconHelper.iconNameForCategory(category)
+            ?: guessIconName(category)
+        val path = "markers/$name.svg"
+        loadAssetSvgBitmap(context, path, sizePx)
+            ?: loadAssetSvgBitmap(context, "markers/store.svg", sizePx)
     } catch (_: Exception) {
-        null
+        loadAssetSvgBitmap(context, "markers/store.svg", sizePx)
     }
 }
 
-// إبقاء الاسم القديم للتوافق إن وُجدت استدعاءات قديمة — يوجّه للبطاقة السفلية عبر MapScreen
-@Deprecated("استخدم StoreDetailsBottomCard")
-@Composable
-fun StoreDetailsDialog(
-    store: Store,
-    onDismiss: () -> Unit,
-    onEdit: (Store) -> Unit,
-    onDelete: (Store) -> Unit
-) {
-    // لم يعد يُستخدم كـ Dialog؛ الحذف من التعديل لاحقاً
-    onDismiss()
+private fun guessIconName(category: String): String {
+    val c = category.lowercase()
+    return when {
+        "بقال" in c || "محل" in c -> "store"
+        "مطعم" in c || "مقهى" in c || "كاف" in c -> "restaurant"
+        "صيدل" in c || "صح" in c -> "hospital"
+        "ورشة" in c -> "workshop"
+        "مدرس" in c -> "school"
+        "مسجد" in c -> "other"
+        else -> "store"
+    }
 }
