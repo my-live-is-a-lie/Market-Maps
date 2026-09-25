@@ -157,22 +157,23 @@ fun MapScreen(
     val density = LocalDensity.current
     val detailsCardVisible = selectedStore != null
     val cardLiftTargetPx = if (detailsCardVisible) {
-        val h = if (detailsCardHeightPx > 0) detailsCardHeightPx.toFloat() else with(density) { 128.dp.toPx() }
-        h + with(density) { 20.dp.toPx() }
+        val hPx = if (detailsCardHeightPx > 0) detailsCardHeightPx.toFloat()
+        else with(density) { 128.dp.toPx() }
+        hPx + with(density) { 20.dp.toPx() }
     } else 0f
     val cardLiftAnim = remember { Animatable(0f) }
     LaunchedEffect(cardLiftTargetPx) {
         cardLiftAnim.animateTo(
             cardLiftTargetPx,
             animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
+                dampingRatio = Spring.DampingRatioNoBouncy,
                 stiffness = Spring.StiffnessMedium
             )
         )
     }
-    val cardLift = with(density) { cardLiftAnim.value.toDp() }
-    val fabBottomPad = 16.dp + cardLift
-    val navBottomPad = if (detailsCardVisible) cardLift + 8.dp else 100.dp
+    val cardLift = with(density) { cardLiftAnim.value.coerceAtLeast(0f).toDp() }
+    val fabBottomPad = (16.dp + cardLift).coerceAtLeast(0.dp)
+    val navBottomPad = (if (detailsCardVisible) cardLift + 8.dp else 100.dp).coerceAtLeast(0.dp)
 
     val searchResults = remember(searchQuery, stores, userLat, userLon, filterType, filterSub) {
         filterAndSortStores(stores, searchQuery, userLat, userLon, filterType, filterSub)
