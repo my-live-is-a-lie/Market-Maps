@@ -280,7 +280,7 @@ fun StoreDetailsBottomCard(
 
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Bottom
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         ActionCircleButton(
                             bitmap = pencilIcon,
@@ -291,16 +291,11 @@ fun StoreDetailsBottomCard(
                             }
                         )
 
-                        Box {
-                            if (showCoords) {
-                                CoordsPopup(
-                                    latitude = store.latitude,
-                                    longitude = store.longitude,
-                                    modifier = Modifier
-                                        .align(Alignment.BottomStart)
-                                        .offset(x = 0.dp, y = (-44).dp)
-                                )
-                            }
+                        // حجم ثابت حتى لا يقفز الزر عند ظهور النافذة
+                        Box(
+                            modifier = Modifier.size(28.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
                             ActionCircleButton(
                                 bitmap = pinIcon,
                                 contentDescription = "إحداثيات",
@@ -314,6 +309,15 @@ fun StoreDetailsBottomCard(
                                     showCoords = false
                                 }
                             )
+                            if (showCoords) {
+                                CoordsPopup(
+                                    latitude = store.latitude,
+                                    longitude = store.longitude,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .offset(y = (-34).dp) // فوق الدبوس ومتوسطة عليه
+                                )
+                            }
                         }
                     }
                 }
