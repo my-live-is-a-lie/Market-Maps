@@ -10,7 +10,13 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.marketmaps.app.R
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -29,28 +35,33 @@ class MapDownloadWorker(
         setForeground(createForegroundInfo(0, region.nameAr))
         MapDownloader.resetFlags()
 
-        // setProgress/setForeground معلّقتان — لا تُستدعيان من lambda عادية
-        var lastNotifyPercent = -1
-        val result = MapDownloader.download(applicationContext, region) { progress ->
-            val p = progress.percent
-            // تخزين آخر نسبة؛ التحديث المعلّق يتم عبر حلقة منفصلة غير ممكنة هنا
-            // نحدّث الإشعار فقط كل 5٪ عبر runBlocking قصير لتجنب آلاف الاستدعاءات
-            if (p >= lastNotifyPercent + 5 || p >= 100) {
-                lastNotifyPercent = p
-                try {
-                    kotlinx.coroutines.runBlocking {
+        // onProgress دالة عادية (غير suspend) لذلك لا يمكن استدعاء setProgress/setForeground
+        // بداخلها مباشرة. نكتب آخر تقدم في StateFlow (يحتفظ بالقيمة الأحدث فقط)
+        // ويجمعه coroutine موازٍ يحدّث بيانات العمل والإشعار عند تغيّر النسبة.
+        val latest = MutableStateFlow<MapDownloader.Progress?>(null)
+        val result = coroutineScope {
+            val reporter = launch {
+                latest.filterNotNull()
+                    .distinctUntilChangedBy { it.percent }
+                    .collect { progress ->
                         setProgress(
                             workDataOf(
-                                KEY_PROGRESS to p,
+                                KEY_PROGRESS to progress.percent,
                                 KEY_DOWNLOADED to progress.downloadedBytes,
                                 KEY_TOTAL to progress.totalBytes
                             )
                         )
-                        setForeground(createForegroundInfo(p, region.nameAr))
+                        try {
+                            setForeground(createForegroundInfo(progress.percent, region.nameAr))
+                        } catch (_: Exception) {
+                        }
                     }
-                } catch (_: Exception) {
-                }
             }
+            val r = MapDownloader.download(applicationContext, region) { progress ->
+                latest.value = progress
+            }
+            reporter.cancel()
+            r
         }
 
         if (result.isSuccess) {
