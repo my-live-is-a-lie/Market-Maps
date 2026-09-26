@@ -82,8 +82,16 @@ object MapLayerHelper {
         mapView.invalidate()
     }
 
-    fun applyOffline(context: Context, mapView: MapView, bundle: LayerBundle): Boolean {
-        val file = MapDownloader.egyptMapFile(context)
+    fun applyOffline(
+        context: Context,
+        mapView: MapView,
+        bundle: LayerBundle,
+        fileName: String? = null
+    ): Boolean {
+        val name = fileName?.takeIf { it.isNotBlank() }
+            ?: MapDownloader.listDownloaded(context).firstOrNull()?.fileName
+            ?: "egypt.map"
+        val file = MapDownloader.mapFile(context, name)
         if (!file.exists() || file.length() < 1_000_000) {
             Toast.makeText(context, "الخريطة غير محمّلة. افتح الإعدادات للتحميل.", Toast.LENGTH_LONG).show()
             return false
