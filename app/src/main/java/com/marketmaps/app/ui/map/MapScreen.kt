@@ -167,34 +167,22 @@ fun MapScreen(
         navResults.size > 1 && navIndex in navResults.indices -> navResults[navIndex].store.id
         else -> null
     }
-    // تأثير نابض: تصغير خفيف ثم تكبير 20٪
+    // تأثير تمييز سريع
     val highlightScaleAnim = remember { Animatable(1f) }
     LaunchedEffect(highlightedStoreId) {
         if (highlightedStoreId != null) {
-            // حركة ناعمة وبطيئة قليلاً: تصغير خفيف جداً ثم تكبير هادئ
             highlightScaleAnim.snapTo(1f)
             highlightScaleAnim.animateTo(
-                0.94f,
-                animationSpec = tween(durationMillis = 140)
-            )
-            highlightScaleAnim.animateTo(
-                1.18f,
-                animationSpec = spring(
-                    dampingRatio = 0.78f, // أقل اهتزازاً من MediumBouncy
-                    stiffness = 280f       // أبطأ من الافتراضي
-                )
+                1.14f,
+                animationSpec = spring(dampingRatio = 0.82f, stiffness = 900f)
             )
         } else {
-            highlightScaleAnim.animateTo(
-                1f,
-                animationSpec = spring(
-                    dampingRatio = 0.90f,
-                    stiffness = 320f
-                )
-            )
+            highlightScaleAnim.snapTo(1f)
         }
     }
     val highlightScale by highlightScaleAnim.asState()
+    // تقليل إعادة رسم العلامات أثناء الحركة (يمنع وميض موقعك)
+    val highlightScaleBucket = ((highlightScale * 8f).toInt() / 8f)
     var cameraTarget by remember { mutableStateOf<Triple<Double, Double, Float>?>(null) }
     var detailsCardHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -210,7 +198,7 @@ fun MapScreen(
             cardLiftTargetPx,
             animationSpec = spring(
                 dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMedium
+                stiffness = 700f
             )
         )
     }
@@ -310,9 +298,9 @@ fun MapScreen(
         addMarkersToMap(context, mapView, stores, userLat, userLon, highlightedStoreId, highlightScale)
     }
 
-    LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId, highlightScale) {
+    LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId, highlightScaleBucket) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
-        mapViewRef?.let { addMarkersToMap(context, it, stores, userLat, userLon, highlightedStoreId, highlightScale) }
+        mapViewRef?.let { addMarkersToMap(context, it, stores, userLat, userLon, highlightedStoreId, highlightScaleBucket) }
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -724,8 +712,9 @@ private fun addMarkersToMap(
         val zoom = mapView.model.mapViewPosition.zoomLevel.toInt()
         val centerLat = mapView.model.mapViewPosition.center.latitude
         val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)
+        val zoomSize = MarkerIconHelper.sizeForZoom(zoom)
 
-        if (mode != MarkerIconHelper.DisplayMode.HIDDEN) {
+        if (mode != MarkerIconHelper.DisplayMode.HIDDEN && zoomSize > 0) {
             val ordered = if (highlightedStoreId == null) stores
             else stores.sortedBy { if (it.id == highlightedStoreId) 1 else 0 }
             ordered.forEach { store ->
@@ -733,6 +722,11 @@ private fun addMarkersToMap(
                     val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
                     var androidBmp = MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
                         ?: return@forEach
+                    if (androidBmp.width != zoomSize && zoomSize > 0) {
+                        androidBmp = android.graphics.Bitmap.createScaledBitmap(
+                            androidBmp, zoomSize, zoomSize, true
+                        )
+                    }
                     val scale = if (highlighted) highlightScale else 1f
                     if (kotlin.math.abs(scale - 1f) > 0.02f) {
                         val w = (androidBmp.width * scale).toInt().coerceAtLeast(1)
@@ -750,7 +744,7 @@ private fun addMarkersToMap(
 
         if (userLat != null && userLon != null) {
             try {
-                val userBmp = MarkerIconHelper.getUserLocationBitmap(mode)
+                val userBmp = MarkerIconHelper.getUserLocationBitmap(MarkerIconHelper.DisplayMode.BUBBLE_MEDIUM)
                 mapView.layerManager.layers.add(
                     Marker(LatLong(userLat, userLon), userBmp, 0, -userBmp.height / 2)
                 )

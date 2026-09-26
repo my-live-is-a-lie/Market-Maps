@@ -47,24 +47,34 @@ object MarkerIconHelper {
     }
 
     fun displayModeForZoom(zoom: Int, latitude: Double = 30.0): DisplayMode {
-        val approxScaleMeters = metersPerPixel(latitude, zoom) * 100.0
         return when {
-            approxScaleMeters <= 70 -> DisplayMode.BUBBLE_LARGE
-            approxScaleMeters <= 140 -> DisplayMode.BUBBLE_MEDIUM
-            approxScaleMeters <= 280 -> DisplayMode.CIRCLE
+            zoom >= 16 -> DisplayMode.BUBBLE_LARGE
+            zoom >= 14 -> DisplayMode.BUBBLE_MEDIUM
+            zoom >= 12 -> DisplayMode.CIRCLE
             else -> DisplayMode.HIDDEN
         }
     }
 
-    /**
-     * أحجام أقرب لحجم أيقونات خرائط جوجل.
-     * LARGE ≈ 48-52dp على الشاشات الشائعة.
-     */
+    /** حجم الأيقونة حسب الزوم بخطوات متقاربة لانتقال أنعم. */
+    fun sizeForZoom(zoom: Int): Int {
+        return when {
+            zoom >= 18 -> 88
+            zoom >= 17 -> 80
+            zoom >= 16 -> 72
+            zoom >= 15 -> 64
+            zoom >= 14 -> 56
+            zoom >= 13 -> 44
+            zoom >= 12 -> 32
+            zoom >= 11 -> 22
+            else -> 0
+        }
+    }
+
     fun sizeForMode(mode: DisplayMode): Int {
         return when (mode) {
-            DisplayMode.BUBBLE_LARGE -> 96   // كان 67 — أكبر بكثير ليطابق جوجل
-            DisplayMode.BUBBLE_MEDIUM -> 56  // كان 34
-            DisplayMode.CIRCLE -> 20
+            DisplayMode.BUBBLE_LARGE -> 80
+            DisplayMode.BUBBLE_MEDIUM -> 56
+            DisplayMode.CIRCLE -> 28
             DisplayMode.HIDDEN -> 0
         }
     }

@@ -104,7 +104,7 @@ fun StoreDetailsBottomCard(
         enterY.snapTo(72f)
         enterY.animateTo(
             0f,
-            spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+            spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 700f)
         )
     }
 
