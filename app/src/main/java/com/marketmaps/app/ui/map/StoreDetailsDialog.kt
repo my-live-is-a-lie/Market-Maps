@@ -52,7 +52,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -85,9 +84,6 @@ fun StoreDetailsBottomCard(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    val screenW = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
-    val screenH = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
 
     var showCoords by remember { mutableStateOf(false) }
     var dragAxis by remember { mutableStateOf<Char?>(null) } // 'H' أو 'V'

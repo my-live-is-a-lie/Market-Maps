@@ -318,7 +318,7 @@ fun MapScreen(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true) {
-            moveToCurrentLocation(context, mapViewRef) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 18f) }
+            moveToCurrentLocation(context) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 18f) }
         } else Toast.makeText(context, "يجب السماح بالوصول إلى الموقع", Toast.LENGTH_LONG).show()
     }
 
@@ -326,7 +326,7 @@ fun MapScreen(
         val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
         val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
         if (fine == PackageManager.PERMISSION_GRANTED || coarse == PackageManager.PERMISSION_GRANTED) {
-            moveToCurrentLocation(context, mapViewRef) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 18f) }
+            moveToCurrentLocation(context) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 18f) }
         } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
 
@@ -806,15 +806,18 @@ private fun addMarkersToMap(
     } catch (_: Exception) {}
 }
 
+/**
+ * يطلب الموقع الحالي ويمرّره للمستدعي الذي يحرك الكاميرا (moveCamera).
+ * سابقاً كانت الدالة تحرّك الخريطة بنفسها إلى تكبير 16 ثم يحركها المستدعي إلى 18،
+ * فيصدر أمرا تحريك متعارضان متتاليان.
+ */
 @SuppressLint("MissingPermission")
-private fun moveToCurrentLocation(context: Context, mapView: MapView?, onLocation: ((Double, Double) -> Unit)? = null) {
+private fun moveToCurrentLocation(context: Context, onLocation: (Double, Double) -> Unit) {
     LocationServices.getFusedLocationProviderClient(context)
         .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
         .addOnSuccessListener { location ->
             if (location != null) {
-                mapView?.model?.mapViewPosition?.animateTo(LatLong(location.latitude, location.longitude))
-                // التكبير يُضبط مرة واحدة من moveCamera لتفادي أمرين متعارضين (16 ثم 18)
-                onLocation?.invoke(location.latitude, location.longitude)
+                onLocation(location.latitude, location.longitude)
                 Toast.makeText(context, "تم تحديد موقعك الحالي", Toast.LENGTH_SHORT).show()
             } else Toast.makeText(context, "تعذر الحصول على الموقع، تأكد من تفعيل GPS", Toast.LENGTH_LONG).show()
         }
