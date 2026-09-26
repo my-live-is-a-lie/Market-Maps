@@ -153,6 +153,33 @@ fun MapScreen(
     var storeToEdit by remember { mutableStateOf<Store?>(null) }
     var navResults by remember { mutableStateOf<List<StoreWithDistance>>(emptyList()) }
     var navIndex by remember { mutableStateOf(-1) }
+    val highlightedStoreId = if (navResults.size > 1 && navIndex in navResults.indices) {
+        navResults[navIndex].store.id
+    } else null
+    // تأثير نابض: تصغير خفيف ثم تكبير 20٪
+    val highlightScaleAnim = remember { Animatable(1f) }
+    LaunchedEffect(highlightedStoreId) {
+        if (highlightedStoreId != null) {
+            highlightScaleAnim.snapTo(1f)
+            highlightScaleAnim.animateTo(0.86f, animationSpec = tween(90))
+            highlightScaleAnim.animateTo(
+                1.20f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+        } else {
+            highlightScaleAnim.animateTo(
+                1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            )
+        }
+    }
+    val highlightScale by highlightScaleAnim.asState()
     var cameraTarget by remember { mutableStateOf<Triple<Double, Double, Float>?>(null) }
     var detailsCardHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -175,10 +202,6 @@ fun MapScreen(
     val cardLift = with(density) { cardLiftAnim.value.coerceAtLeast(0f).toDp() }
     val fabBottomPad = (16.dp + cardLift).coerceAtLeast(0.dp)
     val navBottomPad = (if (detailsCardVisible) cardLift + 8.dp else 100.dp).coerceAtLeast(0.dp)
-
-    val highlightedStoreId = if (navResults.size > 1 && navIndex in navResults.indices) {
-        navResults[navIndex].store.id
-    } else null
 
     val searchResults = remember(searchQuery, stores, userLat, userLon, filterType, filterSub) {
         filterAndSortStores(stores, searchQuery, userLat, userLon, filterType, filterSub)
@@ -269,12 +292,12 @@ fun MapScreen(
         val bundle = layerBundle ?: return@LaunchedEffect
         if (offlineMode && MapDownloader.isEgyptMapDownloaded(context)) MapLayerHelper.applyOffline(context, mapView, bundle)
         else MapLayerHelper.applyOnline(mapView, bundle)
-        addMarkersToMap(context, mapView, stores, userLat, userLon, highlightedStoreId)
+        addMarkersToMap(context, mapView, stores, userLat, userLon, highlightedStoreId, highlightScale)
     }
 
-    LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId) {
+    LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId, highlightScale) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
-        mapViewRef?.let { addMarkersToMap(context, it, stores, userLat, userLon, highlightedStoreId) }
+        mapViewRef?.let { addMarkersToMap(context, it, stores, userLat, userLon, highlightedStoreId, highlightScale) }
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -318,6 +341,7 @@ fun MapScreen(
                     isAddMode = isAddMode,
                     showLabels = showMarkerLabels,
                     highlightedStoreId = highlightedStoreId,
+                    highlightScale = highlightScale,
                     onLongPress = { lat, lon ->
                         selectedLat = lat
                         selectedLon = lon
@@ -358,7 +382,7 @@ fun MapScreen(
                         val z = mv.model.mapViewPosition.zoomLevel.toInt()
                         if (z == lastZoom[0]) return@addObserver
                         lastZoom[0] = z
-                        addMarkersToMap(ctx, mv, storesRef.value, userLatRef.value, userLonRef.value, null)
+                        addMarkersToMap(ctx, mv, storesRef.value, userLatRef.value, userLonRef.value, null, 1f)
                     }
 
                     val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
@@ -672,7 +696,8 @@ private fun addMarkersToMap(
     stores: List<Store>,
     userLat: Double?,
     userLon: Double?,
-    highlightedStoreId: String? = null
+    highlightedStoreId: String? = null,
+    highlightScale: Float = 1f
 ) {
     try {
         mapView.layerManager.layers.filterIsInstance<Marker>().forEach { mapView.layerManager.layers.remove(it) }
@@ -682,7 +707,6 @@ private fun addMarkersToMap(
         val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)
 
         if (mode != MarkerIconHelper.DisplayMode.HIDDEN) {
-            // أولاً غير المميز، ثم المميز فوقها
             val ordered = if (highlightedStoreId == null) stores
             else stores.sortedBy { if (it.id == highlightedStoreId) 1 else 0 }
             ordered.forEach { store ->
@@ -690,9 +714,10 @@ private fun addMarkersToMap(
                     val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
                     var androidBmp = MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
                         ?: return@forEach
-                    if (highlighted) {
-                        val w = (androidBmp.width * 1.2f).toInt().coerceAtLeast(1)
-                        val h = (androidBmp.height * 1.2f).toInt().coerceAtLeast(1)
+                    val scale = if (highlighted) highlightScale else 1f
+                    if (kotlin.math.abs(scale - 1f) > 0.02f) {
+                        val w = (androidBmp.width * scale).toInt().coerceAtLeast(1)
+                        val h = (androidBmp.height * scale).toInt().coerceAtLeast(1)
                         androidBmp = android.graphics.Bitmap.createScaledBitmap(androidBmp, w, h, true)
                     }
                     val bitmap: org.mapsforge.core.graphics.Bitmap =
