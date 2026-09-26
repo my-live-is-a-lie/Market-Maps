@@ -13,69 +13,35 @@ jobs:
   restore:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
 
-      - name: Restore SettingsScreen from good commit and patch
+      - name: Download good SettingsScreen
         run: |
-          set -e
           curl -sL "https://raw.githubusercontent.com/my-live-is-a-lie/Market-Maps/10b06ca07c78b198d1939520ab204cde1affb577/app/src/main/java/com/marketmaps/app/ui/settings/SettingsScreen.kt" \
             -o app/src/main/java/com/marketmaps/app/ui/settings/SettingsScreen.kt
+          wc -l app/src/main/java/com/marketmaps/app/ui/settings/SettingsScreen.kt
 
-          python3 << 'PY'
+      - name: Insert ThemedIconSettingsSection call
+        run: |
+          python3 -c "
           from pathlib import Path
-          path = Path("app/src/main/java/com/marketmaps/app/ui/settings/SettingsScreen.kt")
-          c = path.read_text(encoding="utf-8")
+          p = Path('app/src/main/java/com/marketmaps/app/ui/settings/SettingsScreen.kt')
+          c = p.read_text(encoding='utf-8')
+          old = '''                            Text(\"تطبيق اللون المخصص\")\n                        }\n                    }\n                }\n            }\n        }\n    }\n}\n'''
+          new = '''                            Text(\"تطبيق اللون المخصص\")\n                        }\n                    }\n                }\n            }\n\n            ThemedIconSettingsSection()\n        }\n    }\n}\n'''
+          if old not in c:
+              raise SystemExit('marker not found')
+          c = c.replace(old, new, 1)
+          c = c.replace('subtitle = \"النمط الفاتح/الغامق ولون التمييز\"', 'subtitle = \"النمط ولون التمييز وأيقونة النظام\"')
+          p.write_text(c, encoding='utf-8')
+          print('ok', len(c))
+          "
 
-          marker = '''                        ) {
-                            Text("تطبيق اللون المخصص")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-'''
-
-          insert = '''                        ) {
-                            Text("تطبيق اللون المخصص")
-                        }
-                    }
-                }
-            }
-
-            ThemedIconSettingsSection()
-        }
-    }
-}
-'''
-
-          if marker not in c:
-              raise SystemExit("MARKER NOT FOUND - abort")
-
-          c = c.replace(marker, insert, 1)
-          c = c.replace(
-              'subtitle = "النمط الفاتح/الغامق ولون التمييز"',
-              'subtitle = "النمط ولون التمييز وأيقونة النظام"'
-          )
-          path.write_text(c, encoding="utf-8")
-          print("Patched OK, length", len(c))
-          PY
-
-          test -f app/src/main/java/com/marketmaps/app/ui/settings/ThemedIconSettingsSection.kt
-
-      - name: Commit and push
+      - name: Commit
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app/src/main/java/com/marketmaps/app/ui/settings/SettingsScreen.kt
-          git status
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "fix: استعادة SettingsScreen + قسم أيقونة النظام المتكيفة"
-            git push
-          fi
+          git diff --staged --stat
+          git commit -m "fix: استعادة SettingsScreen + قسم أيقونة النظام المتكيفة" || true
+          git push
