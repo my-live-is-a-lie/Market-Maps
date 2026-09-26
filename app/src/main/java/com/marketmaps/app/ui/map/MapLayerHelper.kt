@@ -47,13 +47,29 @@ object MapLayerHelper {
     }
 
     fun applyOnline(mapView: MapView, bundle: LayerBundle) {
+        // إيقاف وتدمير الطبقة القديمة قبل استبدالها لتفادي تسريب خيوط التحميل
+        try {
+            bundle.downloadLayer?.onPause()
+            bundle.downloadLayer?.onDestroy()
+        } catch (_: Exception) {
+        }
+        bundle.downloadLayer = null
         clearBaseLayers(mapView.layerManager.layers)
-        bundle.rendererLayer?.onDestroy()
+        try {
+            bundle.rendererLayer?.onDestroy()
+        } catch (_: Exception) {
+        }
         bundle.rendererLayer = null
-        bundle.mapFile?.close()
+        try {
+            bundle.mapFile?.close()
+        } catch (_: Exception) {
+        }
         bundle.mapFile = null
 
-        val tileSource = OpenStreetMapMapnik.INSTANCE.apply { userAgent = "MarketMaps/1.0" }
+        val tileSource = OpenStreetMapMapnik.INSTANCE.apply {
+            // يُفضّل لاحقاً إضافة وسيلة تواصل وفق سياسة OSM
+            userAgent = "MarketMaps/1.0"
+        }
         val downloadLayer = TileDownloadLayer(
             bundle.tileCache,
             mapView.model.mapViewPosition,
