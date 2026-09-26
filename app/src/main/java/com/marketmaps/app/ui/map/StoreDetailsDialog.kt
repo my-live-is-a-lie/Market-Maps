@@ -459,24 +459,10 @@ private fun loadAssetSvgBitmap(context: Context, assetPath: String, sizePx: Int)
 private fun loadCategoryGlyph(context: Context, category: String, sizePx: Int): Bitmap? {
     return try {
         val name = MarkerIconHelper.iconNameForCategory(category)
-            ?: guessIconName(category)
         val path = "markers/$name.svg"
         loadAssetSvgBitmap(context, path, sizePx)
             ?: loadAssetSvgBitmap(context, "markers/store.svg", sizePx)
     } catch (_: Exception) {
         loadAssetSvgBitmap(context, "markers/store.svg", sizePx)
-    }
-}
-
-private fun guessIconName(category: String): String {
-    val c = category.lowercase()
-    return when {
-        "بقال" in c || "محل" in c -> "store"
-        "مطعم" in c || "مقهى" in c || "كاف" in c -> "restaurant"
-        "صيدل" in c || "صح" in c -> "hospital"
-        "ورشة" in c -> "workshop"
-        "مدرس" in c -> "school"
-        "مسجد" in c -> "other"
-        else -> "store"
     }
 }

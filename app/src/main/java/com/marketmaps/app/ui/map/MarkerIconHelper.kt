@@ -10,6 +10,7 @@ import android.graphics.PorterDuffColorFilter
 import android.graphics.Bitmap as AndroidBitmap
 import android.graphics.RectF
 import com.caverock.androidsvg.SVG
+import com.marketmaps.app.data.CategoryStyles
 import org.mapsforge.core.graphics.Bitmap
 import org.mapsforge.map.android.graphics.AndroidBitmap as MapsforgeAndroidBitmap
 import android.util.LruCache
@@ -29,8 +30,6 @@ object MarkerIconHelper {
             (value.byteCount / 1024).coerceAtLeast(1)
     }
 
-
-    private val HEALTH_COLOR = Color.parseColor("#E53935")
 
     // لون نص تسميات جوجل تقريباً
     // ألوان قريبة من تسميات نقاط الاهتمام في خرائط جوجل (الوضع الفاتح)
@@ -86,53 +85,10 @@ object MarkerIconHelper {
         }
     }
 
-    fun colorForCategory(category: String): Int {
-        val c = category.lowercase()
-        return when {
-            listOf("صيدلية", "مستشفى", "عيادة", "مختبر", "أسنان").any { it in c } ->
-                HEALTH_COLOR
-            listOf("مطعم", "مقهى", "كافي", "وجبات", "شعبي", "أغذية", "restaurant").any { it in c } ->
-                Color.parseColor("#FB8C00")
-            listOf("بقالة", "عطارة", "سوبر").any { it in c } ->
-                Color.parseColor("#43A047")
-            listOf("ورشة", "سمكرة", "نجارة", "حدادة", "ميكانيكا", "كهرباء", "سباكة").any { it in c } ->
-                Color.parseColor("#8E24AA")
-            listOf("مدرسة", "ابتدائية", "إعدادية", "ثانوية", "لغات", "مكتبة").any { it in c } ->
-                Color.parseColor("#1E88E5")
-            listOf("ملابس", "أحذية").any { it in c } ->
-                Color.parseColor("#EC407A")
-            listOf("أجهزة", "كهربائية", "منزلية", "مواد بناء", "مصنع", "بلاستيك").any { it in c } ->
-                Color.parseColor("#546E7A")
-            "محل" in c || "store" in c ->
-                Color.parseColor("#00897B")
-            else ->
-                Color.parseColor("#3949AB")
-        }
-    }
+    /** مفوَّضة إلى CategoryStyles (مصدر واحد + نتيجة محفوظة لكل تصنيف) */
+    fun colorForCategory(category: String): Int = CategoryStyles.colorFor(category)
 
-    fun iconNameForCategory(category: String): String {
-        val c = category.lowercase()
-        return when {
-            "مستشفى" in c -> "hospital"
-            "عيادة" in c || "أسنان" in c -> "clinic"
-            "مختبر" in c -> "lab"
-            listOf("ورشة", "سمكرة", "نجارة", "حدادة", "ميكانيكا", "كهرباء", "سباكة").any { it in c } ->
-                "workshop"
-            listOf("مصنع", "بلاستيك").any { it in c } ->
-                "factory"
-            listOf("مدرسة", "ابتدائية", "إعدادية", "ثانوية", "لغات").any { it in c } ->
-                "school"
-            listOf("مطعم", "وجبات", "شعبي", "أغذية").any { it in c } ->
-                "restaurant"
-            listOf("مقهى", "كافي").any { it in c } ->
-                "coffee_shop"
-            listOf("محل", "بقالة", "عطارة", "صيدلية", "ملابس", "أحذية", "مكتبة",
-                "أدوات", "أجهزة", "مواد", "سوبر").any { it in c } ->
-                "store"
-            else ->
-                "other"
-        }
-    }
+    fun iconNameForCategory(category: String): String = CategoryStyles.iconNameFor(category)
 
     fun getMarkerBitmap(category: String, mode: DisplayMode): Bitmap? {
         if (mode == DisplayMode.HIDDEN) return null
