@@ -1,0 +1,49 @@
+name: Apply Search Nav Padding Fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-search-nav-padding.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply padding left fix
+        run: |
+          python3 -c "
+          from pathlib import Path
+          p = Path('app/src/main/java/com/marketmaps/app/ui/map/MapScreen.kt')
+          c = p.read_text(encoding='utf-8')
+          old = '.padding(start = 12.dp, bottom = navBottomPad)'
+          new = '.padding(left = 12.dp, bottom = navBottomPad)'
+          if old not in c:
+              if new in c:
+                  print('Already applied')
+              else:
+                  raise SystemExit('marker not found')
+          else:
+              # استبدال الموضع المرتبط بـ AbsoluteAlignment.BottomLeft فقط
+              target = '''.align(AbsoluteAlignment.BottomLeft)\n                        .padding(start = 12.dp, bottom = navBottomPad)'''
+              repl = '''.align(AbsoluteAlignment.BottomLeft)\n                        .padding(left = 12.dp, bottom = navBottomPad)'''
+              if target not in c:
+                  raise SystemExit('target context not found')
+              c = c.replace(target, repl, 1)
+              p.write_text(c, encoding='utf-8')
+              print('Applied OK')
+          "
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/marketmaps/app/ui/map/MapScreen.kt
+          git diff --staged --stat
+          git commit -m "fix: محاذاة أسهم التنقل لليسار الفعلي (padding left مع AbsoluteAlignment)" || true
+          git push
