@@ -1,9 +1,9 @@
 package com.marketmaps.app.ui.map
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -26,9 +26,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.marketmaps.app.data.CategoryData
 import com.marketmaps.app.data.Store
+import java.util.Locale
 
 /**
- * نافذة إضافة أو تعديل موقع.
+ * نافذة إضافة أو تعديل موقع — التصنيف دائماً من القوائم المنسدلة.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,24 +41,36 @@ fun AddStoreDialog(
     onSave: (name: String, categoryPath: String, description: String, onComplete: (success: Boolean) -> Unit) -> Unit
 ) {
     val isEditMode = initialStore != null
+    val parsed = remember(initialStore?.id, initialStore?.category) {
+        parseCategoryPath(initialStore?.category.orEmpty())
+    }
 
     var isSaving by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf(initialStore?.name ?: "") }
     var description by remember { mutableStateOf(initialStore?.description ?: "") }
-    var categoryText by remember { mutableStateOf(initialStore?.category ?: "") }
 
-    var selectedLevel1 by remember { mutableStateOf<CategoryData.Category?>(null) }
+    var selectedLevel1 by remember { mutableStateOf(parsed.first) }
     var expanded1 by remember { mutableStateOf(false) }
-    var selectedLevel2 by remember { mutableStateOf<CategoryData.SubCategory?>(null) }
+    var selectedLevel2 by remember { mutableStateOf(parsed.second) }
     var expanded2 by remember { mutableStateOf(false) }
-    var selectedLevel3 by remember { mutableStateOf<String?>(null) }
+    var selectedLevel3 by remember { mutableStateOf(parsed.third) }
     var expanded3 by remember { mutableStateOf(false) }
 
-    val isValid = if (isEditMode) {
-        name.isNotBlank() && categoryText.isNotBlank()
-    } else {
-        name.isNotBlank() && selectedLevel1 != null && selectedLevel2 != null
-    }
+    val needsLevel3 = selectedLevel2 != null && selectedLevel2!!.thirdLevel.isNotEmpty()
+    val isValid = name.isNotBlank() &&
+        selectedLevel1 != null &&
+        selectedLevel2 != null &&
+        (!needsLevel3 || !selectedLevel3.isNullOrBlank())
+
+    fun buildCategoryPath(): String = buildString {
+        append(selectedLevel1?.name ?: "")
+        append(" ")
+        append(selectedLevel2?.name ?: "")
+        if (!selectedLevel3.isNullOrBlank()) {
+            append(" ")
+            append(selectedLevel3)
+        }
+    }.trim()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -77,108 +90,98 @@ fun AddStoreDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                if (isEditMode) {
+                ExposedDropdownMenuBox(
+                    expanded = expanded1,
+                    onExpandedChange = { expanded1 = it }
+                ) {
                     OutlinedTextField(
-                        value = categoryText,
-                        onValueChange = { categoryText = it },
-                        label = { Text("التصنيف *") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        value = selectedLevel1?.name ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("نوع المكان *") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded1) },
+                        modifier = Modifier
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                            .fillMaxWidth()
                     )
-                } else {
-                    ExposedDropdownMenuBox(
+                    ExposedDropdownMenu(
                         expanded = expanded1,
-                        onExpandedChange = { expanded1 = it }
+                        onDismissRequest = { expanded1 = false }
+                    ) {
+                        CategoryData.categories.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category.name) },
+                                onClick = {
+                                    selectedLevel1 = category
+                                    selectedLevel2 = null
+                                    selectedLevel3 = null
+                                    expanded1 = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                if (selectedLevel1 != null) {
+                    ExposedDropdownMenuBox(
+                        expanded = expanded2,
+                        onExpandedChange = { expanded2 = it }
                     ) {
                         OutlinedTextField(
-                            value = selectedLevel1?.name ?: "",
+                            value = selectedLevel2?.name ?: "",
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("نوع المكان *") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded1) },
+                            label = { Text("التصنيف *") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded2) },
                             modifier = Modifier
                                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                                 .fillMaxWidth()
                         )
                         ExposedDropdownMenu(
-                            expanded = expanded1,
-                            onDismissRequest = { expanded1 = false }
+                            expanded = expanded2,
+                            onDismissRequest = { expanded2 = false }
                         ) {
-                            CategoryData.categories.forEach { category ->
+                            selectedLevel1?.subCategories?.forEach { sub ->
                                 DropdownMenuItem(
-                                    text = { Text(category.name) },
+                                    text = { Text(sub.name) },
                                     onClick = {
-                                        selectedLevel1 = category
-                                        selectedLevel2 = null
+                                        selectedLevel2 = sub
                                         selectedLevel3 = null
-                                        expanded1 = false
+                                        expanded2 = false
                                     }
                                 )
                             }
                         }
                     }
+                }
 
-                    if (selectedLevel1 != null) {
-                        ExposedDropdownMenuBox(
-                            expanded = expanded2,
-                            onExpandedChange = { expanded2 = it }
-                        ) {
-                            OutlinedTextField(
-                                value = selectedLevel2?.name ?: "",
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("التصنيف *") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded2) },
-                                modifier = Modifier
-                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                                    .fillMaxWidth()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = expanded2,
-                                onDismissRequest = { expanded2 = false }
-                            ) {
-                                selectedLevel1?.subCategories?.forEach { sub ->
-                                    DropdownMenuItem(
-                                        text = { Text(sub.name) },
-                                        onClick = {
-                                            selectedLevel2 = sub
-                                            selectedLevel3 = null
-                                            expanded2 = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (selectedLevel2 != null && selectedLevel2!!.thirdLevel.isNotEmpty()) {
-                        ExposedDropdownMenuBox(
+                if (needsLevel3) {
+                    ExposedDropdownMenuBox(
+                        expanded = expanded3,
+                        onExpandedChange = { expanded3 = it }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedLevel3 ?: "",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("تفاصيل إضافية *") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded3) },
+                            modifier = Modifier
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
                             expanded = expanded3,
-                            onExpandedChange = { expanded3 = it }
+                            onDismissRequest = { expanded3 = false }
                         ) {
-                            OutlinedTextField(
-                                value = selectedLevel3 ?: "",
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("تفاصيل إضافية") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded3) },
-                                modifier = Modifier
-                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                                    .fillMaxWidth()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = expanded3,
-                                onDismissRequest = { expanded3 = false }
-                            ) {
-                                selectedLevel2?.thirdLevel?.forEach { item ->
-                                    DropdownMenuItem(
-                                        text = { Text(item) },
-                                        onClick = {
-                                            selectedLevel3 = item
-                                            expanded3 = false
-                                        }
-                                    )
-                                }
+                            selectedLevel2?.thirdLevel?.forEach { item ->
+                                DropdownMenuItem(
+                                    text = { Text(item) },
+                                    onClick = {
+                                        selectedLevel3 = item
+                                        expanded3 = false
+                                    }
+                                )
                             }
                         }
                     }
@@ -194,7 +197,12 @@ fun AddStoreDialog(
                 )
 
                 Text(
-                    text = "الموقع: ${String.format("%.5f", latitude)}, ${String.format("%.5f", longitude)}",
+                    text = String.format(
+                        Locale.US,
+                        "الموقع: %.5f, %.5f",
+                        latitude,
+                        longitude
+                    ),
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall
                 )
             }
@@ -204,22 +212,8 @@ fun AddStoreDialog(
                 onClick = {
                     if (isSaving) return@Button
                     isSaving = true
-                    val categoryPath = if (isEditMode) {
-                        categoryText.trim()
-                    } else {
-                        buildString {
-                            append(selectedLevel1?.name ?: "")
-                            append(" ")
-                            append(selectedLevel2?.name ?: "")
-                            if (!selectedLevel3.isNullOrBlank()) {
-                                append(" ")
-                                append(selectedLevel3)
-                            }
-                        }.trim()
-                    }
-                    onSave(name.trim(), categoryPath, description.trim()) { success ->
+                    onSave(name.trim(), buildCategoryPath(), description.trim()) { _ ->
                         isSaving = false
-                        // عند النجاح يغلق الأب النافذة؛ عند الفشل يبقى الزر قابلاً للإعادة
                     }
                 },
                 enabled = isValid && !isSaving
@@ -240,4 +234,27 @@ fun AddStoreDialog(
             }
         }
     )
+}
+
+/** تفكيك نص التصنيف المحفوظ إلى مستويات القائمة */
+private fun parseCategoryPath(
+    path: String
+): Triple<CategoryData.Category?, CategoryData.SubCategory?, String?> {
+    val trimmed = path.trim()
+    if (trimmed.isEmpty()) return Triple(null, null, null)
+    val cat = CategoryData.categories
+        .sortedByDescending { it.name.length }
+        .find { trimmed == it.name || trimmed.startsWith(it.name + " ") }
+        ?: return Triple(null, null, null)
+    val rest = trimmed.removePrefix(cat.name).trim()
+    if (rest.isEmpty()) return Triple(cat, null, null)
+    val sub = cat.subCategories
+        .sortedByDescending { it.name.length }
+        .find { rest == it.name || rest.startsWith(it.name + " ") }
+        ?: return Triple(cat, null, null)
+    val third = rest.removePrefix(sub.name).trim().ifBlank { null }
+    val thirdOk = if (third != null && sub.thirdLevel.isNotEmpty()) {
+        sub.thirdLevel.find { it == third } ?: third
+    } else third
+    return Triple(cat, sub, thirdOk)
 }
