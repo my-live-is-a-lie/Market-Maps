@@ -37,6 +37,14 @@ import com.marketmaps.app.data.Store
  * خرائط جوجل + أيقونات مخصصة بحجم يتغير مع التكبير + أسماء اختيارية.
  * BitmapDescriptorFactory يُستدعى فقط بعد تهيئة الخريطة (onMapLoaded).
  */
+/** طلب تحريك الكاميرا — id فريد يعيد التشغيل حتى لنفس الإحداثيات */
+data class CameraTarget(
+    val lat: Double,
+    val lon: Double,
+    val zoom: Float,
+    val id: Long = System.nanoTime()
+)
+
 @Composable
 fun GoogleMapContent(
     initialLat: Double,
@@ -45,7 +53,7 @@ fun GoogleMapContent(
     stores: List<Store>,
     userLat: Double?,
     userLon: Double?,
-    cameraTarget: Triple<Double, Double, Float>?,
+    cameraTarget: CameraTarget?,
     isAddMode: Boolean,
     showLabels: Boolean = true,
     highlightedStoreId: String? = null,
@@ -56,11 +64,6 @@ fun GoogleMapContent(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val hasLocationPermission = remember {
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    }
-
     // تهيئة مصنع الأيقونات مبكراً لتفادي: IBitmapDescriptorFactory is not initialized
     LaunchedEffect(Unit) {
         try {
@@ -73,10 +76,10 @@ fun GoogleMapContent(
         position = CameraPosition.fromLatLngZoom(LatLng(initialLat, initialLon), initialZoom)
     }
 
-    LaunchedEffect(cameraTarget) {
+    LaunchedEffect(cameraTarget?.id) {
         val target = cameraTarget ?: return@LaunchedEffect
         cameraPositionState.animate(
-            CameraUpdateFactory.newLatLngZoom(LatLng(target.first, target.second), target.third)
+            CameraUpdateFactory.newLatLngZoom(LatLng(target.lat, target.lon), target.zoom)
         )
     }
 
@@ -147,7 +150,7 @@ fun GoogleMapContent(
     GoogleMap(
         modifier = modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
-        properties = MapProperties(isMyLocationEnabled = hasLocationPermission),
+        properties = MapProperties(isMyLocationEnabled = false),
         uiSettings = MapUiSettings(
             zoomControlsEnabled = false,
             myLocationButtonEnabled = false,
