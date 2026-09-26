@@ -69,6 +69,10 @@ import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.AppThemeMode
 import com.marketmaps.app.data.MapCatalog
 import com.marketmaps.app.data.MapDownloader
+import com.marketmaps.app.data.MapDownloadScheduler
+import com.marketmaps.app.data.MapDownloadWorker
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.marketmaps.app.data.MapProvider
 import com.marketmaps.app.data.DrawerSide
 import com.marketmaps.app.data.EdgeSwipeSide
@@ -872,7 +876,8 @@ private fun OfflineMapsSettingsScreen(
                             }
                             Button(
                                 onClick = {
-                                    MapDownloader.cancel()
+                                    selectedRegion?.let { MapDownloadScheduler.cancel(context, it.id) }
+                                        ?: MapDownloader.cancel()
                                     isDownloading = false
                                     isPaused = false
                                 },
@@ -888,23 +893,37 @@ private fun OfflineMapsSettingsScreen(
                                 isPaused = false
                                 progressPercent = 0
                                 progressText = "جاري البدء..."
+                                // WorkManager: يستمر التحميل حتى بعد مغادرة الإعدادات
+                                MapDownloadScheduler.enqueue(context, region.id)
                                 scope.launch {
-                                    val result = MapDownloader.download(context, region) { p ->
-                                        progressPercent = p.percent
-                                        progressText = p.formatLine()
-                                    }
-                                    isDownloading = false
-                                    isPaused = false
-                                    if (result.isSuccess) {
-                                        refreshList()
-                                        Toast.makeText(context, "تم تحميل ${region.nameAr}", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(
-                                            context,
-                                            result.exceptionOrNull()?.message ?: "فشل التحميل",
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                    }
+                                    WorkManager.getInstance(context)
+                                        .getWorkInfosForUniqueWorkFlow("map_download_" + region.id)
+                                        .collect { infos ->
+                                            val info = infos.firstOrNull() ?: return@collect
+                                            val p = info.progress.getInt(MapDownloadWorker.KEY_PROGRESS, progressPercent)
+                                            if (p > 0) {
+                                                progressPercent = p
+                                                progressText = "$p%"
+                                            }
+                                            when (info.state) {
+                                                WorkInfo.State.SUCCEEDED -> {
+                                                    isDownloading = false
+                                                    isPaused = false
+                                                    refreshList()
+                                                    // تفعيل الأوفلاين على هذه الخريطة
+                                                    prefs.setMapFileName(region.fileName)
+                                                    Toast.makeText(context, "تم تحميل ${region.nameAr}", Toast.LENGTH_SHORT).show()
+                                                    return@collect
+                                                }
+                                                WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> {
+                                                    isDownloading = false
+                                                    isPaused = false
+                                                    Toast.makeText(context, "فشل أو أُلغي التحميل", Toast.LENGTH_LONG).show()
+                                                    return@collect
+                                                }
+                                                else -> Unit
+                                            }
+                                        }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
