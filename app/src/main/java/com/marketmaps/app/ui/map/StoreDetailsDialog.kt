@@ -64,7 +64,11 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import com.caverock.androidsvg.SVG
 import com.marketmaps.app.data.Store
 import kotlin.math.abs
@@ -310,14 +314,36 @@ fun StoreDetailsBottomCard(
                             )
                             if (showCoords) {
                                 val density = LocalDensity.current
+                                val gapPx = with(density) { 8.dp.roundToPx() }
+                                val positionProvider = remember(gapPx) {
+                                    object : PopupPositionProvider {
+                                        override fun calculatePosition(
+                                            anchorBounds: IntRect,
+                                            windowSize: IntSize,
+                                            layoutDirection: LayoutDirection,
+                                            popupContentSize: IntSize
+                                        ): IntOffset {
+                                            // توسيط أفقي فوق زر الدبوس
+                                            val x = anchorBounds.left +
+                                                (anchorBounds.width - popupContentSize.width) / 2
+                                            val y = anchorBounds.top - popupContentSize.height - gapPx
+                                            val xClamped = x.coerceIn(
+                                                0,
+                                                (windowSize.width - popupContentSize.width).coerceAtLeast(0)
+                                            )
+                                            val yClamped = y.coerceAtLeast(0)
+                                            return IntOffset(xClamped, yClamped)
+                                        }
+                                    }
+                                }
                                 Popup(
-                                    alignment = Alignment.TopCenter,
-                                    offset = androidx.compose.ui.unit.IntOffset(
-                                        x = 0,
-                                        y = with(density) { (-6).dp.roundToPx() }
-                                    ),
+                                    popupPositionProvider = positionProvider,
                                     onDismissRequest = { showCoords = false },
-                                    properties = PopupProperties(focusable = false)
+                                    properties = PopupProperties(
+                                        focusable = true,
+                                        dismissOnClickOutside = true,
+                                        clippingEnabled = false
+                                    )
                                 ) {
                                     CoordsPopup(
                                         latitude = store.latitude,
@@ -377,8 +403,8 @@ private fun CoordsPopup(
     Surface(
         modifier = modifier
             .wrapContentWidth()
-            .widthIn(min = 140.dp, max = 200.dp)
-            .shadow(4.dp, RoundedCornerShape(10.dp)),
+            .widthIn(min = 150.dp, max = 190.dp)
+            .shadow(6.dp, RoundedCornerShape(12.dp)),
         shape = RoundedCornerShape(10.dp),
         color = scheme.primaryContainer
     ) {
