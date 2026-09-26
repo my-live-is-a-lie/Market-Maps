@@ -123,6 +123,9 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+    // تحميل الخرائط في الخلفية
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
