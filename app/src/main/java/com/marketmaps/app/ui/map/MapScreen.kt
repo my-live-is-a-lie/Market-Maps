@@ -124,7 +124,13 @@ fun MapScreen(
     val scope = rememberCoroutineScope()
     val storeRepository = remember { StoreRepository() }
     val appPreferences = remember { AppPreferences(context) }
-    val savedLocation by appPreferences.lastLocation.collectAsState(initial = null)
+    // ننتظر أول قراءة من DataStore حتى لا نفتح على القاهرة ونحفظها بالخطأ
+    var locationReady by remember { mutableStateOf(false) }
+    var savedLocation by remember { mutableStateOf<Triple<Double, Double, Double>?>(null) }
+    LaunchedEffect(Unit) {
+        savedLocation = appPreferences.lastLocation.first()
+        locationReady = true
+    }
     val offlineMode by appPreferences.offlineMode.collectAsState(initial = false)
     val activeMapFileName by appPreferences.mapFileName.collectAsState(initial = null)
     val recentSearches by appPreferences.recentSearches.collectAsState(initial = emptyList())
@@ -357,6 +363,16 @@ fun MapScreen(
         }
     }
 
+    if (!locationReady) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
     Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             if (mapProvider == MapProvider.GOOGLE) {
@@ -396,7 +412,9 @@ fun MapScreen(
                         setBuiltInZoomControls(false)
                         // تكبير عناصر الرسم لتحسين وضوح التسميات (خصوصاً الأوفلاين)
                         val density = ctx.resources.displayMetrics.density
-                        model.displayModel.setUserScaleFactor((density * 1.15f).coerceIn(1.0f, 2.2f))
+                        model.displayModel.setUserScaleFactor(1.0f)
+                        // تسميات أوضح قليلاً في الأوفلاين دون تضخيم البلاطات
+                        try { model.displayModel.setTextScale(1.15f) } catch (_: Exception) {}
                     }
                     val cache = MapLayerHelper.createTileCache(ctx, mapView)
                     val bundle = MapLayerHelper.LayerBundle(tileCache = cache)
@@ -804,7 +822,7 @@ private fun moveToCurrentLocation(context: Context, mapView: MapView?, onLocatio
         .addOnSuccessListener { location ->
             if (location != null) {
                 mapView?.model?.mapViewPosition?.animateTo(LatLong(location.latitude, location.longitude))
-                mapView?.model?.mapViewPosition?.zoomLevel = 16.toByte()
+                // التكبير يُضبط مرة واحدة من moveCamera لتفادي أمرين متعارضين (16 ثم 18)
                 onLocation?.invoke(location.latitude, location.longitude)
                 Toast.makeText(context, "تم تحديد موقعك الحالي", Toast.LENGTH_SHORT).show()
             } else Toast.makeText(context, "تعذر الحصول على الموقع، تأكد من تفعيل GPS", Toast.LENGTH_LONG).show()
