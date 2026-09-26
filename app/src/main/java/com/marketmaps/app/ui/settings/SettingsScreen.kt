@@ -172,7 +172,7 @@ private fun SettingsMainScreen(
         ) {
             SettingsSectionCard(
                 title = "مظهر التطبيق",
-                subtitle = "النمط ولون التمييز وأيقونة النظام",
+                subtitle = "النمط الفاتح/الغامق ولون التمييز",
                 icon = Icons.Default.Settings,
                 onClick = { onOpen(SettingsSection.APPEARANCE) }
             )
@@ -474,8 +474,6 @@ private fun AppearanceSettingsScreen(
                     }
                 }
             }
-
-            ThemedIconSettingsSection()
         }
     }
 }
