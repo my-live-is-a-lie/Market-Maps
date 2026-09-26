@@ -68,7 +68,6 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import com.caverock.androidsvg.SVG
 import com.marketmaps.app.data.Store
 import kotlin.math.abs
