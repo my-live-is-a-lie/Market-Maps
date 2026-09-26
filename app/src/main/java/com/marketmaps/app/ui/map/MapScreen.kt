@@ -215,7 +215,7 @@ fun MapScreen(
     }
     val cardLift = with(density) { cardLiftAnim.value.coerceAtLeast(0f).toDp() }
     val fabBottomPad = (16.dp + cardLift).coerceAtLeast(0.dp)
-    val navBottomPad = (if (detailsCardVisible) cardLift + 8.dp else 100.dp).coerceAtLeast(0.dp)
+    val navBottomPad = (if (detailsCardVisible) cardLift + 8.dp else 16.dp).coerceAtLeast(0.dp)
 
     val searchResults = remember(searchQuery, stores, userLat, userLon, filterType, filterSub) {
         filterAndSortStores(stores, searchQuery, userLat, userLon, filterType, filterSub)
