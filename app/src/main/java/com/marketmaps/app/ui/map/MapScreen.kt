@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
@@ -191,7 +192,7 @@ fun MapScreen(
     val highlightScale by highlightScaleAnim.asState()
     // تقليل إعادة رسم العلامات أثناء الحركة (يمنع وميض موقعك)
     val highlightScaleBucket = ((highlightScale * 8f).toInt() / 8f)
-    var cameraTarget by remember { mutableStateOf<Triple<Double, Double, Float>?>(null) }
+    var cameraTarget by remember { mutableStateOf<CameraTarget?>(null) }
     var detailsCardHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val detailsCardVisible = selectedStore != null
@@ -219,7 +220,7 @@ fun MapScreen(
     }
 
     fun moveCamera(lat: Double, lon: Double, zoom: Float = 17f) {
-        cameraTarget = Triple(lat, lon, zoom)
+        cameraTarget = CameraTarget(lat, lon, zoom)
         mapViewRef?.model?.mapViewPosition?.animateTo(LatLong(lat, lon))
         mapViewRef?.model?.mapViewPosition?.zoomLevel = zoom.toInt().toByte()
     }
@@ -413,8 +414,6 @@ fun MapScreen(
                         // تكبير عناصر الرسم لتحسين وضوح التسميات (خصوصاً الأوفلاين)
                         val density = ctx.resources.displayMetrics.density
                         model.displayModel.setUserScaleFactor(1.0f)
-                        // تسميات أوضح قليلاً في الأوفلاين دون تضخيم البلاطات
-                        try { model.displayModel.setTextScale(1.15f) } catch (_: Exception) {}
                     }
                     val cache = MapLayerHelper.createTileCache(ctx, mapView)
                     val bundle = MapLayerHelper.LayerBundle(tileCache = cache)
