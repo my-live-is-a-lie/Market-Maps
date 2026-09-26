@@ -25,7 +25,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -805,12 +807,25 @@ private fun BoxScope.MapSideMenuOverlay(
         if (!dragging) activeSide = panelSide
     }
 
-    // حركة انسيابية (Material) بدل الارتداد النابض
-    val slideSpec = tween<Float>(durationMillis = 300, easing = FastOutSlowInEasing)
+    // حركة استقرار سلسة (Material) بدون ارتداد
+    val settleSpec = tween<Float>(durationMillis = 300, easing = FastOutSlowInEasing)
+    // عتبة السرعة لاعتبار السحبة "سريعة" (fling)
+    val flingVelocityPx = with(density) { 700.dp.toPx() }
 
-    suspend fun settle(targetOpen: Boolean) {
-        progress.animateTo(if (targetOpen) 1f else 0f, animationSpec = slideSpec)
+    suspend fun settle(targetOpen: Boolean, flingVelocity: Float = 0f) {
+        progress.animateTo(
+            targetValue = if (targetOpen) 1f else 0f,
+            animationSpec = settleSpec,
+            initialVelocity = flingVelocity / panelWidthPx
+        )
         onOpenChange(targetOpen)
+    }
+
+    // سرعة السحب أولاً، ثم موضع 50٪ كاحتياطي
+    fun decideOpen(currentProgress: Float, velocityTowardOpen: Float): Boolean = when {
+        velocityTowardOpen > flingVelocityPx -> true
+        velocityTowardOpen < -flingVelocityPx -> false
+        else -> currentProgress >= 0.5f
     }
 
     // فتح/إغلاق من الزر أو من الخارج
@@ -818,7 +833,7 @@ private fun BoxScope.MapSideMenuOverlay(
         if (dragging) return@LaunchedEffect
         val target = if (open) 1f else 0f
         if (kotlin.math.abs(progress.value - target) > 0.01f) {
-            progress.animateTo(target, animationSpec = slideSpec)
+            progress.animateTo(target, animationSpec = settleSpec)
         }
     }
 
@@ -835,7 +850,7 @@ private fun BoxScope.MapSideMenuOverlay(
         -((1f - p) * panelWidthPx)
     }
 
-    // شرائط السحب التفاعلي من الحافة
+    // شرائط السحب من الحافة مع دعم السرعة
     if (edgeSwipeEnabled && (!open || p < 1f)) {
         val edgeWidthDp = (28f + edgeSwipeSensitivity * 36f).dp
         val allowLeft = edgeSwipeSide == EdgeSwipeSide.LEFT || edgeSwipeSide == EdgeSwipeSide.BOTH
@@ -850,43 +865,23 @@ private fun BoxScope.MapSideMenuOverlay(
                     .padding(bottom = bottomClear)
                     .width(edgeWidthDp)
                     .zIndex(5f)
-                    .pointerInput(panelWidthPx, edgeSwipeSensitivity) {
-                        var lastTimeNs = 0L
-                        var velocityPxPerSec = 0f
-                        detectHorizontalDragGestures(
-                            onDragStart = {
-                                dragging = true
-                                activeSide = DrawerSide.LEFT
-                                onEdgeSideSelected(DrawerSide.LEFT)
-                                lastTimeNs = 0L
-                                velocityPxPerSec = 0f
-                            },
-                            onHorizontalDrag = { change, dx ->
-                                change.consume()
-                                val now = System.nanoTime()
-                                if (lastTimeNs != 0L) {
-                                    val dtSec = (now - lastTimeNs) / 1_000_000_000f
-                                    if (dtSec > 0.001f) velocityPxPerSec = dx / dtSec
-                                }
-                                lastTimeNs = now
-                                val next = (progress.value + dx / panelWidthPx).coerceIn(0f, 1f)
-                                scope.launch { progress.snapTo(next) }
-                            },
-                            onDragEnd = {
-                                dragging = false
-                                val shouldOpen = when {
-                                    velocityPxPerSec > 900f -> true
-                                    velocityPxPerSec < -900f -> false
-                                    else -> progress.value >= 0.30f
-                                }
-                                scope.launch { settle(shouldOpen) }
-                            },
-                            onDragCancel = {
-                                dragging = false
-                                scope.launch { settle(progress.value >= 0.30f) }
-                            }
-                        )
-                    }
+                    .draggable(
+                        orientation = Orientation.Horizontal,
+                        state = rememberDraggableState { dx ->
+                            val next = (progress.value + dx / panelWidthPx).coerceIn(0f, 1f)
+                            scope.launch { progress.snapTo(next) }
+                        },
+                        onDragStarted = {
+                            dragging = true
+                            activeSide = DrawerSide.LEFT
+                            onEdgeSideSelected(DrawerSide.LEFT)
+                        },
+                        onDragStopped = { velocity ->
+                            dragging = false
+                            val shouldOpen = decideOpen(progress.value, velocity)
+                            scope.launch { settle(shouldOpen, velocity) }
+                        }
+                    )
             )
         }
         if (allowRight) {
@@ -897,72 +892,52 @@ private fun BoxScope.MapSideMenuOverlay(
                     .padding(bottom = bottomClear)
                     .width(edgeWidthDp)
                     .zIndex(5f)
-                    .pointerInput(panelWidthPx, edgeSwipeSensitivity) {
-                        var lastTimeNs = 0L
-                        var velocityPxPerSec = 0f
-                        detectHorizontalDragGestures(
-                            onDragStart = {
-                                dragging = true
-                                activeSide = DrawerSide.RIGHT
-                                onEdgeSideSelected(DrawerSide.RIGHT)
-                                lastTimeNs = 0L
-                                velocityPxPerSec = 0f
-                            },
-                            onHorizontalDrag = { change, dx ->
-                                change.consume()
-                                val now = System.nanoTime()
-                                if (lastTimeNs != 0L) {
-                                    val dtSec = (now - lastTimeNs) / 1_000_000_000f
-                                    if (dtSec > 0.001f) velocityPxPerSec = dx / dtSec
-                                }
-                                lastTimeNs = now
-                                // من اليمين: السحب لليسار (dx سالب) يزيد التقدم
-                                val next = (progress.value - dx / panelWidthPx).coerceIn(0f, 1f)
-                                scope.launch { progress.snapTo(next) }
-                            },
-                            onDragEnd = {
-                                dragging = false
-                                // من اليمين: سرعة سالبة (سحب لليسار) = فتح
-                                val shouldOpen = when {
-                                    velocityPxPerSec < -900f -> true
-                                    velocityPxPerSec > 900f -> false
-                                    else -> progress.value >= 0.30f
-                                }
-                                scope.launch { settle(shouldOpen) }
-                            },
-                            onDragCancel = {
-                                dragging = false
-                                scope.launch { settle(progress.value >= 0.30f) }
-                            }
-                        )
-                    }
+                    .draggable(
+                        orientation = Orientation.Horizontal,
+                        state = rememberDraggableState { dx ->
+                            // من اليمين: السحب لليسار (dx سالب) يزيد التقدم
+                            val next = (progress.value - dx / panelWidthPx).coerceIn(0f, 1f)
+                            scope.launch { progress.snapTo(next) }
+                        },
+                        onDragStarted = {
+                            dragging = true
+                            activeSide = DrawerSide.RIGHT
+                            onEdgeSideSelected(DrawerSide.RIGHT)
+                        },
+                        onDragStopped = { velocity ->
+                            dragging = false
+                            val shouldOpen = decideOpen(progress.value, -velocity)
+                            scope.launch { settle(shouldOpen, -velocity) }
+                        }
+                    )
             )
         }
     }
 
     if (!visible) return
 
-    // تعتيم يتناسب مع مدى الفتح
+    // تعتيم بدون ripple
     Box(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(20f)
             .background(Color.Black.copy(alpha = 0.35f * p))
             .clickable(
+                enabled = p > 0.3f,
                 indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                enabled = p > 0.3f
+                interactionSource = remember { MutableInteractionSource() }
             ) {
                 scope.launch { settle(false) }
             }
     )
 
-    // اللوحة: ظل + زاوية داخلية + سحب مع دعم السرعة (fling)
     val panelShape = if (activeSide == DrawerSide.RIGHT) {
-        RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
+        RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp)
     } else {
-        RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp)
+        RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp)
     }
+
+    // اللوحة: absoluteOffset لتفادي انعكاس RTL + ظل + سحب بسرعة
     Box(
         modifier = Modifier
             .align(panelAlign)
@@ -970,52 +945,24 @@ private fun BoxScope.MapSideMenuOverlay(
             .fillMaxWidth(0.55f)
             .zIndex(21f)
             .absoluteOffset { IntOffset(offsetX.roundToInt(), 0) }
-            .shadow(18.dp, panelShape)
+            .shadow(elevation = 18.dp, shape = panelShape, clip = false)
             .clip(panelShape)
             .background(Color(0xFF121212))
-            .pointerInput(activeSide, panelWidthPx) {
-                var lastTimeNs = 0L
-                var velocityPxPerSec = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = {
-                        dragging = true
-                        lastTimeNs = 0L
-                        velocityPxPerSec = 0f
-                    },
-                    onHorizontalDrag = { change, dx ->
-                        change.consume()
-                        val now = System.nanoTime()
-                        if (lastTimeNs != 0L) {
-                            val dtSec = (now - lastTimeNs) / 1_000_000_000f
-                            if (dtSec > 0.001f) velocityPxPerSec = dx / dtSec
-                        }
-                        lastTimeNs = now
-                        val delta = if (activeSide == DrawerSide.RIGHT) -dx else dx
-                        val next = (progress.value + delta / panelWidthPx).coerceIn(0f, 1f)
-                        scope.launch { progress.snapTo(next) }
-                    },
-                    onDragEnd = {
-                        dragging = false
-                        // سرعة موقعة باتجاه الفتح (موجب = فتح)
-                        val openVelocity = if (activeSide == DrawerSide.RIGHT) {
-                            -velocityPxPerSec
-                        } else {
-                            velocityPxPerSec
-                        }
-                        val flingThreshold = 900f
-                        val shouldOpen = when {
-                            openVelocity > flingThreshold -> true
-                            openVelocity < -flingThreshold -> false
-                            else -> progress.value >= 0.30f
-                        }
-                        scope.launch { settle(shouldOpen) }
-                    },
-                    onDragCancel = {
-                        dragging = false
-                        scope.launch { settle(progress.value >= 0.30f) }
-                    }
-                )
-            }
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { dx ->
+                    val delta = if (activeSide == DrawerSide.RIGHT) -dx else dx
+                    val next = (progress.value + delta / panelWidthPx).coerceIn(0f, 1f)
+                    scope.launch { progress.snapTo(next) }
+                },
+                onDragStarted = { dragging = true },
+                onDragStopped = { velocity ->
+                    dragging = false
+                    val signedVelocity = if (activeSide == DrawerSide.RIGHT) -velocity else velocity
+                    val shouldOpen = decideOpen(progress.value, signedVelocity)
+                    scope.launch { settle(shouldOpen, signedVelocity) }
+                }
+            )
     ) {
         Column(
             modifier = Modifier
@@ -1074,7 +1021,4 @@ private fun BoxScope.MapSideMenuOverlay(
         }
     }
 }
-
-
-
 
