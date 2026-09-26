@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // قواعد مؤقتة للتطوير — قبل النشر العام قيّد أكثر (App Check + Auth)
+    match /stores/{storeId} {
+      allow read: if true;
+
+      // إضافة: حقول أساسية فقط، أطوال محدودة، إحداثيات منطقية
+      allow create: if request.resource.data.keys().hasAll(['name', 'category', 'latitude', 'longitude'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.category is string
+        && request.resource.data.category.size() > 0
+        && request.resource.data.category.size() <= 80
+        && request.resource.data.latitude is number
+        && request.resource.data.longitude is number
+        && request.resource.data.latitude >= -90
+        && request.resource.data.latitude <= 90
+        && request.resource.data.longitude >= -180
+        && request.resource.data.longitude <= 180
+        && (!('description' in request.resource.data)
+            || (request.resource.data.description is string
+                && request.resource.data.description.size() <= 500));
+
+      // تعديل: نفس القيود، بدون حذف جماعي مفتوح
+      allow update: if request.resource.data.keys().hasAll(['name', 'category', 'latitude', 'longitude'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.category is string
+        && request.resource.data.latitude is number
+        && request.resource.data.longitude is number;
+
+      // الحذف مغلق حالياً — يُفعَّل لاحقاً للمشرفين فقط
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
