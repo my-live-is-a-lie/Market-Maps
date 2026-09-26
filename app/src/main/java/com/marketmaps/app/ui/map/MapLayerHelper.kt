@@ -68,7 +68,7 @@ object MapLayerHelper {
 
         val tileSource = OpenStreetMapMapnik.INSTANCE.apply {
             // يُفضّل لاحقاً إضافة وسيلة تواصل وفق سياسة OSM
-            userAgent = "MarketMaps/1.0"
+            userAgent = "MarketMaps/1.0 (Android; https://github.com/my-live-is-a-lie/Market-Maps)"
         }
         val downloadLayer = TileDownloadLayer(
             bundle.tileCache,
