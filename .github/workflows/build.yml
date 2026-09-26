@@ -2,6 +2,14 @@ name: Build Debug APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+# إلغاء التشغيل القديم عند رفع تعديل جديد على نفس الفرع
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -43,7 +51,19 @@ jobs:
           fi
 
       - name: Build Debug APK (arm64-v8a only)
-        run: ./gradlew assembleDebug --stacktrace --no-daemon --build-cache
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace --no-daemon --build-cache 2>&1 | tee build.log
+
+      # عند الفشل: عرض أخطاء المترجم كـ annotation واحدة تظهر في صفحة الـ PR مباشرة
+      # بدلاً من البحث عنها وسط آلاف أسطر الـ stacktrace
+      - name: Report compiler errors
+        if: failure()
+        run: |
+          ERRS=$(grep -E "^e: |What went wrong" -A2 build.log | grep -vE "^\s+at " | head -60 || true)
+          [ -z "$ERRS" ] && ERRS=$(tail -40 build.log)
+          ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
+          echo "::error title=Build failed::$ERRS"
 
       - name: Prepare APK for upload
         if: success()
