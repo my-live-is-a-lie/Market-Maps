@@ -147,8 +147,8 @@ object MarkerIconHelper {
         if (mode == DisplayMode.HIDDEN) return null
         val size = when (mode) {
             DisplayMode.CIRCLE -> 28
-            DisplayMode.BUBBLE_MEDIUM -> 64
-            DisplayMode.BUBBLE_LARGE -> 88
+            DisplayMode.BUBBLE_MEDIUM -> 80
+            DisplayMode.BUBBLE_LARGE -> 96
             DisplayMode.HIDDEN -> 0
         }
         return composeGoogleUserPin(size)
@@ -157,8 +157,8 @@ object MarkerIconHelper {
     fun getUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): Bitmap {
         val size = when (mode) {
             DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 28
-            DisplayMode.BUBBLE_MEDIUM -> 64
-            DisplayMode.BUBBLE_LARGE -> 88
+            DisplayMode.BUBBLE_MEDIUM -> 80
+            DisplayMode.BUBBLE_LARGE -> 96
         }
         return MapsforgeAndroidBitmap(composeGoogleUserPin(size))
     }
