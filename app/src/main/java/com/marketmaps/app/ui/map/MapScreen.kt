@@ -153,9 +153,12 @@ fun MapScreen(
     var storeToEdit by remember { mutableStateOf<Store?>(null) }
     var navResults by remember { mutableStateOf<List<StoreWithDistance>>(emptyList()) }
     var navIndex by remember { mutableStateOf(-1) }
-    val highlightedStoreId = if (navResults.size > 1 && navIndex in navResults.indices) {
-        navResults[navIndex].store.id
-    } else null
+    // تمييز أيقونة نتيجة البحث أو المحل المفتوح في البطاقة السفلية
+    val highlightedStoreId = when {
+        selectedStore != null -> selectedStore!!.id
+        navResults.size > 1 && navIndex in navResults.indices -> navResults[navIndex].store.id
+        else -> null
+    }
     // تأثير نابض: تصغير خفيف ثم تكبير 20٪
     val highlightScaleAnim = remember { Animatable(1f) }
     LaunchedEffect(highlightedStoreId) {
