@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- استثناء ملفات الخرائط والكاش الضخمة من النسخ الاحتياطي -->
+    <exclude domain="file" path="maps/" />
+    <exclude domain="file" path="mapcache/" />
+    <exclude domain="cache" path="." />
+</full-backup-content>
