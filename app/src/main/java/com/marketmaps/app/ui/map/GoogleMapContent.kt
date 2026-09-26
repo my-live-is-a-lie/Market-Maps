@@ -4,6 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap as AndroidBitmap
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +49,7 @@ fun GoogleMapContent(
     isAddMode: Boolean,
     showLabels: Boolean = true,
     highlightedStoreId: String? = null,
+    highlightScale: Float = 1f,
     onLongPress: (Double, Double) -> Unit,
     onMarkerClick: (Store) -> Unit,
     onCameraIdle: (Double, Double, Float) -> Unit,
@@ -95,10 +100,12 @@ fun GoogleMapContent(
 
     val iconCache = remember(mode, showLabels, mapReady) { mutableMapOf<String, BitmapDescriptor>() }
 
-    fun storeIcon(store: Store, highlighted: Boolean): BitmapDescriptor? {
+    fun storeIcon(store: Store, scale: Float): BitmapDescriptor? {
         if (!mapReady) return null
         if (mode == MarkerIconHelper.DisplayMode.HIDDEN) return null
-        val cacheKey = "${store.id}|${mode.name}|$showLabels|${store.name}|h=$highlighted"
+        // تقريب المقياس لتقليل إدخالات الكاش أثناء الأنيميشن
+        val scaleKey = (scale * 25f).toInt()
+        val cacheKey = "${store.id}|${mode.name}|$showLabels|${store.name}|s=$scaleKey"
         iconCache[cacheKey]?.let { return it }
         val rawBmp: AndroidBitmap? = if (showLabels && mode != MarkerIconHelper.DisplayMode.CIRCLE) {
             MarkerIconHelper.getAndroidMarkerBitmapWithLabel(store.category, store.name, mode)
@@ -106,9 +113,9 @@ fun GoogleMapContent(
             MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
         }
         var bmp = rawBmp ?: return null
-        if (highlighted) {
-            val w = (bmp.width * 1.2f).toInt().coerceAtLeast(1)
-            val h = (bmp.height * 1.2f).toInt().coerceAtLeast(1)
+        if (kotlin.math.abs(scale - 1f) > 0.02f) {
+            val w = (bmp.width * scale).toInt().coerceAtLeast(1)
+            val h = (bmp.height * scale).toInt().coerceAtLeast(1)
             bmp = AndroidBitmap.createScaledBitmap(bmp, w, h, true)
         }
         return try {
@@ -155,14 +162,15 @@ fun GoogleMapContent(
         if (mapReady && mode != MarkerIconHelper.DisplayMode.HIDDEN) {
             stores.forEach { store ->
                 val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
-                val icon = storeIcon(store, highlighted) ?: return@forEach
+                val scale = if (highlighted) highlightScale else 1f
+                val icon = storeIcon(store, scale) ?: return@forEach
                 Marker(
                     state = MarkerState(position = LatLng(store.latitude, store.longitude)),
                     title = store.name,
                     snippet = store.category,
                     icon = icon,
                     anchor = markerAnchor,
-                    zIndex = if (highlighted) 2f else 0f,
+                    zIndex = if (highlighted) 5f else 0f,
                     onClick = {
                         onMarkerClick(store)
                         true
