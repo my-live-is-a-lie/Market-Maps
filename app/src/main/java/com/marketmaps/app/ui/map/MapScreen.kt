@@ -286,17 +286,8 @@ fun MapScreen(
         }
     }
 
-    var appliedSavedCamera by remember { mutableStateOf(false) }
-    LaunchedEffect(mapViewRef) {
-        val mapView = mapViewRef ?: return@LaunchedEffect
-        if (appliedSavedCamera) return@LaunchedEffect
-        val loc = appPreferences.lastLocation.first()
-        if (loc != null) {
-            mapView.model.mapViewPosition.setCenter(LatLong(loc.first, loc.second))
-            mapView.model.mapViewPosition.zoomLevel = loc.third.toInt().toByte()
-        }
-        appliedSavedCamera = true
-    }
+    // لا حاجة لنقل Mapsforge للموقع المحفوظ بعد إنشائها: الخريطة لا تُنشأ إلا بعد
+    // قراءة الموقع (locationReady)، فالموضع الأولي في factory صحيح من البداية.
 
     LaunchedEffect(offlineMode, mapViewRef, mapProvider, activeMapFileName) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect

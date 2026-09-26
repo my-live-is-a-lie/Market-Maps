@@ -90,13 +90,19 @@ fun GoogleMapContent(
         currentZoom = cameraPositionState.position.zoom
     }
 
-    // لا نحفظ الموقع قبل اكتمال تحميل الخريطة — يمنع استبدال الموقع المحفوظ بالقاهرة
+    // لا نحفظ الموقع قبل اكتمال تحميل الخريطة، ولا قبل أول حركة حقيقية للكاميرا:
+    // الحالة الأولى (isMoving = false قبل أي حركة) ليست اختيار المستخدم.
+    var cameraHasMoved by remember { mutableStateOf(false) }
     LaunchedEffect(cameraPositionState.isMoving, mapReady) {
         if (!mapReady) return@LaunchedEffect
-        if (!cameraPositionState.isMoving) {
+        if (cameraPositionState.isMoving) {
+            cameraHasMoved = true
+        } else {
             val pos = cameraPositionState.position
             currentZoom = pos.zoom
-            onCameraIdle(pos.target.latitude, pos.target.longitude, pos.zoom)
+            if (cameraHasMoved) {
+                onCameraIdle(pos.target.latitude, pos.target.longitude, pos.zoom)
+            }
         }
     }
 
