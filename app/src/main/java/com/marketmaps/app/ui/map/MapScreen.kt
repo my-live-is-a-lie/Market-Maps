@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -125,6 +126,7 @@ fun MapScreen(
     val appPreferences = remember { AppPreferences(context) }
     val savedLocation by appPreferences.lastLocation.collectAsState(initial = null)
     val offlineMode by appPreferences.offlineMode.collectAsState(initial = false)
+    val activeMapFileName by appPreferences.mapFileName.collectAsState(initial = null)
     val recentSearches by appPreferences.recentSearches.collectAsState(initial = emptyList())
     val recentSearchLimit by appPreferences.recentSearchLimit.collectAsState(initial = 5)
     val mapProvider by appPreferences.mapProvider.collectAsState(initial = MapProvider.MAPSFORGE)
@@ -183,7 +185,7 @@ fun MapScreen(
     val highlightScale by highlightScaleAnim.asState()
     // تقليل إعادة رسم العلامات أثناء الحركة (يمنع وميض موقعك)
     val highlightScaleBucket = ((highlightScale * 8f).toInt() / 8f)
-    var cameraTarget by remember { mutableStateOf<CameraTarget?>(null) }
+    var cameraTarget by remember { mutableStateOf<Triple<Double, Double, Float>?>(null) }
     var detailsCardHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val detailsCardVisible = selectedStore != null
@@ -211,7 +213,7 @@ fun MapScreen(
     }
 
     fun moveCamera(lat: Double, lon: Double, zoom: Float = 17f) {
-        cameraTarget = CameraTarget(lat, lon, zoom)
+        cameraTarget = Triple(lat, lon, zoom)
         mapViewRef?.model?.mapViewPosition?.animateTo(LatLong(lat, lon))
         mapViewRef?.model?.mapViewPosition?.zoomLevel = zoom.toInt().toByte()
     }
@@ -230,13 +232,9 @@ fun MapScreen(
     val userLatRef = remember { mutableStateOf(userLat) }
     userLatRef.value = userLat
     val userLonRef = remember { mutableStateOf(userLon) }
-    val highlightedStoreIdRef = remember { mutableStateOf(highlightedStoreId) }
-    val highlightScaleRef = remember { mutableStateOf(highlightScaleBucket) }
     val selectedStoreRef = remember { mutableStateOf(selectedStore) }
     userLonRef.value = userLon
     selectedStoreRef.value = selectedStore
-    highlightedStoreIdRef.value = highlightedStoreId
-    highlightScaleRef.value = highlightScaleBucket
 
     fun saveCameraPosition() {
         val mv = mapViewRef ?: return
@@ -293,12 +291,23 @@ fun MapScreen(
         appliedSavedCamera = true
     }
 
-    LaunchedEffect(offlineMode, mapViewRef, mapProvider) {
+    LaunchedEffect(offlineMode, mapViewRef, mapProvider, activeMapFileName) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
         val mapView = mapViewRef ?: return@LaunchedEffect
         val bundle = layerBundle ?: return@LaunchedEffect
-        if (offlineMode && MapDownloader.isEgyptMapDownloaded(context)) MapLayerHelper.applyOffline(context, mapView, bundle)
-        else MapLayerHelper.applyOnline(mapView, bundle)
+        if (offlineMode) {
+            val preferred = activeMapFileName?.takeIf { MapDownloader.isDownloaded(context, it) }
+            val anyFile = preferred
+                ?: MapDownloader.listDownloaded(context).firstOrNull()?.fileName
+            if (anyFile != null) {
+                MapLayerHelper.applyOffline(context, mapView, bundle, anyFile)
+            } else {
+                Toast.makeText(context, "لا توجد خريطة محمّلة. حمّلها من الإعدادات.", Toast.LENGTH_LONG).show()
+                MapLayerHelper.applyOnline(mapView, bundle)
+            }
+        } else {
+            MapLayerHelper.applyOnline(mapView, bundle)
+        }
         addMarkersToMap(context, mapView, stores, userLat, userLon, highlightedStoreId, highlightScale)
     }
 
@@ -333,6 +342,20 @@ fun MapScreen(
     val initialLat = savedLocation?.first ?: 30.0444
     val initialLon = savedLocation?.second ?: 31.2357
     val initialZoom = (savedLocation?.third ?: 14.0).toFloat()
+
+
+    // زر الرجوع يغلق الطبقات المفتوحة أولاً بدل الخروج من التطبيق
+    BackHandler(enabled = sideMenuOpen || searchExpanded || selectedStore != null || isAddMode || isMenuExpanded || showAddDialog || showFilterDialog) {
+        when {
+            showFilterDialog -> showFilterDialog = false
+            showAddDialog -> showAddDialog = false
+            sideMenuOpen -> sideMenuOpen = false
+            selectedStore != null -> { selectedStore = null; detailsCardHeightPx = 0 }
+            isAddMode -> isAddMode = false
+            searchExpanded -> searchExpanded = false
+            isMenuExpanded -> isMenuExpanded = false
+        }
+    }
 
     Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
@@ -389,7 +412,7 @@ fun MapScreen(
                         val z = mv.model.mapViewPosition.zoomLevel.toInt()
                         if (z == lastZoom[0]) return@addObserver
                         lastZoom[0] = z
-                        addMarkersToMap(ctx, mv, storesRef.value, userLatRef.value, userLonRef.value, highlightedStoreIdRef.value, highlightScaleRef.value)
+                        addMarkersToMap(ctx, mv, storesRef.value, userLatRef.value, userLonRef.value, null, 1f)
                     }
 
                     val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
@@ -400,13 +423,8 @@ fun MapScreen(
                             }
                         }
                         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                            val nearest = findNearestStoreByPixels(
-                                mapView,
-                                storesRef.value,
-                                e.x,
-                                e.y,
-                                maxDistancePx = 48f * ctx.resources.displayMetrics.density
-                            )
+                            val tapped = mapView.mapViewProjection.fromPixels(e.x.toDouble(), e.y.toDouble())
+                            val nearest = findNearestStore(storesRef.value, tapped.latitude, tapped.longitude, 80.0)
                             if (nearest != null) {
                                 selectedStore = if (selectedStoreRef.value?.id == nearest.id) null else nearest
                                 if (selectedStore == null) detailsCardHeightPx = 0
@@ -689,37 +707,14 @@ fun MapScreen(
     }
 }
 
-/** اختيار أقرب محل بالبكسل على الشاشة — أدق من المسافة بالمتر عند كل مستويات التكبير */
-private fun findNearestStoreByPixels(
-    mapView: MapView,
-    stores: List<Store>,
-    tapX: Float,
-    tapY: Float,
-    maxDistancePx: Float
-): Store? {
-    return try {
-        val zoom = mapView.model.mapViewPosition.zoomLevel.toInt()
-        val centerLat = mapView.model.mapViewPosition.center.latitude
-        val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)
-        if (mode == MarkerIconHelper.DisplayMode.HIDDEN) return null
-
-        var nearest: Store? = null
-        var minDist = Float.MAX_VALUE
-        val projection = mapView.mapViewProjection
-        stores.forEach { store ->
-            val pt = projection.toPixels(LatLong(store.latitude, store.longitude))
-            val dx = pt.x - tapX
-            val dy = pt.y - tapY
-            val d = kotlin.math.sqrt(dx * dx + dy * dy)
-            if (d < minDist && d <= maxDistancePx) {
-                minDist = d
-                nearest = store
-            }
-        }
-        nearest
-    } catch (_: Exception) {
-        null
+private fun findNearestStore(stores: List<Store>, lat: Double, lon: Double, maxDistanceMeters: Double): Store? {
+    var nearest: Store? = null
+    var minDist = Double.MAX_VALUE
+    stores.forEach { store ->
+        val dist = haversineMeters(lat, lon, store.latitude, store.longitude)
+        if (dist < minDist && dist <= maxDistanceMeters) { minDist = dist; nearest = store }
     }
+    return nearest
 }
 
 private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
