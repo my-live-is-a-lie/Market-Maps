@@ -160,21 +160,25 @@ fun MapScreen(
     val highlightScaleAnim = remember { Animatable(1f) }
     LaunchedEffect(highlightedStoreId) {
         if (highlightedStoreId != null) {
+            // حركة ناعمة وبطيئة قليلاً: تصغير خفيف جداً ثم تكبير هادئ
             highlightScaleAnim.snapTo(1f)
-            highlightScaleAnim.animateTo(0.86f, animationSpec = tween(90))
             highlightScaleAnim.animateTo(
-                1.20f,
+                0.94f,
+                animationSpec = tween(durationMillis = 140)
+            )
+            highlightScaleAnim.animateTo(
+                1.18f,
                 animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMediumLow
+                    dampingRatio = 0.78f, // أقل اهتزازاً من MediumBouncy
+                    stiffness = 280f       // أبطأ من الافتراضي
                 )
             )
         } else {
             highlightScaleAnim.animateTo(
                 1f,
                 animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMedium
+                    dampingRatio = 0.90f,
+                    stiffness = 320f
                 )
             )
         }
@@ -498,7 +502,7 @@ fun MapScreen(
                     onPrevious = { goToNavResult(navIndex - 1) },
                     onNext = { goToNavResult(navIndex + 1) },
                     onDismiss = { navResults = emptyList(); navIndex = -1 },
-                    modifier = Modifier.align(AbsoluteAlignment.BottomLeft).padding(start = 12.dp, bottom = navBottomPad).zIndex(3f)
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = navBottomPad).zIndex(3f)
                 )
             }
 
