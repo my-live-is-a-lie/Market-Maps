@@ -90,7 +90,9 @@ fun GoogleMapContent(
         currentZoom = cameraPositionState.position.zoom
     }
 
-    LaunchedEffect(cameraPositionState.isMoving) {
+    // لا نحفظ الموقع قبل اكتمال تحميل الخريطة — يمنع استبدال الموقع المحفوظ بالقاهرة
+    LaunchedEffect(cameraPositionState.isMoving, mapReady) {
+        if (!mapReady) return@LaunchedEffect
         if (!cameraPositionState.isMoving) {
             val pos = cameraPositionState.position
             currentZoom = pos.zoom
