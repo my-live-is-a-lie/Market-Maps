@@ -402,27 +402,34 @@ private fun CoordsPopup(
     Surface(
         modifier = modifier
             .wrapContentWidth()
-            .widthIn(min = 150.dp, max = 190.dp)
             .shadow(6.dp, RoundedCornerShape(12.dp)),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(12.dp),
         color = scheme.primaryContainer
     ) {
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Text(
                 text = "احداثيات الموقع",
                 color = scheme.primary,
                 fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
             )
             Text(
-                text = "عرض ${"%.6f".format(latitude)}",
+                text = "عرض ${"%.5f".format(latitude)}",
                 color = scheme.onPrimaryContainer,
-                fontSize = 11.sp
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 4.dp)
             )
             Text(
-                text = "طول ${"%.6f".format(longitude)}",
+                text = "طول ${"%.5f".format(longitude)}",
                 color = scheme.onPrimaryContainer,
-                fontSize = 11.sp
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 2.dp)
             )
         }
     }
