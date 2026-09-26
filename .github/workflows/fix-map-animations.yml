@@ -15,16 +15,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Patch MapScreen + MarkerIconHelper + StoreDetails
+      - name: Apply patches
         run: |
           python3 << 'PY'
           from pathlib import Path
 
-          # ─── MapScreen.kt ───
           p = Path('app/src/main/java/com/marketmaps/app/ui/map/MapScreen.kt')
           c = p.read_text(encoding='utf-8')
 
-          old_highlight = '''    // تأثير نابض: تصغير خفيف ثم تكبير 20٪
+          old_h = '''    // تأثير نابض: تصغير خفيف ثم تكبير 20٪
     val highlightScaleAnim = remember { Animatable(1f) }
     LaunchedEffect(highlightedStoreId) {
         if (highlightedStoreId != null) {
@@ -53,106 +52,97 @@ jobs:
     }
     val highlightScale by highlightScaleAnim.asState()'''
 
-          new_highlight = '''    // تأثير تمييز سريع: تكبير خفيف دون إعادة بناء متكررة للعلامات
+          new_h = '''    // تأثير تمييز سريع
     val highlightScaleAnim = remember { Animatable(1f) }
     LaunchedEffect(highlightedStoreId) {
         if (highlightedStoreId != null) {
             highlightScaleAnim.snapTo(1f)
             highlightScaleAnim.animateTo(
                 1.14f,
-                animationSpec = spring(
-                    dampingRatio = 0.82f,
-                    stiffness = 900f
-                )
+                animationSpec = spring(dampingRatio = 0.82f, stiffness = 900f)
             )
         } else {
             highlightScaleAnim.snapTo(1f)
         }
     }
     val highlightScale by highlightScaleAnim.asState()
-    // تقليل مرات إعادة رسم العلامات أثناء الحركة (يمنع وميض موقعك)
     val highlightScaleBucket = ((highlightScale * 8f).toInt() / 8f)'''
 
-          if old_highlight not in c:
-              raise SystemExit('highlight block not found')
-          c = c.replace(old_highlight, new_highlight, 1)
-
-          # استخدام scale bucket في LaunchedEffect بدل القيمة المستمرة
+          assert old_h in c, 'highlight not found'
+          c = c.replace(old_h, new_h, 1)
           c = c.replace(
               'LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId, highlightScale)',
               'LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId, highlightScaleBucket)',
-              1
-          )
+              1)
           c = c.replace(
               'mapViewRef?.let { addMarkersToMap(context, it, stores, userLat, userLon, highlightedStoreId, highlightScale) }',
               'mapViewRef?.let { addMarkersToMap(context, it, stores, userLat, userLon, highlightedStoreId, highlightScaleBucket) }',
-              1
-          )
+              1)
 
-          # تسريع رفع الزر مع البطاقة
-          old_lift = '''    LaunchedEffect(cardLiftTargetPx) {
-        cardLiftAnim.animateTo(
-            cardLiftTargetPx,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMedium
-            )
-        )
-    }'''
-          new_lift = '''    LaunchedEffect(cardLiftTargetPx) {
-        cardLiftAnim.animateTo(
-            cardLiftTargetPx,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            )
-        )
-    }'''
-          # MediumLow is slower - use higher stiffness numeric
-          new_lift = '''    LaunchedEffect(cardLiftTargetPx) {
-        // نفس إحساس دخول البطاقة تقريباً حتى لا يسبق أحدهما الآخر
-        cardLiftAnim.animateTo(
-            cardLiftTargetPx,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = 700f
-            )
-        )
-    }'''
-          if old_lift not in c:
-              raise SystemExit('cardLift block not found')
-          c = c.replace(old_lift, new_lift, 1)
+          old_lift = '''            animationSpec = spring(\n                dampingRatio = Spring.DampingRatioNoBouncy,\n                stiffness = Spring.StiffnessMedium\n            )'''
+          # only first occurrence in cardLift
+          idx = c.find('LaunchedEffect(cardLiftTargetPx)')
+          assert idx > 0
+          sub = c[idx:idx+350]
+          if 'StiffnessMedium' in sub:
+              c = c[:idx] + sub.replace(
+                  'stiffness = Spring.StiffnessMedium',
+                  'stiffness = 700f',
+                  1
+              ) + c[idx+350:]
+              print('cardLift stiffness updated')
 
-          # أيقونة الموقع بحجم ثابت (لا تتغير مع وضع العرض فجأة)
-          old_user = '''        if (userLat != null && userLon != null) {
-            try {
-                val userBmp = MarkerIconHelper.getUserLocationBitmap(mode)
-                mapView.layerManager.layers.add(
-                    Marker(LatLong(userLat, userLon), userBmp, 0, -userBmp.height / 2)
-                )
-            } catch (_: Exception) {}
-        }'''
-          new_user = '''        if (userLat != null && userLon != null) {
-            try {
-                // حجم ثابت لعلامة موقعي حتى لا تومض أو تقفز عند تمييز محل أو تغيير الزوم
-                val userBmp = MarkerIconHelper.getUserLocationBitmap(MarkerIconHelper.DisplayMode.BUBBLE_MEDIUM)
-                mapView.layerManager.layers.add(
-                    Marker(LatLong(userLat, userLon), userBmp, 0, -userBmp.height / 2)
-                )
-            } catch (_: Exception) {}
-        }'''
-          if old_user not in c:
-              raise SystemExit('user marker block not found')
+          old_user = 'val userBmp = MarkerIconHelper.getUserLocationBitmap(mode)'
+          new_user = 'val userBmp = MarkerIconHelper.getUserLocationBitmap(MarkerIconHelper.DisplayMode.BUBBLE_MEDIUM)'
+          assert old_user in c
           c = c.replace(old_user, new_user, 1)
+
+          old_add = '''        val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)\n\n        if (mode != MarkerIconHelper.DisplayMode.HIDDEN) {\n            val ordered = if (highlightedStoreId == null) stores\n            else stores.sortedBy { if (it.id == highlightedStoreId) 1 else 0 }\n            ordered.forEach { store ->\n                try {\n                    val highlighted = highlightedStoreId != null && store.id == highlightedStoreId\n                    var androidBmp = MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)\n                        ?: return@forEach'''
+
+          new_add = '''        val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)\n        val zoomSize = MarkerIconHelper.sizeForZoom(zoom)\n\n        if (mode != MarkerIconHelper.DisplayMode.HIDDEN && zoomSize > 0) {\n            val ordered = if (highlightedStoreId == null) stores\n            else stores.sortedBy { if (it.id == highlightedStoreId) 1 else 0 }\n            ordered.forEach { store ->\n                try {\n                    val highlighted = highlightedStoreId != null && store.id == highlightedStoreId\n                    var androidBmp = MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)\n                        ?: return@forEach\n                    if (androidBmp.width != zoomSize && zoomSize > 0) {\n                        androidBmp = android.graphics.Bitmap.createScaledBitmap(\n                            androidBmp, zoomSize, zoomSize, true\n                        )\n                    }'''
+
+          # Use actual newlines not escaped
+          old_add = old_add.replace('\\n', '\n')
+          new_add = new_add.replace('\\n', '\n')
+          if old_add not in c:
+              # try without double escape
+              old_add2 = """        val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)
+
+        if (mode != MarkerIconHelper.DisplayMode.HIDDEN) {
+            val ordered = if (highlightedStoreId == null) stores
+            else stores.sortedBy { if (it.id == highlightedStoreId) 1 else 0 }
+            ordered.forEach { store ->
+                try {
+                    val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
+                    var androidBmp = MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
+                        ?: return@forEach"""
+              new_add2 = """        val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)
+        val zoomSize = MarkerIconHelper.sizeForZoom(zoom)
+
+        if (mode != MarkerIconHelper.DisplayMode.HIDDEN && zoomSize > 0) {
+            val ordered = if (highlightedStoreId == null) stores
+            else stores.sortedBy { if (it.id == highlightedStoreId) 1 else 0 }
+            ordered.forEach { store ->
+                try {
+                    val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
+                    var androidBmp = MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
+                        ?: return@forEach
+                    if (androidBmp.width != zoomSize && zoomSize > 0) {
+                        androidBmp = android.graphics.Bitmap.createScaledBitmap(
+                            androidBmp, zoomSize, zoomSize, true
+                        )
+                    }"""
+              assert old_add2 in c, 'addMarkers not found'
+              c = c.replace(old_add2, new_add2, 1)
+          else:
+              c = c.replace(old_add, new_add, 1)
 
           p.write_text(c, encoding='utf-8')
           print('MapScreen OK')
 
-          # ─── MarkerIconHelper.kt ───
           p2 = Path('app/src/main/java/com/marketmaps/app/ui/map/MarkerIconHelper.kt')
           c2 = p2.read_text(encoding='utf-8')
-
-          old_mode = '''    fun displayModeForZoom(zoom: Int, latitude: Double = 30.0): DisplayMode {
+          old_mode = """    fun displayModeForZoom(zoom: Int, latitude: Double = 30.0): DisplayMode {
         val approxScaleMeters = metersPerPixel(latitude, zoom) * 100.0
         return when {
             approxScaleMeters <= 70 -> DisplayMode.BUBBLE_LARGE
@@ -173,10 +163,8 @@ jobs:
             DisplayMode.CIRCLE -> 20
             DisplayMode.HIDDEN -> 0
         }
-    }'''
-
-          new_mode = '''    fun displayModeForZoom(zoom: Int, latitude: Double = 30.0): DisplayMode {
-        // عتبات حسب مستوى الزوم لتقليل القفزات المفاجئة
+    }"""
+          new_mode = """    fun displayModeForZoom(zoom: Int, latitude: Double = 30.0): DisplayMode {
         return when {
             zoom >= 16 -> DisplayMode.BUBBLE_LARGE
             zoom >= 14 -> DisplayMode.BUBBLE_MEDIUM
@@ -185,9 +173,6 @@ jobs:
         }
     }
 
-    /**
-     * حجم الأيقونة حسب الزوم بخطوات متقاربة لانتقال أنعم (أقرب لسلوك خرائط جوجل).
-     */
     fun sizeForZoom(zoom: Int): Int {
         return when {
             zoom >= 18 -> 88
@@ -202,9 +187,6 @@ jobs:
         }
     }
 
-    /**
-     * أحجام أقرب لحجم أيقونات خرائط جوجل — مع خطوات متقاربة.
-     */
     fun sizeForMode(mode: DisplayMode): Int {
         return when (mode) {
             DisplayMode.BUBBLE_LARGE -> 80
@@ -212,85 +194,29 @@ jobs:
             DisplayMode.CIRCLE -> 28
             DisplayMode.HIDDEN -> 0
         }
-    }'''
-
-          if old_mode not in c2:
-              raise SystemExit('MarkerIconHelper mode block not found')
+    }"""
+          assert old_mode in c2, 'mode block not found'
           c2 = c2.replace(old_mode, new_mode, 1)
-
-          # استخدام sizeForZoom عند بناء الأيقونة إن أمكن — عبر تعديل addMarkers في MapScreen
           p2.write_text(c2, encoding='utf-8')
           print('MarkerIconHelper OK')
 
-          # في addMarkersToMap: استخدام حجم حسب الزوم مباشرة
-          c = p.read_text(encoding='utf-8')
-          old_add = '''        val zoom = mapView.model.mapViewPosition.zoomLevel.toInt()
-        val centerLat = mapView.model.mapViewPosition.center.latitude
-        val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)
-
-        if (mode != MarkerIconHelper.DisplayMode.HIDDEN) {
-            val ordered = if (highlightedStoreId == null) stores
-            else stores.sortedBy { if (it.id == highlightedStoreId) 1 else 0 }
-            ordered.forEach { store ->
-                try {
-                    val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
-                    var androidBmp = MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
-                        ?: return@forEach'''
-
-          new_add = '''        val zoom = mapView.model.mapViewPosition.zoomLevel.toInt()
-        val centerLat = mapView.model.mapViewPosition.center.latitude
-        val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)
-        val zoomSize = MarkerIconHelper.sizeForZoom(zoom)
-
-        if (mode != MarkerIconHelper.DisplayMode.HIDDEN && zoomSize > 0) {
-            val ordered = if (highlightedStoreId == null) stores
-            else stores.sortedBy { if (it.id == highlightedStoreId) 1 else 0 }
-            ordered.forEach { store ->
-                try {
-                    val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
-                    var androidBmp = MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
-                        ?: return@forEach
-                    // ملاءمة الحجم لمستوى الزوم الحالي بخطوات ناعمة
-                    if (androidBmp.width != zoomSize && zoomSize > 0) {
-                        androidBmp = android.graphics.Bitmap.createScaledBitmap(
-                            androidBmp, zoomSize, zoomSize, true
-                        )
-                    }'''
-
-          if old_add not in c:
-              raise SystemExit('addMarkers block not found')
-          c = c.replace(old_add, new_add, 1)
-          p.write_text(c, encoding='utf-8')
-          print('addMarkers size OK')
-
-          # ─── StoreDetailsDialog: تسريع دخول البطاقة ───
           p3 = Path('app/src/main/java/com/marketmaps/app/ui/map/StoreDetailsDialog.kt')
           c3 = p3.read_text(encoding='utf-8')
-          old_enter = '''        enterY.animateTo(
-            0f,
-            spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
-        )'''
-          new_enter = '''        enterY.animateTo(
-            0f,
-            spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 700f)
-        )'''
-          if old_enter not in c3:
-              print('WARN: enterY block not found')
-          else:
-              c3 = c3.replace(old_enter, new_enter, 1)
-              p3.write_text(c3, encoding='utf-8')
-              print('StoreDetails OK')
-
-          print('ALL PATCHES DONE')
+          c3 = c3.replace(
+              'spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)',
+              'spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 700f)',
+              1
+          )
+          p3.write_text(c3, encoding='utf-8')
+          print('StoreDetails OK')
+          print('ALL DONE')
           PY
 
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/src/main/java/com/marketmaps/app/ui/map/MapScreen.kt \
-                  app/src/main/java/com/marketmaps/app/ui/map/MarkerIconHelper.kt \
-                  app/src/main/java/com/marketmaps/app/ui/map/StoreDetailsDialog.kt
+          git add app/src/main/java/com/marketmaps/app/ui/map/*.kt
           git diff --staged --stat
-          git commit -m "fix: مزامنة حركة البطاقة/الزر، تقليل وميض الموقع، تسريع التمييز، تنعيم حجم الأيقونات مع الزوم" || true
+          git commit -m "fix: مزامنة البطاقة والزر، تقليل وميض الموقع، تسريع التمييز، تنعيم الزوم" || true
           git push
