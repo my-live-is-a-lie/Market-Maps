@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -931,10 +932,12 @@ private fun BoxScope.MapSideMenuOverlay(
             }
     )
 
+    // AbsoluteRoundedCornerShape: لا تنعكس مع RTL — تدوير الحافة الداخلية المواجهة للخريطة فقط
+    val cornerRadius = 12.dp
     val panelShape = if (activeSide == DrawerSide.RIGHT) {
-        RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp)
+        AbsoluteRoundedCornerShape(topLeft = cornerRadius, bottomLeft = cornerRadius)
     } else {
-        RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp)
+        AbsoluteRoundedCornerShape(topRight = cornerRadius, bottomRight = cornerRadius)
     }
 
     // اللوحة: absoluteOffset لتفادي انعكاس RTL + ظل + سحب بسرعة
