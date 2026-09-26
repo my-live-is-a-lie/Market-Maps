@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -73,23 +74,21 @@ fun SearchResultNav(
     Column(
         modifier = modifier
             .widthIn(min = 148.dp, max = 168.dp)
-            .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+            .absoluteOffset { IntOffset(offsetX.value.roundToInt(), 0) }
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDrag = { change, drag ->
                         change.consume()
-                        // سحب لليسار فقط (قيمة سالبة في LTR/RTL نستخدم الإزاحة السالبة للإغلاق)
-                        val next = (offsetX.value + drag.x).let {
-                            // نسمح بالسحب لليسار أكثر، وللAmiين قليلاً فقط
-                            it.coerceIn(-dismissPx * 2f, dismissPx * 0.25f)
-                        }
+                        // absoluteOffset: السالب = يسار الشاشة دائماً (لا ينعكس مع العربية)
+                        // نسمح بالتحريك لليسار فقط
+                        val next = (offsetX.value + drag.x).coerceIn(-dismissPx * 2.5f, 0f)
                         scope.launch { offsetX.snapTo(next) }
                     },
                     onDragEnd = {
                         scope.launch {
-                            if (offsetX.value <= -dismissPx * 0.45f) {
+                            if (offsetX.value <= -dismissPx * 0.40f) {
                                 offsetX.animateTo(
-                                    -dismissPx * 2.5f,
+                                    -dismissPx * 3f,
                                     spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMedium)
                                 )
                                 onDismiss()
