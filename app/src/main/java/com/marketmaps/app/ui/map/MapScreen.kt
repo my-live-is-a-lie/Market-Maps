@@ -412,14 +412,7 @@ fun MapScreen(
                 modifier = Modifier.fillMaxSize(),
                 update = { mapView -> mapViewRef = mapView; layerBundle?.let { MapLayerHelper.resume(it) } },
                 onRelease = { mapView ->
-                    try {
-                        val center = mapView.model.mapViewPosition.center
-                        val zoom = mapView.model.mapViewPosition.zoomLevel.toDouble()
-                        kotlinx.coroutines.runBlocking {
-                            appPreferences.saveLastLocation(center.latitude, center.longitude, zoom)
-                        }
-                    } catch (_: Exception) {
-                    }
+                    // الموقع يُحفظ مسبقاً في ON_PAUSE و onDispose — لا تستخدم runBlocking على الخيط الرئيسي
                     layerBundle?.let { MapLayerHelper.destroy(it) }
                     mapView.destroy(); mapViewRef = null; layerBundle = null
                 }
@@ -622,14 +615,18 @@ fun MapScreen(
                 AddStoreDialog(
                     latitude = selectedLat, longitude = selectedLon,
                     onDismiss = { showAddDialog = false },
-                    onSave = { name, categoryPath, description ->
+                    onSave = { name, categoryPath, description, onComplete ->
                         scope.launch {
                             val store = Store(name = name, category = categoryPath, description = description, latitude = selectedLat, longitude = selectedLon)
                             val result = storeRepository.addStore(store)
                             if (result.isSuccess) {
                                 Toast.makeText(context, "تم حفظ الموقع بنجاح", Toast.LENGTH_SHORT).show()
                                 refreshStores(); showAddDialog = false; isAddMode = false
-                            } else Toast.makeText(context, "فشل الحفظ: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                onComplete(true)
+                            } else {
+                                Toast.makeText(context, "فشل الحفظ: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                onComplete(false)
+                            }
                         }
                     }
                 )
@@ -639,7 +636,7 @@ fun MapScreen(
                 AddStoreDialog(
                     latitude = store.latitude, longitude = store.longitude, initialStore = store,
                     onDismiss = { storeToEdit = null },
-                    onSave = { name, categoryPath, description ->
+                    onSave = { name, categoryPath, description, onComplete ->
                         scope.launch {
                             val updated = store.copy(name = name, category = categoryPath, description = description)
                             val result = storeRepository.updateStore(updated)
@@ -651,7 +648,11 @@ fun MapScreen(
                                 detailsCardHeightPx = 0
                                 refreshStores()
                                 selectedStore = updated
-                            } else Toast.makeText(context, "فشل التحديث", Toast.LENGTH_LONG).show()
+                                onComplete(true)
+                            } else {
+                                Toast.makeText(context, "فشل التحديث", Toast.LENGTH_LONG).show()
+                                onComplete(false)
+                            }
                         }
                     }
                 )
