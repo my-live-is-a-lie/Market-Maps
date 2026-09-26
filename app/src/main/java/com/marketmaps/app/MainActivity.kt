@@ -33,7 +33,6 @@ import kotlinx.coroutines.flow.first
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        CrashHandler.install(this)
         enableEdgeToEdge()
         setContent {
             val context = LocalContext.current
