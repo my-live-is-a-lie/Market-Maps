@@ -1,0 +1,42 @@
+name: Remove Themed Icon Setting
+
+on:
+  push:
+    paths:
+      - '.github/workflows/remove-themed-icon-setting.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove ThemedIconSettingsSection call and revert subtitle
+        run: |
+          python3 -c "
+          from pathlib import Path
+          p = Path('app/src/main/java/com/marketmaps/app/ui/settings/SettingsScreen.kt')
+          c = p.read_text(encoding='utf-8')
+          c = c.replace('\n\n            ThemedIconSettingsSection()', '')
+          c = c.replace(
+              'subtitle = \"النمط ولون التمييز وأيقونة النظام\"',
+              'subtitle = \"النمط الفاتح/الغامق ولون التمييز\"'
+          )
+          p.write_text(c, encoding='utf-8')
+          print('patched', len(c))
+          assert 'ThemedIconSettingsSection' not in c
+          print('OK')
+          "
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/marketmaps/app/ui/settings/SettingsScreen.kt
+          git diff --staged --stat
+          git commit -m "remove: إزالة قسم أيقونة التطبيق من مظهر التطبيق" || true
+          git push
