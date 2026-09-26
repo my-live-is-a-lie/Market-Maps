@@ -12,6 +12,7 @@ import android.graphics.RectF
 import com.caverock.androidsvg.SVG
 import org.mapsforge.core.graphics.Bitmap
 import org.mapsforge.map.android.graphics.AndroidBitmap as MapsforgeAndroidBitmap
+import android.util.LruCache
 import kotlin.math.cos
 import kotlin.math.pow
 
@@ -22,6 +23,12 @@ import kotlin.math.pow
 object MarkerIconHelper {
 
     private var appContext: Context? = null
+
+    private val bitmapCache = object : LruCache<String, AndroidBitmap>(48) {
+        override fun sizeOf(key: String, value: AndroidBitmap): Int =
+            (value.byteCount / 1024).coerceAtLeast(1)
+    }
+
 
     private val HEALTH_COLOR = Color.parseColor("#E53935")
 
@@ -296,6 +303,8 @@ object MarkerIconHelper {
     }
 
     private fun composeBubble(bubbleColor: Int, iconName: String, size: Int): AndroidBitmap {
+        val cacheKey = "b|${iconName}|${bubbleColor}|${size}"
+        bitmapCache.get(cacheKey)?.let { return it }
         val bmp = AndroidBitmap.createBitmap(size, size, AndroidBitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
         val ctx = appContext
@@ -330,7 +339,8 @@ object MarkerIconHelper {
                 canvas.drawBitmap(iconBmp, left, top, whitePaint)
                 iconBmp.recycle()
 
-                return bmp
+                bitmapCache.put(cacheKey, bmp)
+        return bmp
             } catch (_: Exception) {
             }
         }
@@ -348,10 +358,13 @@ object MarkerIconHelper {
             close()
         }
         canvas.drawPath(tip, p)
+        bitmapCache.put(cacheKey, bmp)
         return bmp
     }
 
     private fun composeCircle(color: Int, size: Int): AndroidBitmap {
+        val cacheKey = "c|${color}|${size}"
+        bitmapCache.get(cacheKey)?.let { return it }
         val bmp = AndroidBitmap.createBitmap(size, size, AndroidBitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
         val ctx = appContext
@@ -369,7 +382,8 @@ object MarkerIconHelper {
                 paint.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
                 canvas.drawBitmap(temp, 0f, 0f, paint)
                 temp.recycle()
-                return bmp
+                bitmapCache.put(cacheKey, bmp)
+        return bmp
             } catch (_: Exception) {
             }
         }
@@ -379,6 +393,7 @@ object MarkerIconHelper {
             this.color = color
         }
         canvas.drawCircle(size / 2f, size / 2f, size * 0.4f, p)
+        bitmapCache.put(cacheKey, bmp)
         return bmp
     }
 
