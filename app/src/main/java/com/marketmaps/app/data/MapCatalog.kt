@@ -1,5 +1,7 @@
 package com.marketmaps.app.data
 
+import com.marketmaps.app.util.TextNormalizer
+
 /**
  * كتالوج خرائط Mapsforge المجانية (مستوى القارة → الدولة).
  * المصدر لا يوفّر ملفات على مستوى المحافظة حالياً.
@@ -88,19 +90,8 @@ object MapCatalog {
     fun byContinent(continentId: String): List<MapRegion> =
         regions.filter { it.continentId == continentId }
 
-    /** تطبيع بسيط للنص العربي لتسهيل البحث */
-    private fun normalize(s: String): String {
-        return s.trim()
-            .lowercase()
-            .replace("أ", "ا")
-            .replace("إ", "ا")
-            .replace("آ", "ا")
-            .replace("ة", "ه")
-            .replace("ى", "ي")
-            .replace("ؤ", "و")
-            .replace("ئ", "ي")
-            .replace(" ", "")
-    }
+    private fun normalize(s: String): String =
+        TextNormalizer.normalize(s).replace(" ", "")
 
     fun search(query: String): List<MapRegion> {
         val q = normalize(query)
