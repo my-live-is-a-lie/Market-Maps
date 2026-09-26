@@ -1,5 +1,6 @@
 package com.marketmaps.app.data
 
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
@@ -13,13 +14,14 @@ class StoreRepository {
 
     suspend fun addStore(store: Store): Result<String> {
         return try {
-            val data = hashMapOf(
+            val data = hashMapOf<String, Any>(
                 "name" to store.name,
                 "category" to store.category,
                 "description" to store.description,
                 "latitude" to store.latitude,
                 "longitude" to store.longitude,
-                "createdAt" to store.createdAt
+                // وقت السيرفر — لا يعتمد على ساعة الهاتف
+                "createdAt" to FieldValue.serverTimestamp()
             )
             val documentRef = collection.add(data).await()
             Result.success(documentRef.id)
@@ -33,6 +35,9 @@ class StoreRepository {
             val snapshot = collection.get().await()
             val stores = snapshot.documents.mapNotNull { doc ->
                 try {
+                    val created = doc.getTimestamp("createdAt")?.toDate()?.time
+                        ?: doc.getLong("createdAt")
+                        ?: 0L
                     Store(
                         id = doc.id,
                         name = doc.getString("name") ?: "",
@@ -40,7 +45,7 @@ class StoreRepository {
                         description = doc.getString("description") ?: "",
                         latitude = doc.getDouble("latitude") ?: 0.0,
                         longitude = doc.getDouble("longitude") ?: 0.0,
-                        createdAt = doc.getLong("createdAt") ?: 0L
+                        createdAt = created
                     )
                 } catch (e: Exception) {
                     null
@@ -52,29 +57,24 @@ class StoreRepository {
         }
     }
 
-    /**
-     * تحديث محل موجود.
-     */
     suspend fun updateStore(store: Store): Result<Unit> {
         return try {
             if (store.id.isBlank()) return Result.failure(Exception("معرف المحل غير موجود"))
-            val data = hashMapOf(
+            val data = hashMapOf<String, Any>(
                 "name" to store.name,
                 "category" to store.category,
                 "description" to store.description,
                 "latitude" to store.latitude,
-                "longitude" to store.longitude
+                "longitude" to store.longitude,
+                "updatedAt" to FieldValue.serverTimestamp()
             )
-            collection.document(store.id).update(data as Map<String, Any>).await()
+            collection.document(store.id).update(data).await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    /**
-     * حذف محل.
-     */
     suspend fun deleteStore(storeId: String): Result<Unit> {
         return try {
             if (storeId.isBlank()) return Result.failure(Exception("معرف المحل غير موجود"))
