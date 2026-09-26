@@ -515,7 +515,7 @@ fun MapScreen(
                     // AbsoluteAlignment.BottomLeft = اليسار الفعلي دائماً (لا ينعكس مع العربية)
                     modifier = Modifier
                         .align(AbsoluteAlignment.BottomLeft)
-                        .padding(start = 12.dp, bottom = navBottomPad)
+                        .padding(left = 12.dp, bottom = navBottomPad)
                         .zIndex(3f)
                 )
             }
