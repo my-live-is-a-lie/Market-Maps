@@ -156,7 +156,7 @@ fun StoreDetailsBottomCard(
                                 }
                             }
                             when (dragAxis) {
-                                'H' -> scope.launch { offsetX.snapTo(offsetX.value + drag.x) }
+                                'H' -> scope.launch { offsetX.snapTo(offsetX.value + drag.x * 1.15f) }
                                 'V' -> scope.launch {
                                     offsetY.snapTo((offsetY.value + drag.y).coerceAtLeast(0f))
                                 }
@@ -164,7 +164,7 @@ fun StoreDetailsBottomCard(
                             }
                         },
                         onDragEnd = {
-                            val threshX = cardW * 0.28f
+                            val threshX = cardW * 0.15f // سحب جانبي أسهل
                             val threshY = cardH * 0.28f
                             val goH = abs(offsetX.value) >= threshX
                             val goV = offsetY.value >= threshY
