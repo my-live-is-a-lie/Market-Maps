@@ -879,7 +879,7 @@ private fun BoxScope.MapSideMenuOverlay(
                         onDragStopped = { velocity ->
                             dragging = false
                             val shouldOpen = decideOpen(progress.value, velocity)
-                            scope.launch { settle(shouldOpen, velocity) }
+                            settle(shouldOpen, velocity)
                         }
                     )
             )
@@ -907,7 +907,7 @@ private fun BoxScope.MapSideMenuOverlay(
                         onDragStopped = { velocity ->
                             dragging = false
                             val shouldOpen = decideOpen(progress.value, -velocity)
-                            scope.launch { settle(shouldOpen, -velocity) }
+                            settle(shouldOpen, -velocity)
                         }
                     )
             )
@@ -960,7 +960,7 @@ private fun BoxScope.MapSideMenuOverlay(
                     dragging = false
                     val signedVelocity = if (activeSide == DrawerSide.RIGHT) -velocity else velocity
                     val shouldOpen = decideOpen(progress.value, signedVelocity)
-                    scope.launch { settle(shouldOpen, signedVelocity) }
+                    settle(shouldOpen, signedVelocity)
                 }
             )
     ) {
