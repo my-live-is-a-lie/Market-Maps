@@ -498,7 +498,7 @@ fun MapScreen(
                     onPrevious = { goToNavResult(navIndex - 1) },
                     onNext = { goToNavResult(navIndex + 1) },
                     onDismiss = { navResults = emptyList(); navIndex = -1 },
-                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = navBottomPad).zIndex(3f)
+                    modifier = Modifier.align(AbsoluteAlignment.BottomLeft).padding(start = 12.dp, bottom = navBottomPad).zIndex(3f)
                 )
             }
 
