@@ -411,12 +411,12 @@ fun MapScreen(
                     val mapView = MapView(ctx).apply {
                         isClickable = true
                         setBuiltInZoomControls(false)
-                        // تكبير عناصر الرسم لتحسين وضوح التسميات (خصوصاً الأوفلاين)
-                        val density = ctx.resources.displayMetrics.density
-                        model.displayModel.setUserScaleFactor(1.0f)
+                        // لا نضبط userScaleFactor: Mapsforge يضرب مسبقاً في كثافة الشاشة
+                        // (deviceScaleFactor = density). الضرب في density مرة ثانية كان يضخم
+                        // البلاطة إلى 512–1024px ويرفع ذاكرة البلاطات إلى >130MB.
+                        // وضوح نصوص الأوفلاين يُعالج عبر textScale في MapLayerHelper.
                     }
-                    val cache = MapLayerHelper.createTileCache(ctx, mapView)
-                    val bundle = MapLayerHelper.LayerBundle(tileCache = cache)
+                    val bundle = MapLayerHelper.createBundle(ctx, mapView)
                     layerBundle = bundle
                     MapLayerHelper.applyOnline(mapView, bundle)
                     mapView.model.mapViewPosition.setCenter(LatLong(initialLat, initialLon))
@@ -457,8 +457,9 @@ fun MapScreen(
                 update = { mapView -> mapViewRef = mapView; layerBundle?.let { MapLayerHelper.resume(it) } },
                 onRelease = { mapView ->
                     // الموقع يُحفظ مسبقاً في ON_PAUSE و onDispose — لا تستخدم runBlocking على الخيط الرئيسي
-                    layerBundle?.let { MapLayerHelper.destroy(it) }
-                    mapView.destroy(); mapViewRef = null; layerBundle = null
+                    val bundle = layerBundle
+                    if (bundle != null) MapLayerHelper.destroy(mapView, bundle) else mapView.destroy()
+                    mapViewRef = null; layerBundle = null
                 }
             )
 
