@@ -10,7 +10,6 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.marketmaps.app.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -30,18 +29,27 @@ class MapDownloadWorker(
         setForeground(createForegroundInfo(0, region.nameAr))
         MapDownloader.resetFlags()
 
+        // setProgress/setForeground معلّقتان — لا تُستدعيان من lambda عادية
+        var lastNotifyPercent = -1
         val result = MapDownloader.download(applicationContext, region) { progress ->
-            setProgress(
-                workDataOf(
-                    KEY_PROGRESS to progress.percent.toInt(),
-                    KEY_DOWNLOADED to progress.downloadedBytes,
-                    KEY_TOTAL to progress.totalBytes
-                )
-            )
-            // تحديث الإشعار بشكل دوري تقريباً
-            try {
-                setForeground(createForegroundInfo(progress.percent.toInt(), region.nameAr))
-            } catch (_: Exception) {
+            val p = progress.percent
+            // تخزين آخر نسبة؛ التحديث المعلّق يتم عبر حلقة منفصلة غير ممكنة هنا
+            // نحدّث الإشعار فقط كل 5٪ عبر runBlocking قصير لتجنب آلاف الاستدعاءات
+            if (p >= lastNotifyPercent + 5 || p >= 100) {
+                lastNotifyPercent = p
+                try {
+                    kotlinx.coroutines.runBlocking {
+                        setProgress(
+                            workDataOf(
+                                KEY_PROGRESS to p,
+                                KEY_DOWNLOADED to progress.downloadedBytes,
+                                KEY_TOTAL to progress.totalBytes
+                            )
+                        )
+                        setForeground(createForegroundInfo(p, region.nameAr))
+                    }
+                } catch (_: Exception) {
+                }
             }
         }
 
