@@ -29,12 +29,12 @@ object MapLayerHelper {
     )
 
     fun createTileCache(context: Context, mapView: MapView): TileCache {
-        // مضاعف أعلى يقلل ظهور مربعات رمادية أثناء التحريك/التكبير
+        // 1.5f توازن بين السلاسة واستهلاك الذاكرة (2.5 كان يستهلك أكثر من اللازم)
         return AndroidUtil.createTileCache(
             context,
             "mapcache",
             mapView.model.displayModel.tileSize,
-            2.5f,
+            1.5f,
             mapView.model.frameBufferModel.overdrawFactor
         )
     }
@@ -99,7 +99,11 @@ object MapLayerHelper {
 
         return try {
             clearBaseLayers(mapView.layerManager.layers)
-            bundle.downloadLayer?.onPause()
+            try {
+                bundle.downloadLayer?.onPause()
+                bundle.downloadLayer?.onDestroy()
+            } catch (_: Exception) {
+            }
             bundle.downloadLayer = null
 
             val mapFile = MapFile(file)
@@ -132,9 +136,24 @@ object MapLayerHelper {
     }
 
     fun destroy(bundle: LayerBundle) {
-        bundle.downloadLayer?.onPause()
-        bundle.rendererLayer?.onDestroy()
-        bundle.mapFile?.close()
+        // onDestroy ينهي خيوط TileDownloadThread؛ onPause وحده يتركها حيّة مع ذاكرة البلاطات
+        try {
+            bundle.downloadLayer?.onPause()
+            bundle.downloadLayer?.onDestroy()
+        } catch (_: Exception) {
+        }
+        try {
+            bundle.rendererLayer?.onDestroy()
+        } catch (_: Exception) {
+        }
+        try {
+            bundle.mapFile?.close()
+        } catch (_: Exception) {
+        }
+        try {
+            bundle.tileCache.destroy()
+        } catch (_: Exception) {
+        }
         bundle.downloadLayer = null
         bundle.rendererLayer = null
         bundle.mapFile = null
