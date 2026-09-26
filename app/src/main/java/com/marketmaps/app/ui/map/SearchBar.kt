@@ -1,5 +1,7 @@
 package com.marketmaps.app.ui.map
 
+import com.marketmaps.app.util.TextNormalizer
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -363,22 +365,25 @@ fun filterAndSortStores(
     var filtered = stores
 
     if (filterType != "الكل") {
+        // يبدأ التصنيف بنوع المكان (محل / ورشة / …) لتفادي تطابق «أخرى» مع كل الأنواع
         filtered = filtered.filter { store ->
-            store.category.contains(filterType, ignoreCase = true)
+            val cat = store.category.trim()
+            cat == filterType || cat.startsWith("$filterType ", ignoreCase = true)
         }
     }
     if (filterSub != "الكل") {
         filtered = filtered.filter { store ->
-            store.category.contains(filterSub, ignoreCase = true)
+            val parts = store.category.trim().split(Regex("\\s+"))
+            parts.any { it.equals(filterSub, ignoreCase = true) }
         }
     }
 
     if (query.isNotBlank()) {
-        val lowerQuery = query.trim().lowercase()
+        val nq = TextNormalizer.normalize(query)
         filtered = filtered.filter { store ->
-            store.name.lowercase().contains(lowerQuery) ||
-                    store.category.lowercase().contains(lowerQuery) ||
-                    store.description.lowercase().contains(lowerQuery)
+            TextNormalizer.normalize(store.name).contains(nq) ||
+                TextNormalizer.normalize(store.category).contains(nq) ||
+                TextNormalizer.normalize(store.description).contains(nq)
         }
     } else if (filterType == "الكل" && filterSub == "الكل") {
         return emptyList()
