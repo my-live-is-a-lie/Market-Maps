@@ -1,12 +1,14 @@
 package com.marketmaps.app.ui.map
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -35,10 +37,11 @@ fun AddStoreDialog(
     longitude: Double,
     initialStore: Store? = null,
     onDismiss: () -> Unit,
-    onSave: (name: String, categoryPath: String, description: String) -> Unit
+    onSave: (name: String, categoryPath: String, description: String, onComplete: (success: Boolean) -> Unit) -> Unit
 ) {
     val isEditMode = initialStore != null
 
+    var isSaving by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf(initialStore?.name ?: "") }
     var description by remember { mutableStateOf(initialStore?.description ?: "") }
     var categoryText by remember { mutableStateOf(initialStore?.category ?: "") }
@@ -199,6 +202,8 @@ fun AddStoreDialog(
         confirmButton = {
             Button(
                 onClick = {
+                    if (isSaving) return@Button
+                    isSaving = true
                     val categoryPath = if (isEditMode) {
                         categoryText.trim()
                     } else {
@@ -212,11 +217,21 @@ fun AddStoreDialog(
                             }
                         }.trim()
                     }
-                    onSave(name.trim(), categoryPath, description.trim())
+                    onSave(name.trim(), categoryPath, description.trim()) { success ->
+                        isSaving = false
+                        // عند النجاح يغلق الأب النافذة؛ عند الفشل يبقى الزر قابلاً للإعادة
+                    }
                 },
-                enabled = isValid
+                enabled = isValid && !isSaving
             ) {
-                Text(if (isEditMode) "تحديث" else "حفظ")
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(if (isEditMode) "تحديث" else "حفظ")
+                }
             }
         },
         dismissButton = {
