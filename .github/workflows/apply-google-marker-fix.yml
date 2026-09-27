@@ -1,0 +1,26 @@
+name: Apply Google Marker Fix
+
+on:
+  push:
+    paths:
+      - 'scripts/apply_google_marker_fix.py'
+      - '.github/workflows/apply-google-marker-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/apply_google_marker_fix.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/marketmaps/app/ui/map/MarkerIconHelper.kt
+          git diff --staged --stat
+          git commit -m "fix: استعادة مبدأ تكبير الأيقونات من النسخة القديمة (أحجام ثابتة بالبكسل)" || true
+          git push
