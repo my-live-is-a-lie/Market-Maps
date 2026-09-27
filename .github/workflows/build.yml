@@ -92,6 +92,25 @@ jobs:
           cp "$(find app/build/outputs/apk/release -name '*.apk' | head -1)" ./MarketMaps-release-arm64.apk
           ls -lh ./MarketMaps-*.apk
 
+      # تحقق سريع من أن R8/تقليص الموارد لم يحذف ملفات يحتاجها التطبيق وقت التشغيل
+      - name: Verify release APK contents
+        if: success()
+        run: |
+          APK=MarketMaps-release-arm64.apk
+          LIST=$(unzip -l "$APK")
+          MISSING=""
+          # ثيم Mapsforge (يُحمَّل عبر getResourceAsStream) + أيقونات العلامات + Baseline Profile
+          for f in assets/mapsforge/default.xml assets/markers/store.svg assets/dexopt/baseline.prof classes.dex; do
+            echo "$LIST" | grep -q " $f$" || MISSING="$MISSING $f"
+          done
+          DEBUG_SIZE=$(du -h MarketMaps-debug-arm64.apk | cut -f1)
+          RELEASE_SIZE=$(du -h "$APK" | cut -f1)
+          if [ -n "$MISSING" ]; then
+            echo "::error title=Release APK::ملفات مفقودة:$MISSING"
+            exit 1
+          fi
+          echo "::notice title=APK sizes::debug=$DEBUG_SIZE release=$RELEASE_SIZE (theme, markers, baseline.prof موجودة)"
+
       - name: Upload APK Artifact
         if: success()
         uses: actions/upload-artifact@v4
