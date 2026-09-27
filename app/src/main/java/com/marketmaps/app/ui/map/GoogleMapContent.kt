@@ -29,9 +29,11 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.rememberMarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.marketmaps.app.data.Store
 import kotlin.math.roundToInt
@@ -154,7 +156,11 @@ fun GoogleMapContent(
     GoogleMap(
         modifier = modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
-        properties = MapProperties(isMyLocationEnabled = false),
+        properties = MapProperties(
+            isMyLocationEnabled = false,
+            mapType = MapType.NORMAL,
+            isBuildingEnabled = false
+        ),
         uiSettings = MapUiSettings(
             zoomControlsEnabled = false,
             myLocationButtonEnabled = false,
@@ -176,7 +182,7 @@ fun GoogleMapContent(
                     val icon = storeIcon(store, scale)
                     if (icon != null) {
                         val position = LatLng(store.latitude, store.longitude)
-                        val markerState = remember(position) { MarkerState(position = position) }
+                        val markerState = rememberMarkerState(position = position)
                         Marker(
                             state = markerState,
                             title = store.name,
@@ -195,7 +201,7 @@ fun GoogleMapContent(
 
             if (userLat != null && userLon != null && userIcon != null) {
                 val userPosition = LatLng(userLat, userLon)
-                val userState = remember(userPosition) { MarkerState(position = userPosition) }
+                val userState = rememberMarkerState(position = userPosition)
                 Marker(
                     state = userState,
                     title = "موقعي",
