@@ -124,30 +124,30 @@ object MarkerIconHelper {
 
     /** نفس جدول النسخة القديمة: خطوات متقاربة مع الزوم */
     fun markerSizePxForZoom(zoom: Int): Int = when {
-        zoom >= 18 -> 88
-        zoom >= 17 -> 80
-        zoom >= 16 -> 72
-        zoom >= 15 -> 64
-        zoom >= 14 -> 56
-        zoom >= 13 -> 44
-        zoom >= 12 -> 32
-        zoom >= 11 -> 22
+        zoom >= 18 -> 52
+        zoom >= 17 -> 48
+        zoom >= 16 -> 44
+        zoom >= 15 -> 40
+        zoom >= 14 -> 36
+        zoom >= 13 -> 30
+        zoom >= 12 -> 24
+        zoom >= 11 -> 18
         else -> 0
     }
 
     fun sizeForZoom(zoom: Int): Int = markerSizePxForZoom(zoom)
 
     fun markerSizePxForMode(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.BUBBLE_LARGE -> 80
-        DisplayMode.BUBBLE_MEDIUM -> 56
-        DisplayMode.CIRCLE -> 28
+        DisplayMode.BUBBLE_LARGE -> 48
+        DisplayMode.BUBBLE_MEDIUM -> 36
+        DisplayMode.CIRCLE -> 18
         DisplayMode.HIDDEN -> 0
     }
 
     private fun userPinSizePx(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 28
-        DisplayMode.BUBBLE_MEDIUM -> 80
-        DisplayMode.BUBBLE_LARGE -> 96
+        DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 18
+        DisplayMode.BUBBLE_MEDIUM -> 48
+        DisplayMode.BUBBLE_LARGE -> 56
     }
 
     fun colorForCategory(category: String): Int = CategoryStyles.colorFor(category)
