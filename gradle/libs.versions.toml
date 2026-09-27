@@ -5,6 +5,7 @@
 agp = "8.7.3"
 kotlin = "2.1.0"
 googleServices = "4.4.2"
+firebaseCrashlyticsGradle = "3.0.2"
 
 coreKtx = "1.15.0"
 lifecycle = "2.8.7"
@@ -55,6 +56,7 @@ maps-compose = { module = "com.google.maps.android:maps-compose", version.ref = 
 
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-firestore = { module = "com.google.firebase:firebase-firestore" }
+firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
 
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 
@@ -66,3 +68,4 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
+firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "firebaseCrashlyticsGradle" }
