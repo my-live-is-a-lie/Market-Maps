@@ -44,6 +44,12 @@ jobs:
             echo "MAPS_API_KEY=" >> local.properties
           else
             echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
+            echo "تم حقن مفتاح API (الطول: ${#MAPS_API_KEY})"
+          fi
+          if [ -f app/debug.keystore ]; then
+            echo "===== SHA-1 Debug (أضفه في Google Cloud Console) ====="
+            keytool -list -v -keystore app/debug.keystore -storepass android -alias androiddebugkey 2>/dev/null | grep -E "SHA1:|SHA256:" || true
+            echo "======================================================"
           fi
 
       - name: Build Debug APK (arm64-v8a only)
