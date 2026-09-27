@@ -11,7 +11,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import com.marketmaps.app.util.logged
+import androidx.compose.runtime.key
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -84,12 +86,7 @@ fun GoogleMapContent(
         )
     }
 
-    var currentZoom by remember { mutableFloatStateOf(initialZoom) }
     var mapReady by remember { mutableStateOf(false) }
-
-    LaunchedEffect(cameraPositionState.position.zoom) {
-        currentZoom = cameraPositionState.position.zoom
-    }
 
     // لا نحفظ الموقع قبل اكتمال تحميل الخريطة، ولا قبل أول حركة حقيقية للكاميرا:
     // الحالة الأولى (isMoving = false قبل أي حركة) ليست اختيار المستخدم.
@@ -98,28 +95,36 @@ fun GoogleMapContent(
         if (!mapReady) return@LaunchedEffect
         if (cameraPositionState.isMoving) {
             cameraHasMoved = true
-        } else {
+        } else if (cameraHasMoved) {
             val pos = cameraPositionState.position
-            currentZoom = pos.zoom
-            if (cameraHasMoved) {
-                onCameraIdle(pos.target.latitude, pos.target.longitude, pos.zoom)
-            }
+            onCameraIdle(pos.target.latitude, pos.target.longitude, pos.zoom)
         }
     }
 
-    val mode = MarkerIconHelper.displayModeForGoogleZoom(currentZoom)
+    // سابقاً: قراءة cameraPositionState.position داخل التركيب (LaunchedEffect(position.zoom)
+    // و latForScale) كانت تعيد تركيب الدالة كلها وحلقة العلامات مع كل إطار تحريك.
+    // derivedStateOf يقرأ الموضع داخلياً ولا يُبلغ إلا عند تغيّر وضع العرض فعلاً
+    // (عند عبور التكبير 12 / 14 / 16).
+    val mode by remember {
+        derivedStateOf {
+            MarkerIconHelper.displayModeForGoogleZoom(cameraPositionState.position.zoom)
+        }
+    }
 
-    val iconCache = remember(mode, showLabels, mapReady) { mutableMapOf<String, BitmapDescriptor>() }
+    val iconCache = remember(mode, showLabels, mapReady) { HashMap<String, BitmapDescriptor>() }
 
     fun storeIcon(store: Store, scale: Float): BitmapDescriptor? {
-        if (!mapReady) return null
-        if (mode == MarkerIconHelper.DisplayMode.HIDDEN) return null
-        // تقريب المقياس لتقليل إدخالات الكاش أثناء الأنيميشن
+        if (!mapReady || mode == MarkerIconHelper.DisplayMode.HIDDEN) return null
+        // تقريب المقياس لتقليل إدخالات الكاش أثناء أنيميشن التمييز
         val scaleKey = (scale * 25f).toInt()
-        val cacheKey = "${store.id}|${mode.name}|$showLabels|${store.name}|s=$scaleKey"
+        val withLabel = showLabels && mode != MarkerIconHelper.DisplayMode.CIRCLE
+        // بدون أسماء: الأيقونة تعتمد على التصنيف فقط، فتتشارك كل محلات التصنيف نفس
+        // الـ BitmapDescriptor بدل نسخة لكل محل.
+        val cacheKey = if (withLabel) "L|${store.id}|${store.name}|${store.category}|$scaleKey"
+        else "I|${store.category}|$scaleKey"
         iconCache[cacheKey]?.let { return it }
         // الصورة تُرسم بحجمها النهائي (مع مقياس التمييز) بدل تكبيرها بعد الرسم
-        val bmp: AndroidBitmap = if (showLabels && mode != MarkerIconHelper.DisplayMode.CIRCLE) {
+        val bmp: AndroidBitmap = if (withLabel) {
             MarkerIconHelper.getAndroidMarkerBitmapWithLabel(store.category, store.name, mode, scale)
         } else {
             MarkerIconHelper.getAndroidMarkerBitmap(
@@ -127,23 +132,19 @@ fun GoogleMapContent(
                 (MarkerIconHelper.markerSizePxForMode(mode) * scale).roundToInt()
             )
         } ?: return null
-        return try {
-            val desc = BitmapDescriptorFactory.fromBitmap(bmp)
-            iconCache[cacheKey] = desc
-            desc
-        } catch (_: Exception) {
-            null
+        return logged(TAG, "BitmapDescriptor لـ ${store.category}") {
+            BitmapDescriptorFactory.fromBitmap(bmp).also { iconCache[cacheKey] = it }
         }
     }
 
-    fun userIcon(): BitmapDescriptor? {
-        if (!mapReady) return null
-        if (mode == MarkerIconHelper.DisplayMode.HIDDEN) return null
-        val bmp = MarkerIconHelper.getAndroidUserLocationBitmap(mode) ?: return null
-        return try {
-            BitmapDescriptorFactory.fromBitmap(bmp)
-        } catch (_: Exception) {
+    // سابقاً كانت تُرسم صورة دبوس جديدة وتُنشأ BitmapDescriptor جديد مع كل إعادة تركيب
+    val userIcon: BitmapDescriptor? = remember(mode, mapReady) {
+        if (!mapReady || mode == MarkerIconHelper.DisplayMode.HIDDEN) {
             null
+        } else {
+            MarkerIconHelper.getAndroidUserLocationBitmap(mode)?.let { bmp ->
+                logged(TAG, "BitmapDescriptor لموقع المستخدم") { BitmapDescriptorFactory.fromBitmap(bmp) }
+            }
         }
     }
 
@@ -170,34 +171,43 @@ fun GoogleMapContent(
     ) {
         if (mapReady && mode != MarkerIconHelper.DisplayMode.HIDDEN) {
             stores.forEach { store ->
-                val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
-                val scale = if (highlighted) highlightScale else 1f
-                val icon = storeIcon(store, scale) ?: return@forEach
-                Marker(
-                    state = MarkerState(position = LatLng(store.latitude, store.longitude)),
-                    title = store.name,
-                    snippet = store.category,
-                    icon = icon,
-                    anchor = markerAnchor,
-                    zIndex = if (highlighted) 5f else 0f,
-                    onClick = {
-                        onMarkerClick(store)
-                        true
+                // key: كل علامة تحتفظ بحالتها بين إعادات التركيب؛ إضافة/حذف محل لا يعيد
+                // إنشاء العلامات الأخرى، و MarkerState لا يُنشأ من جديد لكل علامة في كل مرة.
+                key(store.id) {
+                    val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
+                    val scale = if (highlighted) highlightScale else 1f
+                    val icon = storeIcon(store, scale)
+                    if (icon != null) {
+                        val position = LatLng(store.latitude, store.longitude)
+                        val markerState = remember(position) { MarkerState(position = position) }
+                        Marker(
+                            state = markerState,
+                            title = store.name,
+                            snippet = store.category,
+                            icon = icon,
+                            anchor = markerAnchor,
+                            zIndex = if (highlighted) 5f else 0f,
+                            onClick = {
+                                onMarkerClick(store)
+                                true
+                            }
+                        )
                     }
-                )
+                }
             }
 
-            if (userLat != null && userLon != null) {
-                val uIcon = userIcon()
-                if (uIcon != null) {
-                    Marker(
-                        state = MarkerState(position = LatLng(userLat, userLon)),
-                        title = "موقعي",
-                        icon = uIcon,
-                        anchor = Offset(0.5f, 1.0f)
-                    )
-                }
+            if (userLat != null && userLon != null && userIcon != null) {
+                val userPosition = LatLng(userLat, userLon)
+                val userState = remember(userPosition) { MarkerState(position = userPosition) }
+                Marker(
+                    state = userState,
+                    title = "موقعي",
+                    icon = userIcon,
+                    anchor = Offset(0.5f, 1.0f)
+                )
             }
         }
     }
 }
+
+private const val TAG = "GoogleMap"
