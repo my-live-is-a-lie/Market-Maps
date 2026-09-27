@@ -86,6 +86,16 @@ object MarkerIconHelper {
         svgCache.clear()
     }
 
+    /** إرجاع من الكاش فقط إن كانت الصورة ما زالت صالحة (Mapsforge قد يعمل recycle للصورة المشتركة) */
+    private fun cacheGet(key: String): AndroidBitmap? {
+        val cached = bitmapCache.get(key) ?: return null
+        if (cached.isRecycled) {
+            bitmapCache.remove(key)
+            return null
+        }
+        return cached
+    }
+
     private fun dp(value: Float): Int = (value * density).roundToInt().coerceAtLeast(1)
 
     private fun dpF(value: Float): Float = value * density
@@ -155,16 +165,24 @@ object MarkerIconHelper {
     }
 
     /** غلاف Mapsforge جديد حول صورة مشتركة من الكاش */
-    fun getMarkerBitmap(category: String, mode: DisplayMode, sizePx: Int): Bitmap? =
-        getAndroidMarkerBitmap(category, mode, sizePx)?.let { MapsforgeAndroidBitmap(it) }
+    fun getMarkerBitmap(category: String, mode: DisplayMode, sizePx: Int): Bitmap? {
+        val src = getAndroidMarkerBitmap(category, mode, sizePx) ?: return null
+        if (src.isRecycled) return null
+        // نسخة مستقلة: Mapsforge يستدعي recycle عند إزالة العلامة، والكاش مشترك
+        val copy = src.copy(src.config ?: AndroidBitmap.Config.ARGB_8888, false) ?: return null
+        return MapsforgeAndroidBitmap(copy)
+    }
 
     fun getAndroidUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): AndroidBitmap? {
         if (mode == DisplayMode.HIDDEN) return null
         return composeGoogleUserPin(userPinSizePx(mode))
     }
 
-    fun getUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): Bitmap =
-        MapsforgeAndroidBitmap(composeGoogleUserPin(userPinSizePx(mode)))
+    fun getUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): Bitmap {
+        val src = composeGoogleUserPin(userPinSizePx(mode))
+        val copy = src.copy(src.config ?: AndroidBitmap.Config.ARGB_8888, false) ?: src
+        return MapsforgeAndroidBitmap(copy)
+    }
 
     /**
      * أيقونة + اسم بأسلوب قريب من تسميات خرائط جوجل على الخريطة الفاتحة:
@@ -263,7 +281,7 @@ object MarkerIconHelper {
 
     private fun composeBubble(bubbleColor: Int, iconName: String, size: Int): AndroidBitmap {
         val cacheKey = "b|$iconName|$bubbleColor|$size"
-        bitmapCache.get(cacheKey)?.let { return it }
+        cacheGet(cacheKey)?.let { return it }
 
         val bmp = AndroidBitmap.createBitmap(size, size, AndroidBitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
@@ -299,7 +317,7 @@ object MarkerIconHelper {
 
     private fun composeCircle(color: Int, size: Int): AndroidBitmap {
         val cacheKey = "c|$color|$size"
-        bitmapCache.get(cacheKey)?.let { return it }
+        cacheGet(cacheKey)?.let { return it }
 
         val bmp = AndroidBitmap.createBitmap(size, size, AndroidBitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
@@ -320,7 +338,7 @@ object MarkerIconHelper {
     /** دبوس أحمر كلاسيكي بأسلوب خرائط جوجل لموقع المستخدم */
     private fun composeGoogleUserPin(size: Int): AndroidBitmap {
         val cacheKey = "u|$size"
-        bitmapCache.get(cacheKey)?.let { return it }
+        cacheGet(cacheKey)?.let { return it }
 
         val bmp = AndroidBitmap.createBitmap(size, size, AndroidBitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
