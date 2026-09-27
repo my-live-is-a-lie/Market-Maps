@@ -10,24 +10,27 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.marketmaps.app.data.AppPreferences
+import com.marketmaps.app.data.AppThemeMode
 import com.marketmaps.app.ui.CrashReportScreen
 import com.marketmaps.app.ui.map.MapScreen
 import com.marketmaps.app.ui.onboarding.OnboardingScreen
 import com.marketmaps.app.ui.settings.SettingsScreen
+import com.marketmaps.app.ui.theme.AccentPresets
 import com.marketmaps.app.ui.theme.MarketMapsTheme
 import com.marketmaps.app.util.CrashHandler
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,62 +42,68 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val context = LocalContext.current
-            CrashHandler.install(context)
             val prefs = remember { AppPreferences(context) }
-            val settings by prefs.settings.collectAsState(initial = null)
-            if (settings == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                MarketMapsApp(prefs = prefs, settings = settings!!)
-            }
-        }
-    }
-}
+            val themeMode by prefs.themeMode.collectAsState(initial = AppThemeMode.LIGHT)
+            val accentKey by prefs.accentKey.collectAsState(initial = AccentPresets.DEFAULT)
 
-@Composable
-private fun MarketMapsApp(
-    prefs: AppPreferences,
-    settings: com.marketmaps.app.data.AppSettings
-) {
-    var showSettings by remember { mutableStateOf(false) }
-    var showCrash by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+            MarketMapsTheme(themeMode = themeMode, accentKey = accentKey) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    var onboardingDone by remember { mutableStateOf<Boolean?>(null) }
+                    var localDone by rememberSaveable { mutableStateOf(false) }
+                    // rememberSaveable: تبقى الإعدادات مفتوحة بعد تدوير الشاشة
+                    var showSettings by rememberSaveable { mutableStateOf(false) }
+                    var crashText by remember {
+                        mutableStateOf(CrashHandler.readLastCrash(context))
+                    }
 
-    MarketMapsTheme(
-        themeMode = settings.themeMode,
-        accentKey = settings.accentKey
-    ) {
-        Box(Modifier.fillMaxSize()) {
-            when {
-                showCrash -> {
-                    CrashReportScreen(onBack = { showCrash = false })
-                }
-                !settings.onboardingDone -> {
-                    OnboardingScreen(
-                        onFinished = {
-                            scope.launch { prefs.setOnboardingDone(true) }
+                    LaunchedEffect(Unit) {
+                        onboardingDone = prefs.onboardingDone.first()
+                    }
+
+                    when {
+                        crashText != null -> {
+                            CrashReportScreen(
+                                crashText = crashText!!,
+                                onDismiss = {
+                                    CrashHandler.clear(context)
+                                    crashText = null
+                                }
+                            )
                         }
-                    )
-                }
-                showSettings -> {
-                    SettingsScreen(onBack = { showSettings = false })
-                }
-                else -> {
-                    MapScreen(
-                        onOpenSettings = { showSettings = true },
-                        onOpenCrashReport = { showCrash = true }
-                    )
+                        onboardingDone == null -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        }
+                        !(onboardingDone!! || localDone) -> {
+                            OnboardingScreen(
+                                onFinished = { localDone = true }
+                            )
+                        }
+                        else -> {
+                            BackHandler(enabled = showSettings) {
+                                showSettings = false
+                            }
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                MapScreen(
+                                    onOpenSettings = { showSettings = true },
+                                    onOpenFullSettings = { showSettings = true },
+                                    isCovered = showSettings
+                                )
+                                if (showSettings) {
+                                    SettingsScreen(onBack = { showSettings = false })
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        }
-    }
-
-    BackHandler(enabled = showSettings || showCrash) {
-        when {
-            showCrash -> showCrash = false
-            showSettings -> showSettings = false
         }
     }
 }
