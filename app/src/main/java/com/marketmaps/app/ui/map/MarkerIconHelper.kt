@@ -116,38 +116,38 @@ object MarkerIconHelper {
         displayModeForZoom(zoom.toInt().coerceIn(1, 22), latitude)
 
     /**
-     * أحجام بالبكسل كما النسخة القديمة (88/80/72…) مع تعديل خفيف حسب كثافة الشاشة
-     * نسبة إلى كثافة التصميم 2.75 حتى تبدو مماثلة على أجهزة مختلفة.
+     * مبدأ تكبير الأيقونات — النسخة المعتمدة (لا تُغيَّر إلا بطلب صريح):
+     * أحجام ثابتة بالبكسل حسب مستوى الزوم، كما قبل تحسينات الأداء.
+     * الهدف لاحقاً: انتقال أكثر سلاسة بأسلوب خرائط جوجل مع الإبقاء على نفس الإحساس البصري.
      */
-    /** أحجام ثابتة بالبكسل كما النسخة القديمة (بدون ضرب بكثافة الشاشة). */
-    private fun legacyPx(px: Int): Int = px.coerceAtLeast(1)
-
-    /** نفس جدول النسخة القديمة: خطوات متقاربة مع الزوم */
     fun markerSizePxForZoom(zoom: Int): Int = when {
-        zoom >= 18 -> 52
-        zoom >= 17 -> 48
-        zoom >= 16 -> 44
-        zoom >= 15 -> 40
-        zoom >= 14 -> 36
-        zoom >= 13 -> 30
-        zoom >= 12 -> 24
-        zoom >= 11 -> 18
+        zoom >= 18 -> 88
+        zoom >= 17 -> 80
+        zoom >= 16 -> 72
+        zoom >= 15 -> 64
+        zoom >= 14 -> 56
+        zoom >= 13 -> 44
+        zoom >= 12 -> 32
+        zoom >= 11 -> 22
         else -> 0
     }
 
     fun sizeForZoom(zoom: Int): Int = markerSizePxForZoom(zoom)
 
     fun markerSizePxForMode(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.BUBBLE_LARGE -> 48
-        DisplayMode.BUBBLE_MEDIUM -> 36
-        DisplayMode.CIRCLE -> 18
+        DisplayMode.BUBBLE_LARGE -> 80
+        DisplayMode.BUBBLE_MEDIUM -> 56
+        DisplayMode.CIRCLE -> 28
         DisplayMode.HIDDEN -> 0
     }
 
+    /** توافق مع الاستدعاءات القديمة */
+    fun sizeForMode(mode: DisplayMode): Int = markerSizePxForMode(mode)
+
     private fun userPinSizePx(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 18
-        DisplayMode.BUBBLE_MEDIUM -> 48
-        DisplayMode.BUBBLE_LARGE -> 56
+        DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 28
+        DisplayMode.BUBBLE_MEDIUM -> 80
+        DisplayMode.BUBBLE_LARGE -> 96
     }
 
     fun colorForCategory(category: String): Int = CategoryStyles.colorFor(category)
