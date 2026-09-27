@@ -103,6 +103,11 @@ import com.marketmaps.app.data.Store
 import com.marketmaps.app.data.StoreRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.marketmaps.app.util.logged
+import java.util.concurrent.atomic.AtomicInteger
+import org.mapsforge.map.layer.Layer
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import org.mapsforge.core.model.LatLong
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 import org.mapsforge.map.android.view.MapView
@@ -236,12 +241,10 @@ fun MapScreen(
     isAddModeRef.value = isAddMode
     val storesRef = remember { mutableStateOf(stores) }
     storesRef.value = stores
-    val userLatRef = remember { mutableStateOf(userLat) }
-    userLatRef.value = userLat
-    val userLonRef = remember { mutableStateOf(userLon) }
     val selectedStoreRef = remember { mutableStateOf(selectedStore) }
-    userLonRef.value = userLon
     selectedStoreRef.value = selectedStore
+    // مستوى تكبير Mapsforge كحالة Compose (يُحدَّث من المراقب عبر الخيط الرئيسي)
+    var mapsforgeZoom by remember { mutableIntStateOf(-1) }
 
     fun saveCameraPosition() {
         val mv = mapViewRef ?: return
@@ -306,12 +309,16 @@ fun MapScreen(
         } else {
             MapLayerHelper.applyOnline(mapView, bundle)
         }
-        addMarkersToMap(context, mapView, stores, userLat, userLon, highlightedStoreId, highlightScale)
+        // لا حاجة لإعادة بناء العلامات هنا: تبديل طبقة الأساس لا يلمس الـ Markers
     }
 
-    LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId, highlightScaleBucket) {
+    // mapsforgeZoom جزء من المفاتيح: تغيّر مستوى التكبير يعيد بناء العلامات بالحجم
+    // الجديد مع الإبقاء على العلامة المميزة (كان مراقب التكبير يمرر null فيضيع التمييز).
+    // LaunchedEffect يلغي أي بناء سابق لم يكتمل عند تغيّر أي مفتاح.
+    LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId, highlightScaleBucket, mapsforgeZoom) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
-        mapViewRef?.let { addMarkersToMap(context, it, stores, userLat, userLon, highlightedStoreId, highlightScaleBucket) }
+        val mapView = mapViewRef ?: return@LaunchedEffect
+        updateMapsforgeMarkers(mapView, stores, userLat, userLon, highlightedStoreId, highlightScaleBucket)
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -414,13 +421,13 @@ fun MapScreen(
                     mapView.model.mapViewPosition.zoomLevel = initialZoom.toInt().toByte()
                     mapViewRef = mapView
 
-                    val lastZoom = intArrayOf(-1)
+                    // المراقب يُستدعى أيضاً من خيط أنيميشن Mapsforge (كل 15ms أثناء الحركة)،
+                    // لذلك نكتفي بمقارنة رخيصة هنا ونمرر التغيير للخيط الرئيسي عبر post.
+                    val lastZoom = AtomicInteger(-1)
                     mapView.model.mapViewPosition.addObserver {
-                        val mv = mapViewRef ?: return@addObserver
-                        val z = mv.model.mapViewPosition.zoomLevel.toInt()
-                        if (z == lastZoom[0]) return@addObserver
-                        lastZoom[0] = z
-                        addMarkersToMap(ctx, mv, storesRef.value, userLatRef.value, userLonRef.value, null, 1f)
+                        val z = mapView.model.mapViewPosition.zoomLevel.toInt()
+                        if (lastZoom.getAndSet(z) == z) return@addObserver
+                        mapView.post { mapsforgeZoom = z }
                     }
 
                     val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
@@ -750,67 +757,73 @@ private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Doub
     return r * 2 * atan2(sqrt(a), sqrt(1 - a))
 }
 
-private fun addMarkersToMap(
-    context: Context,
+private const val TAG = "MapScreen"
+
+/**
+ * تحديث علامات Mapsforge:
+ * - صور الأيقونات تُجهَّز على Dispatchers.Default (كان تحليل SVG والرسم على الخيط
+ *   الرئيسي فيتقطع التكبير عند تجاوز 12 و14 و16).
+ * - الاستبدال دفعة واحدة: removeAll + addAll بدون إعادة رسم ثم redraw واحدة.
+ *   Layers في Mapsforge يستخدم CopyOnWriteArrayList، فكان كل add/remove منفرد ينسخ
+ *   المصفوفة كاملة ويطلب إعادة رسم (O(N²) مع كثرة المحلات).
+ * - لا نستدعي onDestroy على العلامات القديمة: صورها مشتركة من كاش الأيقونات.
+ */
+private suspend fun updateMapsforgeMarkers(
     mapView: MapView,
     stores: List<Store>,
     userLat: Double?,
     userLon: Double?,
-    highlightedStoreId: String? = null,
-    highlightScale: Float = 1f
+    highlightedStoreId: String?,
+    highlightScale: Float
 ) {
-    try {
-        mapView.layerManager.layers.filterIsInstance<Marker>().forEach { mapView.layerManager.layers.remove(it) }
-
-        val zoom = mapView.model.mapViewPosition.zoomLevel.toInt()
-        val centerLat = mapView.model.mapViewPosition.center.latitude
-        val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)
-        val zoomSize = MarkerIconHelper.sizeForZoom(zoom)
-
-        if (mode != MarkerIconHelper.DisplayMode.HIDDEN && zoomSize > 0) {
-            val ordered = if (highlightedStoreId == null) stores
-            else stores.sortedBy { if (it.id == highlightedStoreId) 1 else 0 }
-            ordered.forEach { store ->
-                try {
-                    val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
-                    var androidBmp = MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
-                        ?: return@forEach
-                    if (androidBmp.width != zoomSize && zoomSize > 0) {
-                        androidBmp = android.graphics.Bitmap.createScaledBitmap(
-                            androidBmp, zoomSize, zoomSize, true
-                        )
-                    }
-                    val scale = if (highlighted) highlightScale else 1f
-                    if (kotlin.math.abs(scale - 1f) > 0.02f) {
-                        val w = (androidBmp.width * scale).toInt().coerceAtLeast(1)
-                        val h = (androidBmp.height * scale).toInt().coerceAtLeast(1)
-                        androidBmp = android.graphics.Bitmap.createScaledBitmap(androidBmp, w, h, true)
-                    }
-                    val bitmap: org.mapsforge.core.graphics.Bitmap =
-                        org.mapsforge.map.android.graphics.AndroidBitmap(androidBmp)
-                    mapView.layerManager.layers.add(
-                        Marker(LatLong(store.latitude, store.longitude), bitmap, 0, -bitmap.height / 2)
-                    )
-                } catch (_: Exception) {}
-            }
-        }
-
-        if (userLat != null && userLon != null) {
-            try {
-                val userBmp = MarkerIconHelper.getUserLocationBitmap(MarkerIconHelper.DisplayMode.BUBBLE_MEDIUM)
-                mapView.layerManager.layers.add(
-                    Marker(LatLong(userLat, userLon), userBmp, 0, -userBmp.height / 2)
-                )
-            } catch (_: Exception) {}
-        }
-    } catch (_: Exception) {}
+    val zoom = mapView.model.mapViewPosition.zoomLevel.toInt()
+    val newMarkers = withContext(Dispatchers.Default) {
+        buildMapsforgeMarkers(stores, zoom, userLat, userLon, highlightedStoreId, highlightScale)
+    }
+    val layers = mapView.layerManager.layers
+    val oldMarkers = layers.filterIsInstance<Marker>()
+    if (oldMarkers.isNotEmpty()) layers.removeAll(oldMarkers, false)
+    if (newMarkers.isNotEmpty()) layers.addAll(newMarkers, false)
+    mapView.layerManager.redrawLayers()
 }
 
-/**
- * يطلب الموقع الحالي ويمرّره للمستدعي الذي يحرك الكاميرا (moveCamera).
- * سابقاً كانت الدالة تحرّك الخريطة بنفسها إلى تكبير 16 ثم يحركها المستدعي إلى 18،
- * فيصدر أمرا تحريك متعارضان متتاليان.
- */
+private fun buildMapsforgeMarkers(
+    stores: List<Store>,
+    zoom: Int,
+    userLat: Double?,
+    userLon: Double?,
+    highlightedStoreId: String?,
+    highlightScale: Float
+): List<Layer> {
+    val out = ArrayList<Layer>(stores.size + 1)
+    val mode = MarkerIconHelper.displayModeForZoom(zoom)
+    val sizePx = MarkerIconHelper.markerSizePxForZoom(zoom)
+
+    if (mode != MarkerIconHelper.DisplayMode.HIDDEN && sizePx > 0) {
+        var highlightedMarker: Marker? = null
+        for (store in stores) {
+            val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
+            // المميز يُرسم بحجمه المكبَّر مباشرة من الـ SVG (بدل createScaledBitmap)
+            val size = if (highlighted) (sizePx * highlightScale).roundToInt() else sizePx
+            val bitmap = logged(TAG, "أيقونة ${store.category}") {
+                MarkerIconHelper.getMarkerBitmap(store.category, mode, size)
+            } ?: continue
+            val marker = Marker(LatLong(store.latitude, store.longitude), bitmap, 0, -bitmap.height / 2)
+            if (highlighted) highlightedMarker = marker else out.add(marker)
+        }
+        // المميز آخراً حتى يُرسم فوق البقية
+        highlightedMarker?.let { out.add(it) }
+    }
+
+    if (userLat != null && userLon != null) {
+        logged(TAG, "أيقونة الموقع الحالي") {
+            val userBmp = MarkerIconHelper.getUserLocationBitmap(MarkerIconHelper.DisplayMode.BUBBLE_MEDIUM)
+            out.add(Marker(LatLong(userLat, userLon), userBmp, 0, -userBmp.height / 2))
+        }
+    }
+    return out
+}
+
 @SuppressLint("MissingPermission")
 private fun moveToCurrentLocation(context: Context, onLocation: (Double, Double) -> Unit) {
     LocationServices.getFusedLocationProviderClient(context)

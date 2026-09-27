@@ -32,6 +32,7 @@ import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.marketmaps.app.data.Store
+import kotlin.math.roundToInt
 
 /**
  * خرائط جوجل + أيقونات مخصصة بحجم يتغير مع التكبير + أسماء اختيارية.
@@ -106,8 +107,7 @@ fun GoogleMapContent(
         }
     }
 
-    val latForScale = cameraPositionState.position.target.latitude
-    val mode = MarkerIconHelper.displayModeForGoogleZoom(currentZoom, latForScale)
+    val mode = MarkerIconHelper.displayModeForGoogleZoom(currentZoom)
 
     val iconCache = remember(mode, showLabels, mapReady) { mutableMapOf<String, BitmapDescriptor>() }
 
@@ -118,17 +118,15 @@ fun GoogleMapContent(
         val scaleKey = (scale * 25f).toInt()
         val cacheKey = "${store.id}|${mode.name}|$showLabels|${store.name}|s=$scaleKey"
         iconCache[cacheKey]?.let { return it }
-        val rawBmp: AndroidBitmap? = if (showLabels && mode != MarkerIconHelper.DisplayMode.CIRCLE) {
-            MarkerIconHelper.getAndroidMarkerBitmapWithLabel(store.category, store.name, mode)
+        // الصورة تُرسم بحجمها النهائي (مع مقياس التمييز) بدل تكبيرها بعد الرسم
+        val bmp: AndroidBitmap = if (showLabels && mode != MarkerIconHelper.DisplayMode.CIRCLE) {
+            MarkerIconHelper.getAndroidMarkerBitmapWithLabel(store.category, store.name, mode, scale)
         } else {
-            MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
-        }
-        var bmp = rawBmp ?: return null
-        if (kotlin.math.abs(scale - 1f) > 0.02f) {
-            val w = (bmp.width * scale).toInt().coerceAtLeast(1)
-            val h = (bmp.height * scale).toInt().coerceAtLeast(1)
-            bmp = AndroidBitmap.createScaledBitmap(bmp, w, h, true)
-        }
+            MarkerIconHelper.getAndroidMarkerBitmap(
+                store.category, mode,
+                (MarkerIconHelper.markerSizePxForMode(mode) * scale).roundToInt()
+            )
+        } ?: return null
         return try {
             val desc = BitmapDescriptorFactory.fromBitmap(bmp)
             iconCache[cacheKey] = desc
