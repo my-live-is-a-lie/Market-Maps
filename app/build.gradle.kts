@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 val localProps = Properties()
@@ -153,6 +154,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     // وحدات -ktx أُزيلت من Firebase BoM 34؛ نفس الـ API موجود في الوحدة الرئيسية
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.crashlytics)
 
     implementation(libs.okhttp)
 
