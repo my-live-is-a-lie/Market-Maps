@@ -15,6 +15,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,8 +47,9 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     var onboardingDone by remember { mutableStateOf<Boolean?>(null) }
-                    var localDone by remember { mutableStateOf(false) }
-                    var showSettings by remember { mutableStateOf(false) }
+                    var localDone by rememberSaveable { mutableStateOf(false) }
+                    // rememberSaveable: تبقى الإعدادات مفتوحة بعد تدوير الشاشة
+                    var showSettings by rememberSaveable { mutableStateOf(false) }
                     var crashText by remember {
                         mutableStateOf(CrashHandler.readLastCrash(context))
                     }

@@ -69,6 +69,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.derivedStateOf
@@ -177,21 +179,23 @@ fun MapScreen(
     var isMenuExpanded by remember { mutableStateOf(false) }
     var isAddMode by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
-    var selectedLat by remember { mutableStateOf(0.0) }
-    var selectedLon by remember { mutableStateOf(0.0) }
+    var selectedLat by remember { mutableDoubleStateOf(0.0) }
+    var selectedLon by remember { mutableDoubleStateOf(0.0) }
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
     var stores by remember { mutableStateOf<List<Store>>(emptyList()) }
-    var searchQuery by remember { mutableStateOf("") }
-    var searchExpanded by remember { mutableStateOf(false) }
-    var filterType by remember { mutableStateOf(FILTER_ALL) }
-    var filterSub by remember { mutableStateOf(FILTER_ALL) }
+    // rememberSaveable: نص البحث والفلاتر تبقى بعد تدوير الشاشة أو إغلاق النظام للتطبيق في الخلفية
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var searchExpanded by rememberSaveable { mutableStateOf(false) }
+    var filterType by rememberSaveable { mutableStateOf(FILTER_ALL) }
+    var filterSub by rememberSaveable { mutableStateOf(FILTER_ALL) }
+    var filtersInitialized by rememberSaveable { mutableStateOf(false) }
     var showFilterDialog by remember { mutableStateOf(false) }
     var userLat by remember { mutableStateOf<Double?>(null) }
     var userLon by remember { mutableStateOf<Double?>(null) }
     var selectedStore by remember { mutableStateOf<Store?>(null) }
     var storeToEdit by remember { mutableStateOf<Store?>(null) }
     var navResults by remember { mutableStateOf<List<StoreWithDistance>>(emptyList()) }
-    var navIndex by remember { mutableStateOf(-1) }
+    var navIndex by remember { mutableIntStateOf(-1) }
     // تمييز أيقونة نتيجة البحث أو المحل المفتوح في البطاقة السفلية
     val highlightedStoreId = when {
         selectedStore != null -> selectedStore!!.id
@@ -351,15 +355,18 @@ fun MapScreen(
     }
 
     LaunchedEffect(Unit) {
+        // الفلاتر أولاً (قراءة محلية سريعة) بدل انتظار تحميل المحلات من الشبكة،
+        // ومرة واحدة فقط: بعد تدوير الشاشة تبقى القيم المستعادة من rememberSaveable.
+        if (!filtersInitialized) {
+            if (appPreferences.rememberFilter.first()) {
+                filterType = appPreferences.savedFilterType.first()
+                filterSub = appPreferences.savedFilterSub.first()
+            }
+            filtersInitialized = true
+        }
+        tryGetLastLocation(context) { lat, lon -> userLat = lat; userLon = lon }
         val result = storeRepository.getAllStores()
         if (result.isSuccess) stores = result.getOrDefault(emptyList())
-        tryGetLastLocation(context) { lat, lon -> userLat = lat; userLon = lon }
-        if (appPreferences.rememberFilter.first()) {
-            filterType = appPreferences.savedFilterType.first()
-            filterSub = appPreferences.savedFilterSub.first()
-        } else {
-            filterType = FILTER_ALL; filterSub = FILTER_ALL
-        }
     }
 
     // لا حاجة لنقل Mapsforge للموقع المحفوظ بعد إنشائها: الخريطة لا تُنشأ إلا بعد
