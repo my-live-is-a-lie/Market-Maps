@@ -2,7 +2,9 @@ package com.marketmaps.app.data
 
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.tasks.await
+import com.marketmaps.app.util.logE
 import com.marketmaps.app.util.logW
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -22,7 +24,6 @@ class StoreRepository {
                 "description" to store.description,
                 "latitude" to store.latitude,
                 "longitude" to store.longitude,
-                // وقت السيرفر — لا يعتمد على ساعة الهاتف
                 "createdAt" to FieldValue.serverTimestamp()
             )
             val documentRef = collection.add(data).await()
@@ -30,28 +31,24 @@ class StoreRepository {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            logW(TAG, "Firestore", e)
+            logW(TAG, "addStore", e)
             Result.failure(e)
         }
     }
 
     suspend fun getAllStores(): Result<List<Store>> {
         return try {
-            val snapshot = collection.get().await()
+            // نفضّل السيرفر حتى لا تُرجع ذاكرة فارغة بعد تثبيت جديد
+            val snapshot = try {
+                collection.get(Source.SERVER).await()
+            } catch (e: Exception) {
+                logW(TAG, "السيرفر غير متاح — محاولة من الكاش", e)
+                collection.get(Source.CACHE).await()
+            }
+            logW(TAG, "عدد المستندات من Firestore: ${snapshot.size()} (fromCache=${snapshot.metadata.isFromCache})")
             val stores = snapshot.documents.mapNotNull { doc ->
                 try {
-                    val created = doc.getTimestamp("createdAt")?.toDate()?.time
-                        ?: doc.getLong("createdAt")
-                        ?: 0L
-                    Store(
-                        id = doc.id,
-                        name = doc.getString("name") ?: "",
-                        category = doc.getString("category") ?: "",
-                        description = doc.getString("description") ?: "",
-                        latitude = doc.getDouble("latitude") ?: 0.0,
-                        longitude = doc.getDouble("longitude") ?: 0.0,
-                        createdAt = created
-                    )
+                    parseStore(doc.id, doc.data ?: emptyMap())
                 } catch (e: Exception) {
                     logW(TAG, "مستند غير صالح ${doc.id}", e)
                     null
@@ -61,8 +58,39 @@ class StoreRepository {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            logW(TAG, "Firestore", e)
+            logE(TAG, "getAllStores فشل", e)
             Result.failure(e)
+        }
+    }
+
+    private fun parseStore(id: String, data: Map<String, Any?>): Store {
+        val createdRaw = data["createdAt"]
+        val created = when (createdRaw) {
+            is com.google.firebase.Timestamp -> createdRaw.toDate().time
+            is Long -> createdRaw
+            is Double -> createdRaw.toLong()
+            else -> 0L
+        }
+        return Store(
+            id = id,
+            name = data["name"] as? String ?: "",
+            category = data["category"] as? String ?: "",
+            description = data["description"] as? String ?: "",
+            latitude = numberToDouble(data["latitude"]),
+            longitude = numberToDouble(data["longitude"]),
+            createdAt = created
+        )
+    }
+
+    private fun numberToDouble(value: Any?): Double {
+        return when (value) {
+            is Double -> value
+            is Float -> value.toDouble()
+            is Long -> value.toDouble()
+            is Int -> value.toDouble()
+            is Number -> value.toDouble()
+            is String -> value.toDoubleOrNull() ?: 0.0
+            else -> 0.0
         }
     }
 
@@ -82,7 +110,7 @@ class StoreRepository {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            logW(TAG, "Firestore", e)
+            logW(TAG, "updateStore", e)
             Result.failure(e)
         }
     }
@@ -95,7 +123,7 @@ class StoreRepository {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            logW(TAG, "Firestore", e)
+            logW(TAG, "deleteStore", e)
             Result.failure(e)
         }
     }
