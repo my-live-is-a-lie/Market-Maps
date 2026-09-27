@@ -66,6 +66,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,6 +86,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
@@ -194,9 +196,15 @@ fun MapScreen(
             highlightScaleAnim.snapTo(1f)
         }
     }
-    val highlightScale by highlightScaleAnim.asState()
-    // تقليل إعادة رسم العلامات أثناء الحركة (يمنع وميض موقعك)
-    val highlightScaleBucket = ((highlightScale * 8f).toInt() / 8f)
+    // قراءة highlightScaleAnim.value مباشرة في جسم MapScreen كانت تعيد تركيب الشاشة
+    // كلها (+1000 سطر) مع كل إطار أنيميشن. derivedStateOf لا يُبلغ إلا عند تغيّر
+    // القيمة المقرّبة: خطوات 1/8 لعلامات Mapsforge و 1/25 لأيقونات جوجل.
+    val highlightScaleBucket by remember {
+        derivedStateOf { (highlightScaleAnim.value * 8f).toInt() / 8f }
+    }
+    val highlightScale by remember {
+        derivedStateOf { (highlightScaleAnim.value * 25f).toInt() / 25f }
+    }
     var cameraTarget by remember { mutableStateOf<CameraTarget?>(null) }
     var detailsCardHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -216,9 +224,11 @@ fun MapScreen(
             )
         )
     }
-    val cardLift = with(density) { cardLiftAnim.value.coerceAtLeast(0f).toDp() }
-    val fabBottomPad = (16.dp + cardLift).coerceAtLeast(0.dp)
-    val navBottomPad = (if (detailsCardVisible) cardLift + 8.dp else 16.dp).coerceAtLeast(0.dp)
+    // إزاحة الأزرار فوق البطاقة تُقرأ في مرحلة التخطيط فقط (offset { }) بدل
+    // حساب padding في جسم الدالة، فلا تُعاد الشاشة كلها مع كل إطار من حركة البطاقة.
+    val cardLiftOffset: Density.() -> IntOffset = {
+        IntOffset(0, -cardLiftAnim.value.coerceAtLeast(0f).roundToInt())
+    }
 
     val searchResults = remember(searchQuery, stores, userLat, userLon, filterType, filterSub) {
         filterAndSortStores(stores, searchQuery, userLat, userLon, filterType, filterSub)
@@ -556,7 +566,8 @@ fun MapScreen(
                     // AbsoluteAlignment.BottomLeft = اليسار الفعلي دائماً (لا ينعكس مع العربية)
                     modifier = Modifier
                         .align(AbsoluteAlignment.BottomLeft)
-                        .absolutePadding(left = 12.dp, bottom = navBottomPad)
+                        .absolutePadding(left = 12.dp, bottom = if (detailsCardVisible) 8.dp else 16.dp)
+                        .offset(cardLiftOffset)
                         .zIndex(3f)
                 )
             }
@@ -578,7 +589,8 @@ fun MapScreen(
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, bottom = fabBottomPad, end = 16.dp)
+                    .padding(start = 16.dp, bottom = 16.dp, end = 16.dp)
+                    .offset(cardLiftOffset)
                     .zIndex(15f),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
