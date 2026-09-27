@@ -100,50 +100,50 @@ object MarkerIconHelper {
 
     private fun dpF(value: Float): Float = value * density
 
-    fun displayModeForZoom(zoom: Int): DisplayMode = when {
+    /**
+     * أوضاع العرض حسب التكبير (كما النسخة السابقة):
+     * ≥16 فقاعة كبيرة، ≥14 متوسطة، ≥12 نقطة، أقل من 12 مخفي
+     * (حوالي أكثر من ~200م على مستوى الشارع تتحول لنقاط ثم تختفي).
+     */
+    fun displayModeForZoom(zoom: Int, latitude: Double = 30.0): DisplayMode = when {
         zoom >= 16 -> DisplayMode.BUBBLE_LARGE
         zoom >= 14 -> DisplayMode.BUBBLE_MEDIUM
-        zoom >= 11 -> DisplayMode.CIRCLE
-        // أقل من 11: نقاط صغيرة جداً بدل إخفاء كامل حتى لا تختفي المحلات عند التكبير البعيد
-        zoom >= 9 -> DisplayMode.CIRCLE
+        zoom >= 12 -> DisplayMode.CIRCLE
         else -> DisplayMode.HIDDEN
     }
 
-    fun displayModeForGoogleZoom(zoom: Float): DisplayMode =
-        displayModeForZoom(zoom.toInt().coerceIn(1, 22))
+    fun displayModeForGoogleZoom(zoom: Float, latitude: Double = 30.0): DisplayMode =
+        displayModeForZoom(zoom.toInt().coerceIn(1, 22), latitude)
 
     /**
-     * حجم أيقونة Mapsforge حسب التكبير بخطوات متقاربة لانتقال أنعم.
-     * القيم بالـ dp تعادل تقريباً قيم البكسل القديمة على شاشة كثافتها 2.75.
+     * أحجام بالبكسل كما النسخة القديمة (88/80/72…) مع تعديل خفيف حسب كثافة الشاشة
+     * نسبة إلى كثافة التصميم 2.75 حتى تبدو مماثلة على أجهزة مختلفة.
      */
-    fun markerSizePxForZoom(zoom: Int): Int {
-        val sizeDp = when {
-            zoom >= 18 -> 32f
-            zoom >= 17 -> 29f
-            zoom >= 16 -> 26f
-            zoom >= 15 -> 23f
-            zoom >= 14 -> 20f
-            zoom >= 13 -> 16f
-            zoom >= 12 -> 12f
-            zoom >= 11 -> 10f
-            zoom >= 9 -> 8f
-            else -> return 0
-        }
-        return dp(sizeDp)
+    private fun legacyPx(px: Int): Int =
+        (px * (density / 2.75f)).roundToInt().coerceAtLeast(1)
+
+    fun markerSizePxForZoom(zoom: Int): Int = when {
+        zoom >= 18 -> legacyPx(88)
+        zoom >= 17 -> legacyPx(80)
+        zoom >= 16 -> legacyPx(72)
+        zoom >= 15 -> legacyPx(64)
+        zoom >= 14 -> legacyPx(56)
+        zoom >= 13 -> legacyPx(48)
+        zoom >= 12 -> legacyPx(36)
+        else -> 0
     }
 
-    /** حجم أيقونة خرائط جوجل حسب وضع العرض */
     fun markerSizePxForMode(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.BUBBLE_LARGE -> dp(29f)
-        DisplayMode.BUBBLE_MEDIUM -> dp(20f)
-        DisplayMode.CIRCLE -> dp(10f)
+        DisplayMode.BUBBLE_LARGE -> legacyPx(80)
+        DisplayMode.BUBBLE_MEDIUM -> legacyPx(56)
+        DisplayMode.CIRCLE -> legacyPx(28)
         DisplayMode.HIDDEN -> 0
     }
 
     private fun userPinSizePx(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.HIDDEN, DisplayMode.CIRCLE -> dp(10f)
-        DisplayMode.BUBBLE_MEDIUM -> dp(29f)
-        DisplayMode.BUBBLE_LARGE -> dp(35f)
+        DisplayMode.HIDDEN, DisplayMode.CIRCLE -> legacyPx(28)
+        DisplayMode.BUBBLE_MEDIUM -> legacyPx(80)
+        DisplayMode.BUBBLE_LARGE -> legacyPx(96)
     }
 
     fun colorForCategory(category: String): Int = CategoryStyles.colorFor(category)
