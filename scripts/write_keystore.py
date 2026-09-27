@@ -1,0 +1,4 @@
+import base64
+from pathlib import Path
+Path("app/debug.keystore").write_bytes(base64.b64decode("MIIKdgIBAzCCCiAGCSqGSIb3DQEHAaCCChEEggoNMIIKCTCCBcAGCSqGSIb3DQEHAaCCBbEEggWtMIIFqTCCBaUGCyqGSIb3DQEMCgECoIIFQDCCBTwwZgYJKoZIhvcNAQUNMFkwOQYCKgQSMRYwFAYIKoZIhvcNAwcECBQd0x0x0x0x"))
+print("bad keystore")
