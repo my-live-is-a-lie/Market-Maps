@@ -165,12 +165,21 @@ fun MapScreen(
 
     // تنبيه إن اختار المستخدم جوجل بدون مفتاح صالح في هذا البناء
     LaunchedEffect(mapProvider) {
-        if (mapProvider == MapProvider.GOOGLE && BuildConfig.MAPS_API_KEY.isBlank()) {
-            Toast.makeText(
-                context,
-                "مفتاح خرائط جوجل غير موجود في هذا البناء — الخريطة ستظهر فارغة",
-                Toast.LENGTH_LONG
-            ).show()
+        if (mapProvider == MapProvider.GOOGLE) {
+            val key = BuildConfig.MAPS_API_KEY
+            if (key.isBlank()) {
+                Toast.makeText(
+                    context,
+                    "مفتاح خرائط جوجل فارغ في هذا البناء — حدّث Secret: MAPS_API_KEY",
+                    Toast.LENGTH_LONG
+                ).show()
+            } else if (key.contains("BI59KWYJPS73")) {
+                Toast.makeText(
+                    context,
+                    "مفتاح جوجل الحالي تجريبي (demo) — استبدله بمفتاح Maps SDK فعّال في GitHub Secrets",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
     val showMarkerLabels = settings.showMarkerLabels
@@ -381,7 +390,13 @@ fun MapScreen(
         if (result.isSuccess) {
             stores = result.getOrDefault(emptyList())
             if (stores.isEmpty()) {
-                Toast.makeText(context, "لا توجد محلات محمّلة من السحابة حالياً", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    "السحابة رجعت 0 محل — تحقق من الإنترنت وقواعد Firestore لمجموعة stores",
+                    Toast.LENGTH_LONG
+                ).show()
+            } else {
+                Toast.makeText(context, "تم تحميل ${stores.size} محل", Toast.LENGTH_SHORT).show()
             }
         } else {
             val err = result.exceptionOrNull()?.message ?: "خطأ غير معروف"
