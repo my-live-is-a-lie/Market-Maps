@@ -129,6 +129,7 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
+import com.marketmaps.app.util.logW
 
 @OptIn(ExperimentalFoundationApi::class, FlowPreview::class)
 @Composable
@@ -287,7 +288,8 @@ fun MapScreen(
             scope.launch {
                 appPreferences.saveLastLocation(center.latitude, center.longitude, zoom)
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            logW(TAG, "حفظ موقع الكاميرا", e)
         }
     }
 

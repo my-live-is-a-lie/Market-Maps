@@ -13,6 +13,8 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
+import com.marketmaps.app.util.logW
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * تحميل ملفات خرائط Mapsforge مع إيقاف مؤقت واستئناف وإلغاء.
@@ -213,7 +215,11 @@ object MapDownloader {
                 onProgress(Progress(dest.length(), dest.length(), 0, 100))
                 Result.success(dest)
             }
+        } catch (e: CancellationException) {
+            // إلغاء العمل من WorkManager يجب أن يصل كإلغاء وليس كـ «فشل»
+            throw e
         } catch (e: Exception) {
+            logW("MapDownloader", "فشل تحميل ${region.id}", e)
             Result.failure(e)
         } finally {
             resetFlags()

@@ -69,10 +69,7 @@ fun GoogleMapContent(
     val context = LocalContext.current
     // تهيئة مصنع الأيقونات مبكراً لتفادي: IBitmapDescriptorFactory is not initialized
     LaunchedEffect(Unit) {
-        try {
-            MapsInitializer.initialize(context)
-        } catch (_: Exception) {
-        }
+        logged(TAG, "MapsInitializer.initialize") { MapsInitializer.initialize(context) }
     }
 
     val cameraPositionState = rememberCameraPositionState {

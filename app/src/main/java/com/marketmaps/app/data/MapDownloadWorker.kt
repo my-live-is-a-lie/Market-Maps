@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.marketmaps.app.util.logged
 
 /**
  * تحميل خريطة في الخلفية مع إشعار تقدم.
@@ -51,9 +52,9 @@ class MapDownloadWorker(
                                 KEY_TOTAL to progress.totalBytes
                             )
                         )
-                        try {
+                        // قد يُرفض الإشعار الأمامي (مثلاً قيود أندرويد 12+ في الخلفية) — التحميل يستمر
+                        logged(TAG, "setForeground") {
                             setForeground(createForegroundInfo(progress.percent, region.nameAr))
-                        } catch (_: Exception) {
                         }
                     }
             }
@@ -66,9 +67,8 @@ class MapDownloadWorker(
 
         if (result.isSuccess) {
             // حفظ كخريطة نشطة للأوفلاين
-            try {
+            logged(TAG, "حفظ الخريطة النشطة") {
                 AppPreferences(applicationContext).setMapFileName(region.fileName)
-            } catch (_: Exception) {
             }
             Result.success(workDataOf(KEY_FILE to region.fileName))
         } else {
@@ -112,3 +112,5 @@ class MapDownloadWorker(
         private const val NOTIFICATION_ID = 4401
     }
 }
+
+private const val TAG = "MapDownloadWorker"

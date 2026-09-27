@@ -1,6 +1,7 @@
 package com.marketmaps.app.util
 
 import android.util.Log
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * تسجيل موحّد بدل ابتلاع الاستثناءات بصمت.
@@ -27,6 +28,8 @@ fun logE(tag: String, message: String, error: Throwable? = null) {
 inline fun <T> logged(tag: String, message: String, block: () -> T): T? =
     try {
         block()
+    } catch (e: CancellationException) {
+        throw e // إلغاء الـ coroutine ليس خطأً — يجب أن يمر
     } catch (e: Exception) {
         logW(tag, message, e)
         null

@@ -72,6 +72,7 @@ import com.marketmaps.app.data.Store
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import com.marketmaps.app.util.logW
 
 @Composable
 fun StoreDetailsBottomCard(
@@ -451,7 +452,8 @@ private fun loadAssetSvgBitmap(context: Context, assetPath: String, sizePx: Int)
         val canvas = Canvas(bmp)
         svg.renderToCanvas(canvas)
         bmp
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        logW("StoreDetails", "تعذر رسم $assetPath", e)
         null
     }
 }
@@ -462,7 +464,8 @@ private fun loadCategoryGlyph(context: Context, category: String, sizePx: Int): 
         val path = "markers/$name.svg"
         loadAssetSvgBitmap(context, path, sizePx)
             ?: loadAssetSvgBitmap(context, "markers/store.svg", sizePx)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        logW("StoreDetails", "أيقونة التصنيف $category", e)
         loadAssetSvgBitmap(context, "markers/store.svg", sizePx)
     }
 }

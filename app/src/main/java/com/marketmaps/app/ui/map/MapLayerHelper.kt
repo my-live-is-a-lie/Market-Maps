@@ -17,6 +17,8 @@ import org.mapsforge.map.layer.renderer.TileRendererLayer
 import org.mapsforge.map.reader.MapFile
 import org.mapsforge.map.rendertheme.internal.MapsforgeThemes
 import java.io.File
+import com.marketmaps.app.util.logE
+import com.marketmaps.app.util.logW
 
 /**
  * إدارة طبقات الخريطة (أونلاين / أوفلاين).
@@ -76,7 +78,8 @@ object MapLayerHelper {
         try {
             val legacy = File(context.externalCacheDir ?: return, "mapcache")
             if (legacy.exists()) legacy.deleteRecursively()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            logW(TAG, "تعذر حذف الكاش القديم", e)
         }
     }
 
@@ -92,7 +95,8 @@ object MapLayerHelper {
         try {
             bundle.downloadLayer?.onPause()
             bundle.downloadLayer?.onDestroy()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            logW(TAG, "تدمير طبقة التحميل", e)
         }
         bundle.downloadLayer = null
     }
@@ -101,7 +105,8 @@ object MapLayerHelper {
     private fun destroyRendererLayer(bundle: LayerBundle) {
         try {
             bundle.rendererLayer?.onDestroy()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            logW(TAG, "تدمير طبقة الأوفلاين", e)
         }
         bundle.rendererLayer = null
         bundle.mapFile = null
@@ -170,6 +175,7 @@ object MapLayerHelper {
             bundle.rendererLayer = rendererLayer
             true
         } catch (e: Exception) {
+            logE(TAG, "تعذر فتح الخريطة الأوفلاين $fileName", e)
             Toast.makeText(context, "تعذر فتح الخريطة الأوفلاين: ${e.message}", Toast.LENGTH_LONG).show()
             applyOnline(mapView, bundle)
             false
@@ -219,8 +225,11 @@ object MapLayerHelper {
         try {
             bundle.onlineCache.destroy()
             bundle.offlineCache.destroy()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            logW(TAG, "تدمير كاش البلاطات", e)
         }
         mapView.destroy()
     }
 }
+
+private const val TAG = "MapLayers"
