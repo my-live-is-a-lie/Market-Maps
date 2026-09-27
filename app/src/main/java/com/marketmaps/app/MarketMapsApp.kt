@@ -3,6 +3,7 @@ package com.marketmaps.app
 import android.app.Application
 import android.content.ComponentCallbacks2
 import com.marketmaps.app.ui.map.MarkerIconHelper
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.marketmaps.app.util.CrashHandler
 
 /**
@@ -11,6 +12,11 @@ import com.marketmaps.app.util.CrashHandler
 class MarketMapsApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        // تفعيل جمع التقارير (مفعّل افتراضياً؛ نؤكده صراحة)
+        try {
+            FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
+        } catch (_: Exception) {
+        }
         CrashHandler.install(this)
     }
 
