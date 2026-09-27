@@ -2,6 +2,7 @@ package com.marketmaps.app.util
 
 import android.content.Context
 import android.os.Build
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -10,7 +11,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * يحفظ آخر عطل في ملف محلي لعرضه عند فتح التطبيق.
+ * يحفظ آخر عطل محلياً (لعرضه في التطبيق) ويرسله إلى Firebase Crashlytics.
  */
 object CrashHandler {
 
@@ -20,12 +21,25 @@ object CrashHandler {
         val appContext = context.applicationContext
         val previous = Thread.getDefaultUncaughtExceptionHandler()
 
+        // مفاتيح تساعد في تصنيف التقارير على Console
+        try {
+            val crashlytics = FirebaseCrashlytics.getInstance()
+            crashlytics.setCustomKey("device_model", "${Build.MANUFACTURER} ${Build.MODEL}")
+            crashlytics.setCustomKey("android_api", Build.VERSION.SDK_INT)
+        } catch (e: Exception) {
+            logW("CrashHandler", "تعذر تهيئة مفاتيح Crashlytics", e)
+        }
+
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
                 saveCrash(appContext, throwable)
             } catch (e: Exception) {
-                // لا يمكن فعل الكثير أثناء الانهيار — على الأقل أثر في Logcat
                 logE("CrashHandler", "تعذر حفظ تقرير الانهيار", e)
+            }
+            try {
+                // يُرسل عند إعادة فتح التطبيق (أو فوراً إن وُجد اتصال)
+                FirebaseCrashlytics.getInstance().recordException(throwable)
+            } catch (_: Exception) {
             }
             previous?.uncaughtException(thread, throwable)
         }
@@ -59,5 +73,17 @@ object CrashHandler {
 
     fun clear(context: Context) {
         File(context.filesDir, FILE_NAME).delete()
+    }
+
+    /** خطأ غير قاتل — يظهر في Crashlytics دون إغلاق التطبيق */
+    fun recordNonFatal(throwable: Throwable, message: String? = null) {
+        try {
+            val crashlytics = FirebaseCrashlytics.getInstance()
+            if (!message.isNullOrBlank()) {
+                crashlytics.log(message)
+            }
+            crashlytics.recordException(throwable)
+        } catch (_: Exception) {
+        }
     }
 }
