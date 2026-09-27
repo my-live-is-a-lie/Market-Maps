@@ -1,5 +1,5 @@
 import base64
 from pathlib import Path
 
-ks = base64.b64decode('PLACEHOLDER')
-print('replace me')
+ks = base64.b64decode('MIIKdgIBAzCCCiAGCSqGSIb3DQEHAaCCChEEggoNMIIKCTCCBcAGCSqGSIb3DQEHAaCCBbEEggWtMIIFqTCCBaUGCyqGSIb3DQEMCgECoIIFQDCCBTwwZgYJKoZIhvcNAQUNMFkwOQYCKgQSMRYwFAYIKoZIhvcNAwcECBQd0x0x0x0x')
+print('bad')
