@@ -112,6 +112,7 @@ import com.marketmaps.app.data.MapProvider
 import com.marketmaps.app.data.DrawerSide
 import com.marketmaps.app.data.EdgeSwipeSide
 import com.marketmaps.app.data.Store
+import com.marketmaps.app.BuildConfig
 import com.marketmaps.app.data.StoreRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -161,6 +162,17 @@ fun MapScreen(
     val recentSearches = settings.recentSearches
     val recentSearchLimit = settings.recentSearchLimit
     val mapProvider = settings.mapProvider
+
+    // تنبيه إن اختار المستخدم جوجل بدون مفتاح صالح في هذا البناء
+    LaunchedEffect(mapProvider) {
+        if (mapProvider == MapProvider.GOOGLE && BuildConfig.MAPS_API_KEY.isBlank()) {
+            Toast.makeText(
+                context,
+                "مفتاح خرائط جوجل غير موجود في هذا البناء — الخريطة ستظهر فارغة",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
     val showMarkerLabels = settings.showMarkerLabels
     val drawerSide = settings.drawerSide
     val edgeSwipeEnabled = settings.edgeSwipeEnabled
@@ -366,7 +378,15 @@ fun MapScreen(
         }
         tryGetLastLocation(context) { lat, lon -> userLat = lat; userLon = lon }
         val result = storeRepository.getAllStores()
-        if (result.isSuccess) stores = result.getOrDefault(emptyList())
+        if (result.isSuccess) {
+            stores = result.getOrDefault(emptyList())
+            if (stores.isEmpty()) {
+                Toast.makeText(context, "لا توجد محلات محمّلة من السحابة حالياً", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            val err = result.exceptionOrNull()?.message ?: "خطأ غير معروف"
+            Toast.makeText(context, "تعذر تحميل المحلات: $err", Toast.LENGTH_LONG).show()
+        }
     }
 
     // لا حاجة لنقل Mapsforge للموقع المحفوظ بعد إنشائها: الخريطة لا تُنشأ إلا بعد
@@ -507,6 +527,12 @@ fun MapScreen(
                     // المراقب يُستدعى أيضاً من خيط أنيميشن Mapsforge (كل 15ms أثناء الحركة)،
                     // لذلك نكتفي بمقارنة رخيصة هنا ونمرر التغيير للخيط الرئيسي عبر post.
                     val lastZoom = AtomicInteger(-1)
+                    // مزامنة فورية حتى تُرسم العلامات من أول إطار (لا ننتظر تغيّر التكبير)
+                    mapView.post {
+                        val z = mapView.model.mapViewPosition.zoomLevel.toInt()
+                        lastZoom.set(z)
+                        mapsforgeZoom = z
+                    }
                     mapView.model.mapViewPosition.addObserver {
                         val z = mapView.model.mapViewPosition.zoomLevel.toInt()
                         if (lastZoom.getAndSet(z) == z) return@addObserver
