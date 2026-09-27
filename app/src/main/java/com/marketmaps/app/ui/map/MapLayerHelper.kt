@@ -8,7 +8,9 @@ import org.mapsforge.map.android.util.AndroidUtil
 import org.mapsforge.map.android.view.MapView
 import org.mapsforge.map.datastore.MapDataStore
 import org.mapsforge.map.layer.Layers
+import org.mapsforge.map.layer.cache.InMemoryTileCache
 import org.mapsforge.map.layer.cache.TileCache
+import org.mapsforge.map.layer.cache.TwoLevelTileCache
 import org.mapsforge.map.layer.download.TileDownloadLayer
 import org.mapsforge.map.layer.download.tilesource.OpenStreetMapMapnik
 import org.mapsforge.map.layer.renderer.TileRendererLayer
@@ -180,6 +182,22 @@ object MapLayerHelper {
 
     fun resume(bundle: LayerBundle) {
         bundle.downloadLayer?.onResume()
+    }
+
+    /**
+     * تفريغ بلاطات الذاكرة فقط (عشرات الميجابايت) عند ضغط الذاكرة أو الخروج للخلفية.
+     * لا نستدعي purge() على TwoLevelTileCache مباشرة لأنه يحذف أيضاً بلاطات القرص
+     * المحفوظة للأونلاين. يُستدعى فقط والخريطة غير ظاهرة.
+     */
+    fun trimMemory(bundle: LayerBundle) {
+        for (cache in listOf(bundle.onlineCache, bundle.offlineCache)) {
+            val memoryLevel = when (cache) {
+                is TwoLevelTileCache -> cache.firstLevelTileCache
+                is InMemoryTileCache -> cache
+                else -> null
+            }
+            memoryLevel?.purge()
+        }
     }
 
     /**

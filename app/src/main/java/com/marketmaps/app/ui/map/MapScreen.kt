@@ -1,6 +1,9 @@
 package com.marketmaps.app.ui.map
 
 import android.Manifest
+import android.view.View
+import android.content.res.Configuration
+import android.content.ComponentCallbacks2
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
@@ -66,6 +69,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -131,7 +135,9 @@ import kotlin.math.sqrt
 fun MapScreen(
     modifier: Modifier = Modifier,
     onOpenSettings: () -> Unit = {},
-    onOpenFullSettings: () -> Unit = onOpenSettings
+    onOpenFullSettings: () -> Unit = onOpenSettings,
+    /** شاشة أخرى (الإعدادات) تغطي الخريطة بالكامل: نوقف تحميل البلاطات والرسم */
+    isCovered: Boolean = false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -285,10 +291,13 @@ fun MapScreen(
         }
     }
 
+    val isCoveredState = rememberUpdatedState(isCovered)
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> layerBundle?.let { MapLayerHelper.resume(it) }
+                Lifecycle.Event.ON_RESUME ->
+                    if (!isCoveredState.value) layerBundle?.let { MapLayerHelper.resume(it) }
                 Lifecycle.Event.ON_PAUSE -> {
                     saveCameraPosition()
                     layerBundle?.let { MapLayerHelper.pause(it) }
@@ -302,6 +311,41 @@ fun MapScreen(
             saveCameraPosition()
             layerBundle?.let { MapLayerHelper.pause(it) }
         }
+    }
+
+    // الخريطة مخفية خلف الإعدادات: إيقاف خيوط تحميل البلاطات + إخفاء الـ View حتى لا
+    // يُعاد رسمه، ثم الاستئناف عند العودة (ثالثاً/6).
+    LaunchedEffect(isCovered, layerBundle, mapViewRef) {
+        val bundle = layerBundle
+        if (isCovered) {
+            bundle?.let { MapLayerHelper.pause(it) }
+            mapViewRef?.visibility = View.INVISIBLE
+        } else {
+            mapViewRef?.visibility = View.VISIBLE
+            if (bundle != null && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                MapLayerHelper.resume(bundle)
+            }
+        }
+    }
+
+    // تفريغ بلاطات الذاكرة عند خروج التطبيق للخلفية (ثالثاً/5). أيقونات العلامات
+    // تُفرَّغ في MarketMapsApp.onTrimMemory.
+    DisposableEffect(Unit) {
+        val appContext = context.applicationContext
+        val callbacks = object : ComponentCallbacks2 {
+            override fun onTrimMemory(level: Int) {
+                if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+                    layerBundle?.let { MapLayerHelper.trimMemory(it) }
+                }
+            }
+
+            override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
+            @Deprecated("Deprecated in Java")
+            override fun onLowMemory() = Unit
+        }
+        appContext.registerComponentCallbacks(callbacks)
+        onDispose { appContext.unregisterComponentCallbacks(callbacks) }
     }
 
     LaunchedEffect(Unit) {
@@ -336,6 +380,9 @@ fun MapScreen(
         } else {
             MapLayerHelper.applyOnline(mapView, bundle)
         }
+        // تبديل الوضع يتم عادة من الإعدادات والخريطة مغطاة: applyOnline يشغّل الطبقة
+        // الجديدة، فنوقفها حتى العودة إلى الخريطة.
+        if (isCoveredState.value) MapLayerHelper.pause(bundle)
         // لا حاجة لإعادة بناء العلامات هنا: تبديل طبقة الأساس لا يلمس الـ Markers
     }
 
@@ -479,7 +526,7 @@ fun MapScreen(
                     mapView
                 },
                 modifier = Modifier.fillMaxSize(),
-                update = { mapView -> mapViewRef = mapView; layerBundle?.let { MapLayerHelper.resume(it) } },
+                update = { mapView -> mapViewRef = mapView },
                 onRelease = { mapView ->
                     // الموقع يُحفظ مسبقاً في ON_PAUSE و onDispose — لا تستخدم runBlocking على الخيط الرئيسي
                     val bundle = layerBundle

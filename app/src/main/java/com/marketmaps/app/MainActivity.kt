@@ -86,7 +86,8 @@ class MainActivity : ComponentActivity() {
                             Box(modifier = Modifier.fillMaxSize()) {
                                 MapScreen(
                                     onOpenSettings = { showSettings = true },
-                                    onOpenFullSettings = { showSettings = true }
+                                    onOpenFullSettings = { showSettings = true },
+                                    isCovered = showSettings
                                 )
                                 if (showSettings) {
                                     SettingsScreen(onBack = { showSettings = false })
