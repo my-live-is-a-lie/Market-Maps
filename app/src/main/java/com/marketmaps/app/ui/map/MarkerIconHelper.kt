@@ -93,7 +93,9 @@ object MarkerIconHelper {
     fun displayModeForZoom(zoom: Int): DisplayMode = when {
         zoom >= 16 -> DisplayMode.BUBBLE_LARGE
         zoom >= 14 -> DisplayMode.BUBBLE_MEDIUM
-        zoom >= 12 -> DisplayMode.CIRCLE
+        zoom >= 11 -> DisplayMode.CIRCLE
+        // أقل من 11: نقاط صغيرة جداً بدل إخفاء كامل حتى لا تختفي المحلات عند التكبير البعيد
+        zoom >= 9 -> DisplayMode.CIRCLE
         else -> DisplayMode.HIDDEN
     }
 
@@ -113,7 +115,8 @@ object MarkerIconHelper {
             zoom >= 14 -> 20f
             zoom >= 13 -> 16f
             zoom >= 12 -> 12f
-            zoom >= 11 -> 8f
+            zoom >= 11 -> 10f
+            zoom >= 9 -> 8f
             else -> return 0
         }
         return dp(sizeDp)
