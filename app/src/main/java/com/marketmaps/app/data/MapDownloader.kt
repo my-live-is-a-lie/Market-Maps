@@ -2,15 +2,19 @@ package com.marketmaps.app.data
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okio.buffer
+import okio.sink
 import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
+import com.marketmaps.app.util.logW
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * تحميل ملفات خرائط Mapsforge مع إيقاف مؤقت واستئناف وإلغاء.
@@ -44,6 +48,8 @@ object MapDownloader {
         val sizeBytes: Long,
         val file: File
     )
+
+    private const val CHUNK_BYTES = 64L * 1024
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -150,45 +156,49 @@ object MapDownloader {
                 }
 
                 val append = response.code == 206 && existing > 0
-                body.byteStream().use { input ->
-                    FileOutputStream(temp, append).use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        var downloaded = existing
-                        var lastProgress = -1
-                        var windowStart = System.currentTimeMillis()
-                        var windowBytes = 0L
-                        var speed = 0L
+                // إن تجاهل الخادم Range وأرسل الملف كاملاً (200) فالملف يُكتب من البداية،
+                // لذا يبدأ العدّاد من الصفر وليس من حجم الملف المؤقت (كانت النسبة تتجاوز الحقيقة).
+                var downloaded = if (append) existing else 0L
 
-                        while (true) {
-                            coroutineContext.ensureActive()
+                // Okio: القراءة مباشرة في مخزن الكتابة المؤقت (بدون نسخ) + كتابة على القرص
+                // بكتل كاملة، بدل FileOutputStream غير مخزَّن يُكتب فيه ~8KB في كل مرة
+                // (أكثر من 20 ألف عملية كتابة صغيرة لملف مصر).
+                val source = body.source()
+                temp.sink(append).buffer().use { sink ->
+                    var lastProgress = -1
+                    var windowStart = System.currentTimeMillis()
+                    var windowBytes = 0L
+                    var speed = 0L
 
-                            while (pauseFlag.get() && !cancelFlag.get()) {
-                                Thread.sleep(200)
-                                coroutineContext.ensureActive()
-                            }
-                            if (cancelFlag.get()) {
-                                return@withContext Result.failure(Exception("تم إلغاء التحميل"))
-                            }
+                    while (true) {
+                        coroutineContext.ensureActive()
 
-                            val read = input.read(buffer)
-                            if (read == -1) break
-                            output.write(buffer, 0, read)
-                            downloaded += read
-                            windowBytes += read
+                        // delay بدل Thread.sleep: لا يحجز خيط IO أثناء الإيقاف المؤقت
+                        while (pauseFlag.get() && !cancelFlag.get()) {
+                            delay(200)
+                        }
+                        if (cancelFlag.get()) {
+                            return@withContext Result.failure(Exception("تم إلغاء التحميل"))
+                        }
 
-                            val now = System.currentTimeMillis()
-                            val elapsed = now - windowStart
-                            if (elapsed >= 500) {
-                                speed = (windowBytes * 1000L) / elapsed.coerceAtLeast(1)
-                                windowStart = now
-                                windowBytes = 0L
-                            }
+                        val read = source.read(sink.buffer, CHUNK_BYTES)
+                        if (read == -1L) break
+                        sink.emitCompleteSegments()
+                        downloaded += read
+                        windowBytes += read
 
-                            val percent = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else 0
-                            if (percent != lastProgress || elapsed >= 500) {
-                                lastProgress = percent
-                                onProgress(Progress(downloaded, total, speed, percent))
-                            }
+                        val now = System.currentTimeMillis()
+                        val elapsed = now - windowStart
+                        if (elapsed >= 500) {
+                            speed = (windowBytes * 1000L) / elapsed.coerceAtLeast(1)
+                            windowStart = now
+                            windowBytes = 0L
+                        }
+
+                        val percent = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else 0
+                        if (percent != lastProgress || elapsed >= 500) {
+                            lastProgress = percent
+                            onProgress(Progress(downloaded, total, speed, percent))
                         }
                     }
                 }
@@ -205,7 +215,11 @@ object MapDownloader {
                 onProgress(Progress(dest.length(), dest.length(), 0, 100))
                 Result.success(dest)
             }
+        } catch (e: CancellationException) {
+            // إلغاء العمل من WorkManager يجب أن يصل كإلغاء وليس كـ «فشل»
+            throw e
         } catch (e: Exception) {
+            logW("MapDownloader", "فشل تحميل ${region.id}", e)
             Result.failure(e)
         } finally {
             resetFlags()

@@ -52,7 +52,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -73,6 +72,7 @@ import com.marketmaps.app.data.Store
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import com.marketmaps.app.util.logW
 
 @Composable
 fun StoreDetailsBottomCard(
@@ -85,9 +85,6 @@ fun StoreDetailsBottomCard(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    val screenW = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
-    val screenH = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
 
     var showCoords by remember { mutableStateOf(false) }
     var dragAxis by remember { mutableStateOf<Char?>(null) } // 'H' أو 'V'
@@ -455,7 +452,8 @@ private fun loadAssetSvgBitmap(context: Context, assetPath: String, sizePx: Int)
         val canvas = Canvas(bmp)
         svg.renderToCanvas(canvas)
         bmp
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        logW("StoreDetails", "تعذر رسم $assetPath", e)
         null
     }
 }
@@ -463,24 +461,11 @@ private fun loadAssetSvgBitmap(context: Context, assetPath: String, sizePx: Int)
 private fun loadCategoryGlyph(context: Context, category: String, sizePx: Int): Bitmap? {
     return try {
         val name = MarkerIconHelper.iconNameForCategory(category)
-            ?: guessIconName(category)
         val path = "markers/$name.svg"
         loadAssetSvgBitmap(context, path, sizePx)
             ?: loadAssetSvgBitmap(context, "markers/store.svg", sizePx)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        logW("StoreDetails", "أيقونة التصنيف $category", e)
         loadAssetSvgBitmap(context, "markers/store.svg", sizePx)
-    }
-}
-
-private fun guessIconName(category: String): String {
-    val c = category.lowercase()
-    return when {
-        "بقال" in c || "محل" in c -> "store"
-        "مطعم" in c || "مقهى" in c || "كاف" in c -> "restaurant"
-        "صيدل" in c || "صح" in c -> "hospital"
-        "ورشة" in c -> "workshop"
-        "مدرس" in c -> "school"
-        "مسجد" in c -> "other"
-        else -> "store"
     }
 }

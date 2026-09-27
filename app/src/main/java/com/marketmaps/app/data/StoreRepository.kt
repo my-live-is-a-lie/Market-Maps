@@ -3,6 +3,8 @@ package com.marketmaps.app.data
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
+import com.marketmaps.app.util.logW
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * مستودع للتعامل مع المحلات في Firestore.
@@ -25,7 +27,10 @@ class StoreRepository {
             )
             val documentRef = collection.add(data).await()
             Result.success(documentRef.id)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
+            logW(TAG, "Firestore", e)
             Result.failure(e)
         }
     }
@@ -48,11 +53,15 @@ class StoreRepository {
                         createdAt = created
                     )
                 } catch (e: Exception) {
+                    logW(TAG, "مستند غير صالح ${doc.id}", e)
                     null
                 }
             }
             Result.success(stores)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
+            logW(TAG, "Firestore", e)
             Result.failure(e)
         }
     }
@@ -70,7 +79,10 @@ class StoreRepository {
             )
             collection.document(store.id).update(data).await()
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
+            logW(TAG, "Firestore", e)
             Result.failure(e)
         }
     }
@@ -80,8 +92,13 @@ class StoreRepository {
             if (storeId.isBlank()) return Result.failure(Exception("معرف المحل غير موجود"))
             collection.document(storeId).delete().await()
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
+            logW(TAG, "Firestore", e)
             Result.failure(e)
         }
     }
 }
+
+private const val TAG = "StoreRepository"

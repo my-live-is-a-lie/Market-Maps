@@ -1,36 +1,26 @@
 # Market Maps — قواعد ProGuard / R8
+#
+# سابقاً: -keep class androidx.compose.** و com.google.firebase.** و com.google.android.gms.**
+# و com.marketmaps.app.data.** بالكامل — وهذا يمنع R8 من تحسين وتصغير Compose
+# (أكبر مكتبة في التطبيق)، وهي أهم ما يستفيد من R8. مكتبات AndroidX و Firebase و
+# Play Services و WorkManager و DataStore و OkHttp تشحن قواعدها بنفسها
+# (consumer rules)، والتطبيق لا يستخدم الانعكاس (reflection) ولا toObject() —
+# كائنات Store تُبنى يدوياً في StoreRepository.
 
-# Mapsforge
+# Mapsforge: الثيمات تُحمَّل كموارد (XML) عبر أسماء الأصناف، والمكتبة لا تشحن قواعد R8
 -keep class org.mapsforge.** { *; }
 -dontwarn org.mapsforge.**
 
-# AndroidSVG
+# AndroidSVG: بعض العناصر تُنشأ حسب اسم الوسم؛ مكتبة صغيرة فالإبقاء عليها آمن
 -keep class com.caverock.androidsvg.** { *; }
 -dontwarn com.caverock.androidsvg.**
 
-# Firebase / Firestore
--keep class com.google.firebase.** { *; }
--keep class com.google.android.gms.** { *; }
--dontwarn com.google.firebase.**
--dontwarn com.google.android.gms.**
+# OkHttp/Okio: تحذيرات لأصناف اختيارية (Conscrypt/BouncyCastle/OpenJSSE) غير موجودة
+-dontwarn okhttp3.internal.platform.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**
 
-# OkHttp / Okio
--dontwarn okhttp3.**
--dontwarn okio.**
--keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
-
-# Kotlin / Coroutines
--keep class kotlin.Metadata { *; }
--dontwarn kotlinx.coroutines.**
-
-# DataStore
--keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite {
-    <fields>;
-}
-
-# Compose — إبقاء أسماء التركيب الأساسية
--keep class androidx.compose.** { *; }
--dontwarn androidx.compose.**
-
-# منع إزالة نماذج البيانات المستخدمة مع Firestore
--keep class com.marketmaps.app.data.** { *; }
+# إبقاء أسماء الأسطر في تقارير الأعطال (CrashHandler) مع إخفاء اسم الملف الأصلي
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

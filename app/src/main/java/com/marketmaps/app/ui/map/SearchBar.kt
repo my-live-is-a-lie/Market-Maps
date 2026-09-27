@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.marketmaps.app.data.FILTER_ALL
 import com.marketmaps.app.data.CategoryData
 import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.Store
@@ -76,23 +77,23 @@ fun SearchBar(
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
-    val mainFilters = remember { listOf("الكل") + CategoryData.categories.map { it.name } }
+    val mainFilters = remember { listOf(FILTER_ALL) + CategoryData.categories.map { it.name } }
 
     val subFilters = remember(filterType) {
-        if (filterType == "الكل") {
+        if (filterType == FILTER_ALL) {
             emptyList()
         } else {
             val cat = CategoryData.categories.find { it.name == filterType }
-            listOf("الكل") + (cat?.subCategories?.map { it.name } ?: emptyList())
+            listOf(FILTER_ALL) + (cat?.subCategories?.map { it.name } ?: emptyList())
         }
     }
 
-    val showingSubs = filterType != "الكل"
+    val showingSubs = filterType != FILTER_ALL
     val quickFilters = if (showingSubs) subFilters else mainFilters
 
     val barColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val barContent = MaterialTheme.colorScheme.onSurface
-    val typeColor = if (filterType == "الكل") {
+    val typeColor = if (filterType == FILTER_ALL) {
         MaterialTheme.colorScheme.primary
     } else {
         Color(MarkerIconHelper.colorForCategory(filterType))
@@ -151,7 +152,7 @@ fun SearchBar(
                                 Icon(
                                     Icons.Default.List,
                                     contentDescription = "فلتر",
-                                    tint = if (filterType != "الكل" || filterSub != "الكل")
+                                    tint = if (filterType != FILTER_ALL || filterSub != FILTER_ALL)
                                         MaterialTheme.colorScheme.primary
                                     else
                                         barContent
@@ -235,22 +236,22 @@ Row(
             ) {
                 quickFilters.forEach { name ->
                     val selected = if (showingSubs) {
-                        if (name == "الكل") filterSub == "الكل" else filterSub == name
+                        if (name == FILTER_ALL) filterSub == FILTER_ALL else filterSub == name
                     } else {
                         filterType == name
                     }
                     val selectedColor = if (showingSubs) {
-                        if (name == "الكل") typeColor else Color(MarkerIconHelper.colorForCategory("$filterType $name"))
+                        if (name == FILTER_ALL) typeColor else Color(MarkerIconHelper.colorForCategory("$filterType $name"))
                     } else {
-                        if (name == "الكل") MaterialTheme.colorScheme.primary
+                        if (name == FILTER_ALL) MaterialTheme.colorScheme.primary
                         else Color(MarkerIconHelper.colorForCategory(name))
                     }
                     FilterChip(
                         selected = selected,
                         onClick = {
                             if (showingSubs) {
-                                if (name == "الكل") {
-                                    onFilterTypeChange("الكل")
+                                if (name == FILTER_ALL) {
+                                    onFilterTypeChange(FILTER_ALL)
                                 } else {
                                     onFilterSubChange(name)
                                 }
@@ -280,7 +281,7 @@ Row(
                 }
             }
 
-            if (query.isNotBlank() || filterType != "الكل" || filterSub != "الكل") {
+            if (query.isNotBlank() || filterType != FILTER_ALL || filterSub != FILTER_ALL) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -299,7 +300,8 @@ Row(
                         )
                     } else {
                         LazyColumn {
-                            items(results) { item ->
+                            // key: يحافظ على حالة العناصر ويتفادى إعادة رسمها كلها عند تغيّر ترتيب النتائج
+                            items(results, key = { it.store.id }) { item ->
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -354,48 +356,62 @@ data class StoreWithDistance(
     val distanceMeters: Double
 )
 
+/**
+ * نسخة مجهّزة للبحث من المحل: النص المطبَّع وأجزاء التصنيف تُحسب مرة واحدة عند
+ * تغيّر قائمة المحلات، بدل تطبيع الاسم والتصنيف والوصف لكل محل مع كل حرف يُكتب.
+ */
+class SearchableStore(
+    val store: Store,
+    val normalizedText: String,
+    val categoryType: String,
+    val categoryParts: List<String>
+)
+
+private val WHITESPACE = Regex("\\s+")
+// فاصل لا يظهر في النص المطبَّع حتى لا يطابق البحث كلمة مقسومة بين حقلين
+private const val FIELD_SEPARATOR = '\u0000'
+
+fun buildSearchIndex(stores: List<Store>): List<SearchableStore> = stores.map { store ->
+    val cat = store.category.trim()
+    SearchableStore(
+        store = store,
+        normalizedText = buildString {
+            append(TextNormalizer.normalize(store.name)); append(FIELD_SEPARATOR)
+            append(TextNormalizer.normalize(store.category)); append(FIELD_SEPARATOR)
+            append(TextNormalizer.normalize(store.description))
+        },
+        categoryType = cat,
+        categoryParts = cat.split(WHITESPACE)
+    )
+}
+
 fun filterAndSortStores(
-    stores: List<Store>,
+    index: List<SearchableStore>,
     query: String,
     userLat: Double?,
     userLon: Double?,
-    filterType: String = "الكل",
-    filterSub: String = "الكل"
+    filterType: String = FILTER_ALL,
+    filterSub: String = FILTER_ALL
 ): List<StoreWithDistance> {
-    var filtered = stores
+    val noFilter = filterType == FILTER_ALL && filterSub == FILTER_ALL
+    if (query.isBlank() && noFilter) return emptyList()
+    val nq = if (query.isNotBlank()) TextNormalizer.normalize(query) else null
 
-    if (filterType != "الكل") {
+    // تصفية واحدة بدل ثلاث قوائم وسيطة
+    val filtered = index.asSequence().filter { item ->
         // يبدأ التصنيف بنوع المكان (محل / ورشة / …) لتفادي تطابق «أخرى» مع كل الأنواع
-        filtered = filtered.filter { store ->
-            val cat = store.category.trim()
-            cat == filterType || cat.startsWith("$filterType ", ignoreCase = true)
-        }
-    }
-    if (filterSub != "الكل") {
-        filtered = filtered.filter { store ->
-            val parts = store.category.trim().split(Regex("\\s+"))
-            parts.any { it.equals(filterSub, ignoreCase = true) }
-        }
-    }
-
-    if (query.isNotBlank()) {
-        val nq = TextNormalizer.normalize(query)
-        filtered = filtered.filter { store ->
-            TextNormalizer.normalize(store.name).contains(nq) ||
-                TextNormalizer.normalize(store.category).contains(nq) ||
-                TextNormalizer.normalize(store.description).contains(nq)
-        }
-    } else if (filterType == "الكل" && filterSub == "الكل") {
-        return emptyList()
+        (filterType == FILTER_ALL || item.categoryType == filterType ||
+            item.categoryType.startsWith("$filterType ", ignoreCase = true)) &&
+            (filterSub == FILTER_ALL || item.categoryParts.any { it.equals(filterSub, ignoreCase = true) }) &&
+            (nq == null || item.normalizedText.contains(nq))
     }
 
     return if (userLat != null && userLon != null) {
-        filtered.map { store ->
-            val dist = haversine(userLat, userLon, store.latitude, store.longitude)
-            StoreWithDistance(store, dist)
-        }.sortedBy { it.distanceMeters }
+        filtered.map { StoreWithDistance(it.store, haversine(userLat, userLon, it.store.latitude, it.store.longitude)) }
+            .sortedBy { it.distanceMeters }
+            .toList()
     } else {
-        filtered.map { StoreWithDistance(it, -1.0) }
+        filtered.map { StoreWithDistance(it.store, -1.0) }.toList()
     }
 }
 

@@ -1,6 +1,9 @@
 package com.marketmaps.app.ui.map
 
 import android.Manifest
+import android.view.View
+import android.content.res.Configuration
+import android.content.ComponentCallbacks2
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
@@ -66,6 +69,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,6 +93,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
@@ -94,7 +103,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.marketmaps.app.data.FILTER_ALL
 import com.marketmaps.app.data.AppPreferences
+import com.marketmaps.app.data.SavedLocation
+import com.marketmaps.app.data.AppSettings
 import com.marketmaps.app.data.MapDownloader
 import com.marketmaps.app.data.MapProvider
 import com.marketmaps.app.data.DrawerSide
@@ -103,6 +115,13 @@ import com.marketmaps.app.data.Store
 import com.marketmaps.app.data.StoreRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.marketmaps.app.util.logged
+import java.util.concurrent.atomic.AtomicInteger
+import org.mapsforge.map.layer.Layer
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Dispatchers
 import org.mapsforge.core.model.LatLong
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 import org.mapsforge.map.android.view.MapView
@@ -112,13 +131,16 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
+import com.marketmaps.app.util.logW
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, FlowPreview::class)
 @Composable
 fun MapScreen(
     modifier: Modifier = Modifier,
     onOpenSettings: () -> Unit = {},
-    onOpenFullSettings: () -> Unit = onOpenSettings
+    onOpenFullSettings: () -> Unit = onOpenSettings,
+    /** شاشة أخرى (الإعدادات) تغطي الخريطة بالكامل: نوقف تحميل البلاطات والرسم */
+    isCovered: Boolean = false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -127,21 +149,23 @@ fun MapScreen(
     val appPreferences = remember { AppPreferences(context) }
     // ننتظر أول قراءة من DataStore حتى لا نفتح على القاهرة ونحفظها بالخطأ
     var locationReady by remember { mutableStateOf(false) }
-    var savedLocation by remember { mutableStateOf<Triple<Double, Double, Double>?>(null) }
+    var savedLocation by remember { mutableStateOf<SavedLocation?>(null) }
     LaunchedEffect(Unit) {
         savedLocation = appPreferences.lastLocation.first()
         locationReady = true
     }
-    val offlineMode by appPreferences.offlineMode.collectAsState(initial = false)
-    val activeMapFileName by appPreferences.mapFileName.collectAsState(initial = null)
-    val recentSearches by appPreferences.recentSearches.collectAsState(initial = emptyList())
-    val recentSearchLimit by appPreferences.recentSearchLimit.collectAsState(initial = 5)
-    val mapProvider by appPreferences.mapProvider.collectAsState(initial = MapProvider.MAPSFORGE)
-    val showMarkerLabels by appPreferences.showMarkerLabels.collectAsState(initial = true)
-    val drawerSide by appPreferences.drawerSide.collectAsState(initial = DrawerSide.RIGHT)
-    val edgeSwipeEnabled by appPreferences.edgeSwipeEnabled.collectAsState(initial = true)
-    val edgeSwipeSide by appPreferences.edgeSwipeSide.collectAsState(initial = EdgeSwipeSide.BOTH)
-    val edgeSwipeSensitivity by appPreferences.edgeSwipeSensitivity.collectAsState(initial = 0.55f)
+    // Flow واحد لكل الإعدادات بدل 10 Flows منفصلة (يُصدر فقط عند تغيّر قيمة فعلاً)
+    val settings by appPreferences.settings.collectAsState(initial = AppSettings())
+    val offlineMode = settings.offlineMode
+    val activeMapFileName = settings.mapFileName
+    val recentSearches = settings.recentSearches
+    val recentSearchLimit = settings.recentSearchLimit
+    val mapProvider = settings.mapProvider
+    val showMarkerLabels = settings.showMarkerLabels
+    val drawerSide = settings.drawerSide
+    val edgeSwipeEnabled = settings.edgeSwipeEnabled
+    val edgeSwipeSide = settings.edgeSwipeSide
+    val edgeSwipeSensitivity = settings.edgeSwipeSensitivity
     var sideMenuOpen by remember { mutableStateOf(false) }
     // جانب عرض القائمة الحالي (منفصل عن إعداد السحب من الحافة)
     var panelSide by remember { mutableStateOf(DrawerSide.RIGHT) }
@@ -155,21 +179,23 @@ fun MapScreen(
     var isMenuExpanded by remember { mutableStateOf(false) }
     var isAddMode by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
-    var selectedLat by remember { mutableStateOf(0.0) }
-    var selectedLon by remember { mutableStateOf(0.0) }
+    var selectedLat by remember { mutableDoubleStateOf(0.0) }
+    var selectedLon by remember { mutableDoubleStateOf(0.0) }
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
     var stores by remember { mutableStateOf<List<Store>>(emptyList()) }
-    var searchQuery by remember { mutableStateOf("") }
-    var searchExpanded by remember { mutableStateOf(false) }
-    var filterType by remember { mutableStateOf("الكل") }
-    var filterSub by remember { mutableStateOf("الكل") }
+    // rememberSaveable: نص البحث والفلاتر تبقى بعد تدوير الشاشة أو إغلاق النظام للتطبيق في الخلفية
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var searchExpanded by rememberSaveable { mutableStateOf(false) }
+    var filterType by rememberSaveable { mutableStateOf(FILTER_ALL) }
+    var filterSub by rememberSaveable { mutableStateOf(FILTER_ALL) }
+    var filtersInitialized by rememberSaveable { mutableStateOf(false) }
     var showFilterDialog by remember { mutableStateOf(false) }
     var userLat by remember { mutableStateOf<Double?>(null) }
     var userLon by remember { mutableStateOf<Double?>(null) }
     var selectedStore by remember { mutableStateOf<Store?>(null) }
     var storeToEdit by remember { mutableStateOf<Store?>(null) }
     var navResults by remember { mutableStateOf<List<StoreWithDistance>>(emptyList()) }
-    var navIndex by remember { mutableStateOf(-1) }
+    var navIndex by remember { mutableIntStateOf(-1) }
     // تمييز أيقونة نتيجة البحث أو المحل المفتوح في البطاقة السفلية
     val highlightedStoreId = when {
         selectedStore != null -> selectedStore!!.id
@@ -189,9 +215,15 @@ fun MapScreen(
             highlightScaleAnim.snapTo(1f)
         }
     }
-    val highlightScale by highlightScaleAnim.asState()
-    // تقليل إعادة رسم العلامات أثناء الحركة (يمنع وميض موقعك)
-    val highlightScaleBucket = ((highlightScale * 8f).toInt() / 8f)
+    // قراءة highlightScaleAnim.value مباشرة في جسم MapScreen كانت تعيد تركيب الشاشة
+    // كلها (+1000 سطر) مع كل إطار أنيميشن. derivedStateOf لا يُبلغ إلا عند تغيّر
+    // القيمة المقرّبة: خطوات 1/8 لعلامات Mapsforge و 1/25 لأيقونات جوجل.
+    val highlightScaleBucket by remember {
+        derivedStateOf { (highlightScaleAnim.value * 8f).toInt() / 8f }
+    }
+    val highlightScale by remember {
+        derivedStateOf { (highlightScaleAnim.value * 25f).toInt() / 25f }
+    }
     var cameraTarget by remember { mutableStateOf<CameraTarget?>(null) }
     var detailsCardHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -211,12 +243,23 @@ fun MapScreen(
             )
         )
     }
-    val cardLift = with(density) { cardLiftAnim.value.coerceAtLeast(0f).toDp() }
-    val fabBottomPad = (16.dp + cardLift).coerceAtLeast(0.dp)
-    val navBottomPad = (if (detailsCardVisible) cardLift + 8.dp else 16.dp).coerceAtLeast(0.dp)
+    // إزاحة الأزرار فوق البطاقة تُقرأ في مرحلة التخطيط فقط (offset { }) بدل
+    // حساب padding في جسم الدالة، فلا تُعاد الشاشة كلها مع كل إطار من حركة البطاقة.
+    val cardLiftOffset: Density.() -> IntOffset = {
+        IntOffset(0, -cardLiftAnim.value.coerceAtLeast(0f).roundToInt())
+    }
 
-    val searchResults = remember(searchQuery, stores, userLat, userLon, filterType, filterSub) {
-        filterAndSortStores(stores, searchQuery, userLat, userLon, filterType, filterSub)
+    // النصوص المطبَّعة تُحسب مرة واحدة لكل تغيّر في قائمة المحلات
+    val searchIndex = remember(stores) { buildSearchIndex(stores) }
+    // تأخير البحث 150ms أثناء الكتابة (المسح فوري) بدل تصفية كل المحلات مع كل حرف
+    var debouncedQuery by remember { mutableStateOf(searchQuery) }
+    LaunchedEffect(Unit) {
+        snapshotFlow { searchQuery }
+            .debounce { q -> if (q.isBlank()) 0L else 150L }
+            .collect { debouncedQuery = it }
+    }
+    val searchResults = remember(debouncedQuery, searchIndex, userLat, userLon, filterType, filterSub) {
+        filterAndSortStores(searchIndex, debouncedQuery, userLat, userLon, filterType, filterSub)
     }
 
     fun moveCamera(lat: Double, lon: Double, zoom: Float = 17f) {
@@ -236,12 +279,10 @@ fun MapScreen(
     isAddModeRef.value = isAddMode
     val storesRef = remember { mutableStateOf(stores) }
     storesRef.value = stores
-    val userLatRef = remember { mutableStateOf(userLat) }
-    userLatRef.value = userLat
-    val userLonRef = remember { mutableStateOf(userLon) }
     val selectedStoreRef = remember { mutableStateOf(selectedStore) }
-    userLonRef.value = userLon
     selectedStoreRef.value = selectedStore
+    // مستوى تكبير Mapsforge كحالة Compose (يُحدَّث من المراقب عبر الخيط الرئيسي)
+    var mapsforgeZoom by remember { mutableIntStateOf(-1) }
 
     fun saveCameraPosition() {
         val mv = mapViewRef ?: return
@@ -251,14 +292,18 @@ fun MapScreen(
             scope.launch {
                 appPreferences.saveLastLocation(center.latitude, center.longitude, zoom)
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            logW(TAG, "حفظ موقع الكاميرا", e)
         }
     }
+
+    val isCoveredState = rememberUpdatedState(isCovered)
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> layerBundle?.let { MapLayerHelper.resume(it) }
+                Lifecycle.Event.ON_RESUME ->
+                    if (!isCoveredState.value) layerBundle?.let { MapLayerHelper.resume(it) }
                 Lifecycle.Event.ON_PAUSE -> {
                     saveCameraPosition()
                     layerBundle?.let { MapLayerHelper.pause(it) }
@@ -274,29 +319,58 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        val result = storeRepository.getAllStores()
-        if (result.isSuccess) stores = result.getOrDefault(emptyList())
-        tryGetLastLocation(context) { lat, lon -> userLat = lat; userLon = lon }
-        if (appPreferences.rememberFilter.first()) {
-            filterType = appPreferences.savedFilterType.first()
-            filterSub = appPreferences.savedFilterSub.first()
+    // الخريطة مخفية خلف الإعدادات: إيقاف خيوط تحميل البلاطات + إخفاء الـ View حتى لا
+    // يُعاد رسمه، ثم الاستئناف عند العودة (ثالثاً/6).
+    LaunchedEffect(isCovered, layerBundle, mapViewRef) {
+        val bundle = layerBundle
+        if (isCovered) {
+            bundle?.let { MapLayerHelper.pause(it) }
+            mapViewRef?.visibility = View.INVISIBLE
         } else {
-            filterType = "الكل"; filterSub = "الكل"
+            mapViewRef?.visibility = View.VISIBLE
+            if (bundle != null && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                MapLayerHelper.resume(bundle)
+            }
         }
     }
 
-    var appliedSavedCamera by remember { mutableStateOf(false) }
-    LaunchedEffect(mapViewRef) {
-        val mapView = mapViewRef ?: return@LaunchedEffect
-        if (appliedSavedCamera) return@LaunchedEffect
-        val loc = appPreferences.lastLocation.first()
-        if (loc != null) {
-            mapView.model.mapViewPosition.setCenter(LatLong(loc.first, loc.second))
-            mapView.model.mapViewPosition.zoomLevel = loc.third.toInt().toByte()
+    // تفريغ بلاطات الذاكرة عند خروج التطبيق للخلفية (ثالثاً/5). أيقونات العلامات
+    // تُفرَّغ في MarketMapsApp.onTrimMemory.
+    DisposableEffect(Unit) {
+        val appContext = context.applicationContext
+        val callbacks = object : ComponentCallbacks2 {
+            override fun onTrimMemory(level: Int) {
+                if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+                    layerBundle?.let { MapLayerHelper.trimMemory(it) }
+                }
+            }
+
+            override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
+            @Deprecated("Deprecated in Java")
+            override fun onLowMemory() = Unit
         }
-        appliedSavedCamera = true
+        appContext.registerComponentCallbacks(callbacks)
+        onDispose { appContext.unregisterComponentCallbacks(callbacks) }
     }
+
+    LaunchedEffect(Unit) {
+        // الفلاتر أولاً (قراءة محلية سريعة) بدل انتظار تحميل المحلات من الشبكة،
+        // ومرة واحدة فقط: بعد تدوير الشاشة تبقى القيم المستعادة من rememberSaveable.
+        if (!filtersInitialized) {
+            if (appPreferences.rememberFilter.first()) {
+                filterType = appPreferences.savedFilterType.first()
+                filterSub = appPreferences.savedFilterSub.first()
+            }
+            filtersInitialized = true
+        }
+        tryGetLastLocation(context) { lat, lon -> userLat = lat; userLon = lon }
+        val result = storeRepository.getAllStores()
+        if (result.isSuccess) stores = result.getOrDefault(emptyList())
+    }
+
+    // لا حاجة لنقل Mapsforge للموقع المحفوظ بعد إنشائها: الخريطة لا تُنشأ إلا بعد
+    // قراءة الموقع (locationReady)، فالموضع الأولي في factory صحيح من البداية.
 
     LaunchedEffect(offlineMode, mapViewRef, mapProvider, activeMapFileName) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
@@ -315,19 +389,26 @@ fun MapScreen(
         } else {
             MapLayerHelper.applyOnline(mapView, bundle)
         }
-        addMarkersToMap(context, mapView, stores, userLat, userLon, highlightedStoreId, highlightScale)
+        // تبديل الوضع يتم عادة من الإعدادات والخريطة مغطاة: applyOnline يشغّل الطبقة
+        // الجديدة، فنوقفها حتى العودة إلى الخريطة.
+        if (isCoveredState.value) MapLayerHelper.pause(bundle)
+        // لا حاجة لإعادة بناء العلامات هنا: تبديل طبقة الأساس لا يلمس الـ Markers
     }
 
-    LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId, highlightScaleBucket) {
+    // mapsforgeZoom جزء من المفاتيح: تغيّر مستوى التكبير يعيد بناء العلامات بالحجم
+    // الجديد مع الإبقاء على العلامة المميزة (كان مراقب التكبير يمرر null فيضيع التمييز).
+    // LaunchedEffect يلغي أي بناء سابق لم يكتمل عند تغيّر أي مفتاح.
+    LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId, highlightScaleBucket, mapsforgeZoom) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
-        mapViewRef?.let { addMarkersToMap(context, it, stores, userLat, userLon, highlightedStoreId, highlightScaleBucket) }
+        val mapView = mapViewRef ?: return@LaunchedEffect
+        updateMapsforgeMarkers(mapView, stores, userLat, userLon, highlightedStoreId, highlightScaleBucket)
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true) {
-            moveToCurrentLocation(context, mapViewRef) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 18f) }
+            moveToCurrentLocation(context) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 18f) }
         } else Toast.makeText(context, "يجب السماح بالوصول إلى الموقع", Toast.LENGTH_LONG).show()
     }
 
@@ -335,7 +416,7 @@ fun MapScreen(
         val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
         val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
         if (fine == PackageManager.PERMISSION_GRANTED || coarse == PackageManager.PERMISSION_GRANTED) {
-            moveToCurrentLocation(context, mapViewRef) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 18f) }
+            moveToCurrentLocation(context) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 18f) }
         } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
 
@@ -346,9 +427,9 @@ fun MapScreen(
         }
     }
 
-    val initialLat = savedLocation?.first ?: 30.0444
-    val initialLon = savedLocation?.second ?: 31.2357
-    val initialZoom = (savedLocation?.third ?: 14.0).toFloat()
+    val initialLat = savedLocation?.lat ?: 30.0444
+    val initialLon = savedLocation?.lon ?: 31.2357
+    val initialZoom = (savedLocation?.zoom ?: 14.0).toFloat()
 
 
     // زر الرجوع يغلق الطبقات المفتوحة أولاً بدل الخروج من التطبيق
@@ -411,25 +492,25 @@ fun MapScreen(
                     val mapView = MapView(ctx).apply {
                         isClickable = true
                         setBuiltInZoomControls(false)
-                        // تكبير عناصر الرسم لتحسين وضوح التسميات (خصوصاً الأوفلاين)
-                        val density = ctx.resources.displayMetrics.density
-                        model.displayModel.setUserScaleFactor(1.0f)
+                        // لا نضبط userScaleFactor: Mapsforge يضرب مسبقاً في كثافة الشاشة
+                        // (deviceScaleFactor = density). الضرب في density مرة ثانية كان يضخم
+                        // البلاطة إلى 512–1024px ويرفع ذاكرة البلاطات إلى >130MB.
+                        // وضوح نصوص الأوفلاين يُعالج عبر textScale في MapLayerHelper.
                     }
-                    val cache = MapLayerHelper.createTileCache(ctx, mapView)
-                    val bundle = MapLayerHelper.LayerBundle(tileCache = cache)
+                    val bundle = MapLayerHelper.createBundle(ctx, mapView)
                     layerBundle = bundle
                     MapLayerHelper.applyOnline(mapView, bundle)
                     mapView.model.mapViewPosition.setCenter(LatLong(initialLat, initialLon))
                     mapView.model.mapViewPosition.zoomLevel = initialZoom.toInt().toByte()
                     mapViewRef = mapView
 
-                    val lastZoom = intArrayOf(-1)
+                    // المراقب يُستدعى أيضاً من خيط أنيميشن Mapsforge (كل 15ms أثناء الحركة)،
+                    // لذلك نكتفي بمقارنة رخيصة هنا ونمرر التغيير للخيط الرئيسي عبر post.
+                    val lastZoom = AtomicInteger(-1)
                     mapView.model.mapViewPosition.addObserver {
-                        val mv = mapViewRef ?: return@addObserver
-                        val z = mv.model.mapViewPosition.zoomLevel.toInt()
-                        if (z == lastZoom[0]) return@addObserver
-                        lastZoom[0] = z
-                        addMarkersToMap(ctx, mv, storesRef.value, userLatRef.value, userLonRef.value, null, 1f)
+                        val z = mapView.model.mapViewPosition.zoomLevel.toInt()
+                        if (lastZoom.getAndSet(z) == z) return@addObserver
+                        mapView.post { mapsforgeZoom = z }
                     }
 
                     val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
@@ -454,11 +535,12 @@ fun MapScreen(
                     mapView
                 },
                 modifier = Modifier.fillMaxSize(),
-                update = { mapView -> mapViewRef = mapView; layerBundle?.let { MapLayerHelper.resume(it) } },
+                update = { mapView -> mapViewRef = mapView },
                 onRelease = { mapView ->
                     // الموقع يُحفظ مسبقاً في ON_PAUSE و onDispose — لا تستخدم runBlocking على الخيط الرئيسي
-                    layerBundle?.let { MapLayerHelper.destroy(it) }
-                    mapView.destroy(); mapViewRef = null; layerBundle = null
+                    val bundle = layerBundle
+                    if (bundle != null) MapLayerHelper.destroy(mapView, bundle) else mapView.destroy()
+                    mapViewRef = null; layerBundle = null
                 }
             )
 
@@ -487,8 +569,8 @@ fun MapScreen(
                 filterType = filterType, filterSub = filterSub,
                 onFilterTypeChange = { type ->
                     filterType = type
-                    filterSub = "الكل"
-                    scope.launch { appPreferences.saveFilter(type, "الكل") }
+                    filterSub = FILTER_ALL
+                    scope.launch { appPreferences.saveFilter(type, FILTER_ALL) }
                 },
                 onFilterSubChange = { sub ->
                     filterSub = sub
@@ -531,8 +613,8 @@ fun MapScreen(
                         scope.launch { appPreferences.saveFilter(type, sub) }
                     },
                     onReset = {
-                        filterType = "الكل"; filterSub = "الكل"
-                        scope.launch { appPreferences.saveFilter("الكل", "الكل") }
+                        filterType = FILTER_ALL; filterSub = FILTER_ALL
+                        scope.launch { appPreferences.saveFilter(FILTER_ALL, FILTER_ALL) }
                     }
                 )
             }
@@ -557,7 +639,8 @@ fun MapScreen(
                     // AbsoluteAlignment.BottomLeft = اليسار الفعلي دائماً (لا ينعكس مع العربية)
                     modifier = Modifier
                         .align(AbsoluteAlignment.BottomLeft)
-                        .absolutePadding(left = 12.dp, bottom = navBottomPad)
+                        .absolutePadding(left = 12.dp, bottom = if (detailsCardVisible) 8.dp else 16.dp)
+                        .offset(cardLiftOffset)
                         .zIndex(3f)
                 )
             }
@@ -579,7 +662,8 @@ fun MapScreen(
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, bottom = fabBottomPad, end = 16.dp)
+                    .padding(start = 16.dp, bottom = 16.dp, end = 16.dp)
+                    .offset(cardLiftOffset)
                     .zIndex(15f),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -719,8 +803,8 @@ fun MapScreen(
             }
 
             selectedStore?.let { store ->
-                val lat = userLat ?: savedLocation?.first
-                val lon = userLon ?: savedLocation?.second
+                val lat = userLat ?: savedLocation?.lat
+                val lon = userLon ?: savedLocation?.lon
                 val dist = if (lat != null && lon != null) {
                     haversineMeters(lat, lon, store.latitude, store.longitude)
                 } else null
@@ -758,71 +842,80 @@ private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Doub
     return r * 2 * atan2(sqrt(a), sqrt(1 - a))
 }
 
-private fun addMarkersToMap(
-    context: Context,
+private const val TAG = "MapScreen"
+
+/**
+ * تحديث علامات Mapsforge:
+ * - صور الأيقونات تُجهَّز على Dispatchers.Default (كان تحليل SVG والرسم على الخيط
+ *   الرئيسي فيتقطع التكبير عند تجاوز 12 و14 و16).
+ * - الاستبدال دفعة واحدة: removeAll + addAll بدون إعادة رسم ثم redraw واحدة.
+ *   Layers في Mapsforge يستخدم CopyOnWriteArrayList، فكان كل add/remove منفرد ينسخ
+ *   المصفوفة كاملة ويطلب إعادة رسم (O(N²) مع كثرة المحلات).
+ * - لا نستدعي onDestroy على العلامات القديمة: صورها مشتركة من كاش الأيقونات.
+ */
+private suspend fun updateMapsforgeMarkers(
     mapView: MapView,
     stores: List<Store>,
     userLat: Double?,
     userLon: Double?,
-    highlightedStoreId: String? = null,
-    highlightScale: Float = 1f
+    highlightedStoreId: String?,
+    highlightScale: Float
 ) {
-    try {
-        mapView.layerManager.layers.filterIsInstance<Marker>().forEach { mapView.layerManager.layers.remove(it) }
+    val zoom = mapView.model.mapViewPosition.zoomLevel.toInt()
+    val newMarkers = withContext(Dispatchers.Default) {
+        buildMapsforgeMarkers(stores, zoom, userLat, userLon, highlightedStoreId, highlightScale)
+    }
+    val layers = mapView.layerManager.layers
+    val oldMarkers = layers.filterIsInstance<Marker>()
+    if (oldMarkers.isNotEmpty()) layers.removeAll(oldMarkers, false)
+    if (newMarkers.isNotEmpty()) layers.addAll(newMarkers, false)
+    mapView.layerManager.redrawLayers()
+}
 
-        val zoom = mapView.model.mapViewPosition.zoomLevel.toInt()
-        val centerLat = mapView.model.mapViewPosition.center.latitude
-        val mode = MarkerIconHelper.displayModeForZoom(zoom, centerLat)
-        val zoomSize = MarkerIconHelper.sizeForZoom(zoom)
+private fun buildMapsforgeMarkers(
+    stores: List<Store>,
+    zoom: Int,
+    userLat: Double?,
+    userLon: Double?,
+    highlightedStoreId: String?,
+    highlightScale: Float
+): List<Layer> {
+    val out = ArrayList<Layer>(stores.size + 1)
+    val mode = MarkerIconHelper.displayModeForZoom(zoom)
+    val sizePx = MarkerIconHelper.markerSizePxForZoom(zoom)
 
-        if (mode != MarkerIconHelper.DisplayMode.HIDDEN && zoomSize > 0) {
-            val ordered = if (highlightedStoreId == null) stores
-            else stores.sortedBy { if (it.id == highlightedStoreId) 1 else 0 }
-            ordered.forEach { store ->
-                try {
-                    val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
-                    var androidBmp = MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode)
-                        ?: return@forEach
-                    if (androidBmp.width != zoomSize && zoomSize > 0) {
-                        androidBmp = android.graphics.Bitmap.createScaledBitmap(
-                            androidBmp, zoomSize, zoomSize, true
-                        )
-                    }
-                    val scale = if (highlighted) highlightScale else 1f
-                    if (kotlin.math.abs(scale - 1f) > 0.02f) {
-                        val w = (androidBmp.width * scale).toInt().coerceAtLeast(1)
-                        val h = (androidBmp.height * scale).toInt().coerceAtLeast(1)
-                        androidBmp = android.graphics.Bitmap.createScaledBitmap(androidBmp, w, h, true)
-                    }
-                    val bitmap: org.mapsforge.core.graphics.Bitmap =
-                        org.mapsforge.map.android.graphics.AndroidBitmap(androidBmp)
-                    mapView.layerManager.layers.add(
-                        Marker(LatLong(store.latitude, store.longitude), bitmap, 0, -bitmap.height / 2)
-                    )
-                } catch (_: Exception) {}
-            }
+    if (mode != MarkerIconHelper.DisplayMode.HIDDEN && sizePx > 0) {
+        var highlightedMarker: Marker? = null
+        for (store in stores) {
+            val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
+            // المميز يُرسم بحجمه المكبَّر مباشرة من الـ SVG (بدل createScaledBitmap)
+            val size = if (highlighted) (sizePx * highlightScale).roundToInt() else sizePx
+            val bitmap = logged(TAG, "أيقونة ${store.category}") {
+                MarkerIconHelper.getMarkerBitmap(store.category, mode, size)
+            } ?: continue
+            val marker = Marker(LatLong(store.latitude, store.longitude), bitmap, 0, -bitmap.height / 2)
+            if (highlighted) highlightedMarker = marker else out.add(marker)
         }
+        // المميز آخراً حتى يُرسم فوق البقية
+        highlightedMarker?.let { out.add(it) }
+    }
 
-        if (userLat != null && userLon != null) {
-            try {
-                val userBmp = MarkerIconHelper.getUserLocationBitmap(MarkerIconHelper.DisplayMode.BUBBLE_MEDIUM)
-                mapView.layerManager.layers.add(
-                    Marker(LatLong(userLat, userLon), userBmp, 0, -userBmp.height / 2)
-                )
-            } catch (_: Exception) {}
+    if (userLat != null && userLon != null) {
+        logged(TAG, "أيقونة الموقع الحالي") {
+            val userBmp = MarkerIconHelper.getUserLocationBitmap(MarkerIconHelper.DisplayMode.BUBBLE_MEDIUM)
+            out.add(Marker(LatLong(userLat, userLon), userBmp, 0, -userBmp.height / 2))
         }
-    } catch (_: Exception) {}
+    }
+    return out
 }
 
 @SuppressLint("MissingPermission")
-private fun moveToCurrentLocation(context: Context, mapView: MapView?, onLocation: ((Double, Double) -> Unit)? = null) {
+private fun moveToCurrentLocation(context: Context, onLocation: (Double, Double) -> Unit) {
     LocationServices.getFusedLocationProviderClient(context)
         .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
         .addOnSuccessListener { location ->
             if (location != null) {
-                mapView?.model?.mapViewPosition?.animateTo(LatLong(location.latitude, location.longitude))
-                // التكبير يُضبط مرة واحدة من moveCamera لتفادي أمرين متعارضين (16 ثم 18)
-                onLocation?.invoke(location.latitude, location.longitude)
+                onLocation(location.latitude, location.longitude)
                 Toast.makeText(context, "تم تحديد موقعك الحالي", Toast.LENGTH_SHORT).show()
             } else Toast.makeText(context, "تعذر الحصول على الموقع، تأكد من تفعيل GPS", Toast.LENGTH_LONG).show()
         }

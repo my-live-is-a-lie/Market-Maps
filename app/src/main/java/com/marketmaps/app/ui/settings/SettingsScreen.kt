@@ -52,6 +52,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,6 +80,9 @@ import com.marketmaps.app.data.DrawerSide
 import com.marketmaps.app.data.EdgeSwipeSide
 import com.marketmaps.app.ui.theme.AccentPresets
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.transformWhile
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 /** أقسام الإعدادات الرئيسية */
 private enum class SettingsSection {
@@ -552,7 +557,15 @@ private fun OfflineMapsSettingsScreen(
     val context = LocalContext.current
     val offlineMode by prefs.offlineMode.collectAsState(initial = false)
 
-    var downloaded by remember { mutableStateOf(MapDownloader.listDownloaded(context)) }
+    // قائمة الخرائط المحمّلة تُقرأ من القرص مرة واحدة (على Dispatchers.IO) وتُحدَّث
+    // فقط بعد تحميل أو حذف، بدل استدعاء isDownloaded() لكل دولة داخل التركيب
+    // مع كل تحديث لنسبة التحميل.
+    var downloaded by remember { mutableStateOf(emptyList<MapDownloader.DownloadedMap>()) }
+    var listVersion by remember { mutableIntStateOf(0) }
+    LaunchedEffect(listVersion) {
+        downloaded = withContext(Dispatchers.IO) { MapDownloader.listDownloaded(context) }
+    }
+    val downloadedFiles = remember(downloaded) { downloaded.mapTo(HashSet()) { it.fileName } }
     var showLoadedList by remember { mutableStateOf(false) }
     var continentId by remember { mutableStateOf<String?>(null) }
     var selectedRegion by remember { mutableStateOf<MapCatalog.MapRegion?>(null) }
@@ -570,7 +583,7 @@ private fun OfflineMapsSettingsScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     fun refreshList() {
-        downloaded = MapDownloader.listDownloaded(context)
+        listVersion++
     }
 
     val filteredRegions = remember(continentId, searchQuery) {
@@ -726,7 +739,7 @@ private fun OfflineMapsSettingsScreen(
                             style = MaterialTheme.typography.titleSmall
                         )
                         filteredRegions.forEach { region ->
-                            val already = MapDownloader.isDownloaded(context, region.fileName)
+                            val already = region.fileName in downloadedFiles
                             val isSelected = selectedRegion?.id == region.id
                             Card(
                                 modifier = Modifier
@@ -816,7 +829,7 @@ private fun OfflineMapsSettingsScreen(
                                 onDismissRequest = { countryMenu = false }
                             ) {
                                 filteredRegions.forEach { region ->
-                                    val already = MapDownloader.isDownloaded(context, region.fileName)
+                                    val already = region.fileName in downloadedFiles
                                     DropdownMenuItem(
                                         text = {
                                             Text(
@@ -836,8 +849,12 @@ private fun OfflineMapsSettingsScreen(
                 }
 
                 selectedRegion?.let { region ->
-                    val already = MapDownloader.isDownloaded(context, region.fileName)
-                    val pending = MapDownloader.pendingTempBytes(context, region.fileName)
+                    val already = region.fileName in downloadedFiles
+                    val pending by produceState(0L, region.fileName, isDownloading, listVersion) {
+                        value = withContext(Dispatchers.IO) {
+                            MapDownloader.pendingTempBytes(context, region.fileName)
+                        }
+                    }
                     Text(
                         "${region.nameAr} — ${region.continentAr} — تقريباً ${region.approxSizeMb} ميجا",
                         style = MaterialTheme.typography.bodyMedium
@@ -898,6 +915,13 @@ private fun OfflineMapsSettingsScreen(
                                 scope.launch {
                                     WorkManager.getInstance(context)
                                         .getWorkInfosForUniqueWorkFlow("map_download_" + region.id)
+                                        // return@collect لا يوقف الجمع: بعد النجاح كانت كل
+                                        // إشارة لاحقة من WorkManager تعيد الرسالة و setMapFileName.
+                                        // transformWhile يُنهي الجمع عند انتهاء العمل.
+                                        .transformWhile { infos ->
+                                            emit(infos)
+                                            infos.firstOrNull()?.state?.isFinished != true
+                                        }
                                         .collect { infos ->
                                             val info = infos.firstOrNull() ?: return@collect
                                             val p = info.progress.getInt(MapDownloadWorker.KEY_PROGRESS, progressPercent)
@@ -948,7 +972,8 @@ private fun OfflineMapsSettingsScreen(
                 }
 
                 // وضع بدون إنترنت
-                val hasAny = downloaded.isNotEmpty() || MapDownloader.isEgyptMapDownloaded(context)
+                // egypt.map موجود في نفس المجلد، فهو ضمن downloaded أصلاً
+                val hasAny = downloaded.isNotEmpty()
                 if (hasAny) {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Row(

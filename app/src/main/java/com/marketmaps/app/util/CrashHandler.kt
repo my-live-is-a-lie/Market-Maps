@@ -23,8 +23,9 @@ object CrashHandler {
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
                 saveCrash(appContext, throwable)
-            } catch (_: Exception) {
-                // تجاهل فشل الحفظ
+            } catch (e: Exception) {
+                // لا يمكن فعل الكثير أثناء الانهيار — على الأقل أثر في Logcat
+                logE("CrashHandler", "تعذر حفظ تقرير الانهيار", e)
             }
             previous?.uncaughtException(thread, throwable)
         }
