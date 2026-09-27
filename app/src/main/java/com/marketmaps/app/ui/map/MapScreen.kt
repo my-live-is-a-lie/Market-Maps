@@ -97,7 +97,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.marketmaps.app.data.FILTER_ALL
 import com.marketmaps.app.data.AppPreferences
+import com.marketmaps.app.data.SavedLocation
+import com.marketmaps.app.data.AppSettings
 import com.marketmaps.app.data.MapDownloader
 import com.marketmaps.app.data.MapProvider
 import com.marketmaps.app.data.DrawerSide
@@ -137,21 +140,23 @@ fun MapScreen(
     val appPreferences = remember { AppPreferences(context) }
     // ننتظر أول قراءة من DataStore حتى لا نفتح على القاهرة ونحفظها بالخطأ
     var locationReady by remember { mutableStateOf(false) }
-    var savedLocation by remember { mutableStateOf<Triple<Double, Double, Double>?>(null) }
+    var savedLocation by remember { mutableStateOf<SavedLocation?>(null) }
     LaunchedEffect(Unit) {
         savedLocation = appPreferences.lastLocation.first()
         locationReady = true
     }
-    val offlineMode by appPreferences.offlineMode.collectAsState(initial = false)
-    val activeMapFileName by appPreferences.mapFileName.collectAsState(initial = null)
-    val recentSearches by appPreferences.recentSearches.collectAsState(initial = emptyList())
-    val recentSearchLimit by appPreferences.recentSearchLimit.collectAsState(initial = 5)
-    val mapProvider by appPreferences.mapProvider.collectAsState(initial = MapProvider.MAPSFORGE)
-    val showMarkerLabels by appPreferences.showMarkerLabels.collectAsState(initial = true)
-    val drawerSide by appPreferences.drawerSide.collectAsState(initial = DrawerSide.RIGHT)
-    val edgeSwipeEnabled by appPreferences.edgeSwipeEnabled.collectAsState(initial = true)
-    val edgeSwipeSide by appPreferences.edgeSwipeSide.collectAsState(initial = EdgeSwipeSide.BOTH)
-    val edgeSwipeSensitivity by appPreferences.edgeSwipeSensitivity.collectAsState(initial = 0.55f)
+    // Flow واحد لكل الإعدادات بدل 10 Flows منفصلة (يُصدر فقط عند تغيّر قيمة فعلاً)
+    val settings by appPreferences.settings.collectAsState(initial = AppSettings())
+    val offlineMode = settings.offlineMode
+    val activeMapFileName = settings.mapFileName
+    val recentSearches = settings.recentSearches
+    val recentSearchLimit = settings.recentSearchLimit
+    val mapProvider = settings.mapProvider
+    val showMarkerLabels = settings.showMarkerLabels
+    val drawerSide = settings.drawerSide
+    val edgeSwipeEnabled = settings.edgeSwipeEnabled
+    val edgeSwipeSide = settings.edgeSwipeSide
+    val edgeSwipeSensitivity = settings.edgeSwipeSensitivity
     var sideMenuOpen by remember { mutableStateOf(false) }
     // جانب عرض القائمة الحالي (منفصل عن إعداد السحب من الحافة)
     var panelSide by remember { mutableStateOf(DrawerSide.RIGHT) }
@@ -171,8 +176,8 @@ fun MapScreen(
     var stores by remember { mutableStateOf<List<Store>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
     var searchExpanded by remember { mutableStateOf(false) }
-    var filterType by remember { mutableStateOf("الكل") }
-    var filterSub by remember { mutableStateOf("الكل") }
+    var filterType by remember { mutableStateOf(FILTER_ALL) }
+    var filterSub by remember { mutableStateOf(FILTER_ALL) }
     var showFilterDialog by remember { mutableStateOf(false) }
     var userLat by remember { mutableStateOf<Double?>(null) }
     var userLon by remember { mutableStateOf<Double?>(null) }
@@ -307,7 +312,7 @@ fun MapScreen(
             filterType = appPreferences.savedFilterType.first()
             filterSub = appPreferences.savedFilterSub.first()
         } else {
-            filterType = "الكل"; filterSub = "الكل"
+            filterType = FILTER_ALL; filterSub = FILTER_ALL
         }
     }
 
@@ -366,9 +371,9 @@ fun MapScreen(
         }
     }
 
-    val initialLat = savedLocation?.first ?: 30.0444
-    val initialLon = savedLocation?.second ?: 31.2357
-    val initialZoom = (savedLocation?.third ?: 14.0).toFloat()
+    val initialLat = savedLocation?.lat ?: 30.0444
+    val initialLon = savedLocation?.lon ?: 31.2357
+    val initialZoom = (savedLocation?.zoom ?: 14.0).toFloat()
 
 
     // زر الرجوع يغلق الطبقات المفتوحة أولاً بدل الخروج من التطبيق
@@ -508,8 +513,8 @@ fun MapScreen(
                 filterType = filterType, filterSub = filterSub,
                 onFilterTypeChange = { type ->
                     filterType = type
-                    filterSub = "الكل"
-                    scope.launch { appPreferences.saveFilter(type, "الكل") }
+                    filterSub = FILTER_ALL
+                    scope.launch { appPreferences.saveFilter(type, FILTER_ALL) }
                 },
                 onFilterSubChange = { sub ->
                     filterSub = sub
@@ -552,8 +557,8 @@ fun MapScreen(
                         scope.launch { appPreferences.saveFilter(type, sub) }
                     },
                     onReset = {
-                        filterType = "الكل"; filterSub = "الكل"
-                        scope.launch { appPreferences.saveFilter("الكل", "الكل") }
+                        filterType = FILTER_ALL; filterSub = FILTER_ALL
+                        scope.launch { appPreferences.saveFilter(FILTER_ALL, FILTER_ALL) }
                     }
                 )
             }
@@ -742,8 +747,8 @@ fun MapScreen(
             }
 
             selectedStore?.let { store ->
-                val lat = userLat ?: savedLocation?.first
-                val lon = userLon ?: savedLocation?.second
+                val lat = userLat ?: savedLocation?.lat
+                val lon = userLon ?: savedLocation?.lon
                 val dist = if (lat != null && lon != null) {
                     haversineMeters(lat, lon, store.latitude, store.longitude)
                 } else null

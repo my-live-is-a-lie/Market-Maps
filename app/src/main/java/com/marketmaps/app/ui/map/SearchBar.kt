@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.marketmaps.app.data.FILTER_ALL
 import com.marketmaps.app.data.CategoryData
 import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.Store
@@ -76,23 +77,23 @@ fun SearchBar(
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
-    val mainFilters = remember { listOf("الكل") + CategoryData.categories.map { it.name } }
+    val mainFilters = remember { listOf(FILTER_ALL) + CategoryData.categories.map { it.name } }
 
     val subFilters = remember(filterType) {
-        if (filterType == "الكل") {
+        if (filterType == FILTER_ALL) {
             emptyList()
         } else {
             val cat = CategoryData.categories.find { it.name == filterType }
-            listOf("الكل") + (cat?.subCategories?.map { it.name } ?: emptyList())
+            listOf(FILTER_ALL) + (cat?.subCategories?.map { it.name } ?: emptyList())
         }
     }
 
-    val showingSubs = filterType != "الكل"
+    val showingSubs = filterType != FILTER_ALL
     val quickFilters = if (showingSubs) subFilters else mainFilters
 
     val barColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val barContent = MaterialTheme.colorScheme.onSurface
-    val typeColor = if (filterType == "الكل") {
+    val typeColor = if (filterType == FILTER_ALL) {
         MaterialTheme.colorScheme.primary
     } else {
         Color(MarkerIconHelper.colorForCategory(filterType))
@@ -151,7 +152,7 @@ fun SearchBar(
                                 Icon(
                                     Icons.Default.List,
                                     contentDescription = "فلتر",
-                                    tint = if (filterType != "الكل" || filterSub != "الكل")
+                                    tint = if (filterType != FILTER_ALL || filterSub != FILTER_ALL)
                                         MaterialTheme.colorScheme.primary
                                     else
                                         barContent
@@ -235,22 +236,22 @@ Row(
             ) {
                 quickFilters.forEach { name ->
                     val selected = if (showingSubs) {
-                        if (name == "الكل") filterSub == "الكل" else filterSub == name
+                        if (name == FILTER_ALL) filterSub == FILTER_ALL else filterSub == name
                     } else {
                         filterType == name
                     }
                     val selectedColor = if (showingSubs) {
-                        if (name == "الكل") typeColor else Color(MarkerIconHelper.colorForCategory("$filterType $name"))
+                        if (name == FILTER_ALL) typeColor else Color(MarkerIconHelper.colorForCategory("$filterType $name"))
                     } else {
-                        if (name == "الكل") MaterialTheme.colorScheme.primary
+                        if (name == FILTER_ALL) MaterialTheme.colorScheme.primary
                         else Color(MarkerIconHelper.colorForCategory(name))
                     }
                     FilterChip(
                         selected = selected,
                         onClick = {
                             if (showingSubs) {
-                                if (name == "الكل") {
-                                    onFilterTypeChange("الكل")
+                                if (name == FILTER_ALL) {
+                                    onFilterTypeChange(FILTER_ALL)
                                 } else {
                                     onFilterSubChange(name)
                                 }
@@ -280,7 +281,7 @@ Row(
                 }
             }
 
-            if (query.isNotBlank() || filterType != "الكل" || filterSub != "الكل") {
+            if (query.isNotBlank() || filterType != FILTER_ALL || filterSub != FILTER_ALL) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -389,19 +390,19 @@ fun filterAndSortStores(
     query: String,
     userLat: Double?,
     userLon: Double?,
-    filterType: String = "الكل",
-    filterSub: String = "الكل"
+    filterType: String = FILTER_ALL,
+    filterSub: String = FILTER_ALL
 ): List<StoreWithDistance> {
-    val noFilter = filterType == "الكل" && filterSub == "الكل"
+    val noFilter = filterType == FILTER_ALL && filterSub == FILTER_ALL
     if (query.isBlank() && noFilter) return emptyList()
     val nq = if (query.isNotBlank()) TextNormalizer.normalize(query) else null
 
     // تصفية واحدة بدل ثلاث قوائم وسيطة
     val filtered = index.asSequence().filter { item ->
         // يبدأ التصنيف بنوع المكان (محل / ورشة / …) لتفادي تطابق «أخرى» مع كل الأنواع
-        (filterType == "الكل" || item.categoryType == filterType ||
+        (filterType == FILTER_ALL || item.categoryType == filterType ||
             item.categoryType.startsWith("$filterType ", ignoreCase = true)) &&
-            (filterSub == "الكل" || item.categoryParts.any { it.equals(filterSub, ignoreCase = true) }) &&
+            (filterSub == FILTER_ALL || item.categoryParts.any { it.equals(filterSub, ignoreCase = true) }) &&
             (nq == null || item.normalizedText.contains(nq))
     }
 

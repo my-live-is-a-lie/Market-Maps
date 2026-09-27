@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.marketmaps.app.data.FILTER_ALL
 import com.marketmaps.app.data.CategoryData
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,13 +50,13 @@ fun FilterDialog(
     var typeExpanded by remember { mutableStateOf(false) }
     var subExpanded by remember { mutableStateOf(false) }
 
-    val typeOptions = listOf("الكل") + CategoryData.categories.map { it.name }
+    val typeOptions = listOf(FILTER_ALL) + CategoryData.categories.map { it.name }
     val subOptions = remember(type) {
-        if (type == "الكل") {
-            listOf("الكل")
+        if (type == FILTER_ALL) {
+            listOf(FILTER_ALL)
         } else {
             val cat = CategoryData.categories.find { it.name == type }
-            listOf("الكل") + (cat?.subCategories?.map { it.name } ?: emptyList())
+            listOf(FILTER_ALL) + (cat?.subCategories?.map { it.name } ?: emptyList())
         }
     }
 
@@ -106,7 +107,7 @@ fun FilterDialog(
                                 text = { Text(option) },
                                 onClick = {
                                     type = option
-                                    sub = "الكل"
+                                    sub = FILTER_ALL
                                     typeExpanded = false
                                 }
                             )
@@ -120,13 +121,13 @@ fun FilterDialog(
                 Spacer(modifier = Modifier.height(4.dp))
                 ExposedDropdownMenuBox(
                     expanded = subExpanded,
-                    onExpandedChange = { if (type != "الكل") subExpanded = it }
+                    onExpandedChange = { if (type != FILTER_ALL) subExpanded = it }
                 ) {
                     OutlinedTextField(
                         value = sub,
                         onValueChange = {},
                         readOnly = true,
-                        enabled = type != "الكل",
+                        enabled = type != FILTER_ALL,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(subExpanded) },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -156,8 +157,8 @@ fun FilterDialog(
                 ) {
                     OutlinedButton(
                         onClick = {
-                            type = "الكل"
-                            sub = "الكل"
+                            type = FILTER_ALL
+                            sub = FILTER_ALL
                             onReset()
                         },
                         modifier = Modifier.weight(1f)
