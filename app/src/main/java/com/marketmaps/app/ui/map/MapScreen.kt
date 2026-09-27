@@ -112,7 +112,6 @@ import com.marketmaps.app.data.MapProvider
 import com.marketmaps.app.data.DrawerSide
 import com.marketmaps.app.data.EdgeSwipeSide
 import com.marketmaps.app.data.Store
-import com.marketmaps.app.BuildConfig
 import com.marketmaps.app.data.StoreRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -163,25 +162,7 @@ fun MapScreen(
     val recentSearchLimit = settings.recentSearchLimit
     val mapProvider = settings.mapProvider
 
-    // تنبيه إن اختار المستخدم جوجل بدون مفتاح صالح في هذا البناء
-    LaunchedEffect(mapProvider) {
-        if (mapProvider == MapProvider.GOOGLE) {
-            val key = BuildConfig.MAPS_API_KEY
-            if (key.isBlank()) {
-                Toast.makeText(
-                    context,
-                    "مفتاح خرائط جوجل فارغ في هذا البناء — حدّث Secret: MAPS_API_KEY",
-                    Toast.LENGTH_LONG
-                ).show()
-            } else if (key.contains("BI59KWYJPS73")) {
-                Toast.makeText(
-                    context,
-                    "مفتاح جوجل الحالي تجريبي (demo) — استبدله بمفتاح Maps SDK فعّال في GitHub Secrets",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
-    }
+
     val showMarkerLabels = settings.showMarkerLabels
     val drawerSide = settings.drawerSide
     val edgeSwipeEnabled = settings.edgeSwipeEnabled
