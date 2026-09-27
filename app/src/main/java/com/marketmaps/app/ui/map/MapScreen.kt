@@ -561,7 +561,10 @@ fun MapScreen(
                     mapView
                 },
                 modifier = Modifier.fillMaxSize(),
-                update = { mapView -> mapViewRef = mapView },
+                update = { mapView ->
+                    mapViewRef = mapView
+                    if (!isCoveredState.value) layerBundle?.let { MapLayerHelper.resume(it) }
+                },
                 onRelease = { mapView ->
                     // الموقع يُحفظ مسبقاً في ON_PAUSE و onDispose — لا تستخدم runBlocking على الخيط الرئيسي
                     val bundle = layerBundle
