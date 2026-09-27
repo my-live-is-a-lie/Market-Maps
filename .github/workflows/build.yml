@@ -1,10 +1,9 @@
-name: Build APK
+name: Build Debug APK
 
+# بناء يدوي فقط — نسخة Debug للاختبار
 on:
   workflow_dispatch:
 
-
-# إلغاء التشغيل القديم عند رفع تعديل جديد على نفس الفرع
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
@@ -44,37 +43,15 @@ jobs:
             echo "تحذير: لم يتم العثور على Secret باسم MAPS_API_KEY — خرائط جوجل لن تعمل"
             echo "MAPS_API_KEY=" >> local.properties
           else
-            echo "MAPS_API_KEY=***"
             echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
           fi
 
-      # مفتاح توقيع Release (اختياري): Secret باسم RELEASE_KEYSTORE_BASE64 (base64 لملف .jks)
-      # + RELEASE_KEYSTORE_PASSWORD و RELEASE_KEY_ALIAS و RELEASE_KEY_PASSWORD.
-      # بدونه تُوقَّع نسخة Release بمفتاح debug (للتجربة فقط، لا تصلح للنشر).
-      - name: Decode release keystore
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-        run: |
-          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
-            echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > release.jks
-            echo "RELEASE_KEYSTORE_PATH=release.jks" >> "$GITHUB_ENV"
-          else
-            echo "::warning title=Release signing::لا يوجد RELEASE_KEYSTORE_BASE64 — نسخة Release موقّعة بمفتاح debug"
-          fi
-
-      # Debug + Release (R8 مفعّل) + Lint في استدعاء Gradle واحد
-      - name: Build Debug & Release APKs (arm64-v8a only) + Lint
-        env:
-          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+      - name: Build Debug APK (arm64-v8a only)
         run: |
           set -o pipefail
-          ./gradlew assembleDebug assembleRelease lintDebug --stacktrace --no-daemon --build-cache 2>&1 | tee build.log
+          ./gradlew assembleDebug --stacktrace --no-daemon --build-cache 2>&1 | tee build.log
 
-      # عند الفشل: عرض أخطاء المترجم كـ annotation واحدة تظهر في صفحة الـ PR مباشرة
-      # بدلاً من البحث عنها وسط آلاف أسطر الـ stacktrace
-      - name: Report compiler errors
+      - name: Report compile errors
         if: failure()
         run: |
           ERRS=$(grep -E "^e: |What went wrong" -A2 build.log | grep -vE "^\s+at " | head -60 || true)
@@ -82,32 +59,11 @@ jobs:
           ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
           echo "::error title=Build failed::$ERRS"
 
-      - name: Prepare APKs for upload
+      - name: Prepare APK for upload
         if: success()
         run: |
-          # نرفع ملفات APK مباشرة — GitHub يضغطها مرة واحدة فقط عند التحميل
           cp "$(find app/build/outputs/apk/debug -name '*.apk' | head -1)" ./MarketMaps-debug-arm64.apk
-          cp "$(find app/build/outputs/apk/release -name '*.apk' | head -1)" ./MarketMaps-release-arm64.apk
-          ls -lh ./MarketMaps-*.apk
-
-      # تحقق سريع من أن R8/تقليص الموارد لم يحذف ملفات يحتاجها التطبيق وقت التشغيل
-      - name: Verify release APK contents
-        if: success()
-        run: |
-          APK=MarketMaps-release-arm64.apk
-          LIST=$(unzip -l "$APK")
-          MISSING=""
-          # ثيم Mapsforge (يُحمَّل عبر getResourceAsStream) + أيقونات العلامات + Baseline Profile
-          for f in assets/mapsforge/default.xml assets/markers/store.svg assets/dexopt/baseline.prof classes.dex; do
-            echo "$LIST" | grep -q " $f$" || MISSING="$MISSING $f"
-          done
-          DEBUG_SIZE=$(du -h MarketMaps-debug-arm64.apk | cut -f1)
-          RELEASE_SIZE=$(du -h "$APK" | cut -f1)
-          if [ -n "$MISSING" ]; then
-            echo "::error title=Release APK::ملفات مفقودة:$MISSING"
-            exit 1
-          fi
-          echo "::notice title=APK sizes::debug=$DEBUG_SIZE release=$RELEASE_SIZE (theme, markers, baseline.prof موجودة)"
+          ls -lh ./MarketMaps-debug-arm64.apk
 
       - name: Upload APK Artifact
         if: success()
@@ -116,23 +72,4 @@ jobs:
           name: MarketMaps-debug-arm64
           path: MarketMaps-debug-arm64.apk
           if-no-files-found: error
-          retention-days: 14
-
-      # نسخة Release: أسرع بشكل ملحوظ (R8 + غير قابلة للتصحيح + Baseline Profiles)
-      - name: Upload Release APK Artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: MarketMaps-release-arm64
-          path: MarketMaps-release-arm64.apk
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload Lint report
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lint-report
-          path: app/build/reports/lint-results-debug.html
-          if-no-files-found: warn
           retention-days: 14
