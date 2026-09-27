@@ -299,7 +299,8 @@ Row(
                         )
                     } else {
                         LazyColumn {
-                            items(results) { item ->
+                            // key: يحافظ على حالة العناصر ويتفادى إعادة رسمها كلها عند تغيّر ترتيب النتائج
+                            items(results, key = { it.store.id }) { item ->
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -354,48 +355,62 @@ data class StoreWithDistance(
     val distanceMeters: Double
 )
 
+/**
+ * نسخة مجهّزة للبحث من المحل: النص المطبَّع وأجزاء التصنيف تُحسب مرة واحدة عند
+ * تغيّر قائمة المحلات، بدل تطبيع الاسم والتصنيف والوصف لكل محل مع كل حرف يُكتب.
+ */
+class SearchableStore(
+    val store: Store,
+    val normalizedText: String,
+    val categoryType: String,
+    val categoryParts: List<String>
+)
+
+private val WHITESPACE = Regex("\\s+")
+// فاصل لا يظهر في النص المطبَّع حتى لا يطابق البحث كلمة مقسومة بين حقلين
+private const val FIELD_SEPARATOR = '\u0000'
+
+fun buildSearchIndex(stores: List<Store>): List<SearchableStore> = stores.map { store ->
+    val cat = store.category.trim()
+    SearchableStore(
+        store = store,
+        normalizedText = buildString {
+            append(TextNormalizer.normalize(store.name)); append(FIELD_SEPARATOR)
+            append(TextNormalizer.normalize(store.category)); append(FIELD_SEPARATOR)
+            append(TextNormalizer.normalize(store.description))
+        },
+        categoryType = cat,
+        categoryParts = cat.split(WHITESPACE)
+    )
+}
+
 fun filterAndSortStores(
-    stores: List<Store>,
+    index: List<SearchableStore>,
     query: String,
     userLat: Double?,
     userLon: Double?,
     filterType: String = "الكل",
     filterSub: String = "الكل"
 ): List<StoreWithDistance> {
-    var filtered = stores
+    val noFilter = filterType == "الكل" && filterSub == "الكل"
+    if (query.isBlank() && noFilter) return emptyList()
+    val nq = if (query.isNotBlank()) TextNormalizer.normalize(query) else null
 
-    if (filterType != "الكل") {
+    // تصفية واحدة بدل ثلاث قوائم وسيطة
+    val filtered = index.asSequence().filter { item ->
         // يبدأ التصنيف بنوع المكان (محل / ورشة / …) لتفادي تطابق «أخرى» مع كل الأنواع
-        filtered = filtered.filter { store ->
-            val cat = store.category.trim()
-            cat == filterType || cat.startsWith("$filterType ", ignoreCase = true)
-        }
-    }
-    if (filterSub != "الكل") {
-        filtered = filtered.filter { store ->
-            val parts = store.category.trim().split(Regex("\\s+"))
-            parts.any { it.equals(filterSub, ignoreCase = true) }
-        }
-    }
-
-    if (query.isNotBlank()) {
-        val nq = TextNormalizer.normalize(query)
-        filtered = filtered.filter { store ->
-            TextNormalizer.normalize(store.name).contains(nq) ||
-                TextNormalizer.normalize(store.category).contains(nq) ||
-                TextNormalizer.normalize(store.description).contains(nq)
-        }
-    } else if (filterType == "الكل" && filterSub == "الكل") {
-        return emptyList()
+        (filterType == "الكل" || item.categoryType == filterType ||
+            item.categoryType.startsWith("$filterType ", ignoreCase = true)) &&
+            (filterSub == "الكل" || item.categoryParts.any { it.equals(filterSub, ignoreCase = true) }) &&
+            (nq == null || item.normalizedText.contains(nq))
     }
 
     return if (userLat != null && userLon != null) {
-        filtered.map { store ->
-            val dist = haversine(userLat, userLon, store.latitude, store.longitude)
-            StoreWithDistance(store, dist)
-        }.sortedBy { it.distanceMeters }
+        filtered.map { StoreWithDistance(it.store, haversine(userLat, userLon, it.store.latitude, it.store.longitude)) }
+            .sortedBy { it.distanceMeters }
+            .toList()
     } else {
-        filtered.map { StoreWithDistance(it, -1.0) }
+        filtered.map { StoreWithDistance(it.store, -1.0) }.toList()
     }
 }
 

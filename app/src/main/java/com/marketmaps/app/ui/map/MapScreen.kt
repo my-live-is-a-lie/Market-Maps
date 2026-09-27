@@ -66,6 +66,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -109,6 +110,8 @@ import com.marketmaps.app.util.logged
 import java.util.concurrent.atomic.AtomicInteger
 import org.mapsforge.map.layer.Layer
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Dispatchers
 import org.mapsforge.core.model.LatLong
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
@@ -120,7 +123,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, FlowPreview::class)
 @Composable
 fun MapScreen(
     modifier: Modifier = Modifier,
@@ -230,8 +233,17 @@ fun MapScreen(
         IntOffset(0, -cardLiftAnim.value.coerceAtLeast(0f).roundToInt())
     }
 
-    val searchResults = remember(searchQuery, stores, userLat, userLon, filterType, filterSub) {
-        filterAndSortStores(stores, searchQuery, userLat, userLon, filterType, filterSub)
+    // النصوص المطبَّعة تُحسب مرة واحدة لكل تغيّر في قائمة المحلات
+    val searchIndex = remember(stores) { buildSearchIndex(stores) }
+    // تأخير البحث 150ms أثناء الكتابة (المسح فوري) بدل تصفية كل المحلات مع كل حرف
+    var debouncedQuery by remember { mutableStateOf(searchQuery) }
+    LaunchedEffect(Unit) {
+        snapshotFlow { searchQuery }
+            .debounce { q -> if (q.isBlank()) 0L else 150L }
+            .collect { debouncedQuery = it }
+    }
+    val searchResults = remember(debouncedQuery, searchIndex, userLat, userLon, filterType, filterSub) {
+        filterAndSortStores(searchIndex, debouncedQuery, userLat, userLon, filterType, filterSub)
     }
 
     fun moveCamera(lat: Double, lon: Double, zoom: Float = 17f) {
