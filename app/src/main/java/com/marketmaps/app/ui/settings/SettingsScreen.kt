@@ -1,5 +1,7 @@
 package com.marketmaps.app.ui.settings
 
+import com.marketmaps.app.util.ArabicPlurals
+
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -1017,7 +1019,7 @@ private fun OfflineMapsSettingsScreen(
                 text = {
                     val size = downloaded.filter { it.fileName in selectedIds }.sumOf { it.sizeBytes }
                     val sizeMb = size / (1024.0 * 1024.0)
-                    val msg = "سيتم حذف ${selectedIds.size} منطقة\nالحجم تقريباً " + "%.1f".format(sizeMb) + " ميجا"
+                    val msg = "سيتم حذف ${ArabicPlurals.regions(selectedIds.size)}\nالحجم تقريباً " + "%.1f".format(sizeMb) + " ميجا"
                     Text(msg)
                 },
                 confirmButton = {
@@ -1052,7 +1054,7 @@ private fun SearchFilterSettingsScreen(
 
     val limitLabel = when (recentLimit) {
         0 -> "معطل"
-        else -> "$recentLimit نتيجة"
+        else -> ArabicPlurals.results(recentLimit)
     }
 
     Scaffold(
@@ -1148,7 +1150,7 @@ private fun SearchFilterSettingsScreen(
                             )
                             (1..8).forEach { n ->
                                 DropdownMenuItem(
-                                    text = { Text("$n نتيجة") },
+                                    text = { Text(ArabicPlurals.results(n)) },
                                     onClick = {
                                         limitMenuExpanded = false
                                         scope.launch {
