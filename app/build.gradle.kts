@@ -166,6 +166,9 @@ kotlin {
 // لتبقى متوافقة مع org.gradle.configuration-cache المفعّلة في المشروع.
 
 val launcherSvgDir = layout.projectDirectory.dir("src/main/assets/launcher")
+
+/** ترتيب الشعارات كما تظهر في الإعدادات (الشعار 1، الشعار 2، ...) — أي ملف جديد يُضاف في الآخر */
+val launcherLogoSvgOrder = listOf("market", "google-maps", "location", "location_pin")
 val launcherIconsOutDir = layout.buildDirectory.dir("generated/launcherIcons").get().asFile
 
 /**
@@ -182,6 +185,10 @@ abstract class GenerateLauncherAliasManifestTask : DefaultTask() {
     /** مفاتيح الألوان الجاهزة بالترتيب (الأول هو الافتراضي المفعّل عند التثبيت) */
     @get:Input
     abstract val backgroundKeys: ListProperty<String>
+
+    /** ترتيب ملفات الشعارات (نفس ترتيب واجهة الإعدادات، ليبقى الافتراضي ثابتاً) */
+    @get:Input
+    abstract val logoSvgOrder: ListProperty<String>
 
     @get:OutputFile
     abstract val manifest: RegularFileProperty
@@ -245,6 +252,7 @@ val launcherAliasManifest = tasks.register<GenerateLauncherAliasManifestTask>("g
     group = "build"
     description = "يولّد بيان أيقونات المشغّل البديلة لكل شعار/لون"
     svgDir.set(launcherSvgDir)
+    logoSvgOrder.set(launcherLogoSvgOrder)
     backgroundKeys.set(listOf("blue", "teal", "green", "orange", "red", "purple", "indigo", "dark"))
     manifest.set(layout.buildDirectory.file("generated/launcherAliasManifest/AndroidManifest.xml"))
 }
@@ -275,6 +283,7 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
     // المساران كخصائص نصية: inputs.files يعيد محتوى المجلد لا المجلد نفسه،
     // وهذه الطريقة تبقى صحيحة مع ذاكرة الإعدادات.
     inputs.property("svgDirPath", launcherSvgDir.asFile.absolutePath)
+    inputs.property("logoSvgOrder", launcherLogoSvgOrder)
     inputs.property("outDirPath", launcherIconsOutDir.absolutePath)
 
     doLast {
@@ -371,7 +380,7 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
             )
         logger.lifecycle("MARKETMAPS_SVG_FOUND=${svgFiles.size} dir=${svgDir.absolutePath}")
         svgFiles
-            .forEach { svg ->
+            .forEachIndexed { logoIndex: Int, svg: File ->
                 val key = svg.nameWithoutExtension.lowercase().replace(Regex("[^a-z0-9_]"), "_")
                     .let { normalized: String ->
                         if (normalized.isEmpty() || normalized[0].isDigit()) {
@@ -385,12 +394,12 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
                 } catch (e: Exception) {
                     logger.lifecycle("MARKETMAPS_SKIP=${svg.name}: ${e.message}")
                     null
-                } ?: return@forEach
+                } ?: return@forEachIndexed
 
                 File(drawableDir, "logo_${key}_foreground.xml").writeText(vector)
                 logoKeys += key
                 logoJson += "{\"key\": \"$key\", \"file\": \"${svg.name}\", " +
-                    "\"label\": \"${svg.nameWithoutExtension}\"}"
+                    "\"label\": \"الشعار ${logoIndex + 1}\"}"
 
                 backgrounds.forEach { (colorKey, _, _) ->
                     val iconName = "ic_launcher_logo_${key}_$colorKey"
