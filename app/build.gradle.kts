@@ -3,6 +3,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileFilter
 import java.nio.file.Path
+import java.util.Locale
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
@@ -309,7 +310,7 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
         /** تنسيق رقم لملف SVG/VectorDrawable (فاصلة عشرية نقطية دائماً) */
         fun formatSvgNumber(value: Float): String {
             if (value == value.toInt().toFloat()) return value.toInt().toString()
-            return String.format(java.util.Locale.US, "%.2f", value).trimEnd('0').trimEnd('.')
+            return String.format(Locale.US, "%.2f", value).trimEnd('0').trimEnd('.')
         }
 
         /**
