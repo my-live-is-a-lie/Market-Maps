@@ -76,9 +76,10 @@ jobs:
           MAIN=$(grep -A9 'android:name="com.marketmaps.app.MainActivity"' "$MERGED" 2>/dev/null | grep -c "LAUNCHER" || echo 0)
           APK=$(find app/build/outputs/apk/debug -name '*.apk' 2>/dev/null | head -1)
           unzip -p "$APK" AndroidManifest.xml > /tmp/axml.bin 2>/dev/null || true
-          S1=$(strings -el /tmp/axml.bin 2>/dev/null | grep -c "LauncherIcon" || echo 0)
-          NAMES=$(strings -el /tmp/axml.bin 2>/dev/null | grep "LauncherIcon" | sort -u | head -3 | tr '\n' ' ')
-          echo "::error title=VERIFY::aliases=$AL | مفعّلة_افتراضياً=$EN | فلتر_LAUNCHER_في_النشاط_الرئيسي=$MAIN | في_APK=$S1 | [$NAMES]"
+          S1=$(grep -a -o "LauncherIcon_[a-z0-9_]*" /tmp/axml.bin 2>/dev/null | sort -u | wc -l)
+          NAMES=$(grep -a -o "LauncherIcon_[a-z0-9_]*" /tmp/axml.bin 2>/dev/null | sort -u | head -3 | tr '\n' ' ')
+          ICONS=$(grep -a -o "ic_launcher_logo_[a-z0-9_]*" /tmp/axml.bin 2>/dev/null | sort -u | wc -l)
+          echo "::error title=VERIFY::aliases=$AL | مفعّلة_افتراضياً=$EN | فلتر_LAUNCHER_في_النشاط_الرئيسي=$MAIN | داخل_APK: أيقونات=$S1 رموز=$ICONS | [$NAMES]"
 
       - name: Prepare APK for upload
         if: success()
