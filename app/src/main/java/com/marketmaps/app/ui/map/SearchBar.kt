@@ -48,6 +48,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.marketmaps.app.data.FILTER_ALL
+import androidx.compose.runtime.collectAsState
+import com.marketmaps.app.data.CategoryCatalog
 import com.marketmaps.app.data.CategoryData
 import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.Store
@@ -77,13 +79,14 @@ fun SearchBar(
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
-    val mainFilters = remember { listOf(FILTER_ALL) + CategoryData.categories.map { it.name } }
+    val categories by CategoryCatalog.categories.collectAsState()
+    val mainFilters = listOf(FILTER_ALL) + categories.map { it.name }
 
     val subFilters = remember(filterType) {
         if (filterType == FILTER_ALL) {
             emptyList()
         } else {
-            val cat = CategoryData.categories.find { it.name == filterType }
+            val cat = categories.find { it.name == filterType }
             listOf(FILTER_ALL) + (cat?.subCategories?.map { it.name } ?: emptyList())
         }
     }
