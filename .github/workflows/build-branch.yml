@@ -67,6 +67,24 @@ jobs:
           ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
           echo "::error title=Build failed::$ERRS"
 
+      - name: "تحقق من الشعارات الأربعة والأيقونات"
+        if: always()
+        run: |
+          echo "==== أسطر تشخيص التوليد ===="
+          grep -hE "MARKETMAPS_|أيقونات الشعارات" build.log gen.log 2>/dev/null | head -12 || true
+          echo "==== ملفات الشعارات المحوَّلة ===="
+          find app/build/generated/launcherIcons/res/drawable -name "logo_*_foreground.xml" 2>/dev/null | sort | sed 's|.*/||' | tr '\n' ' '
+          echo
+          echo "==== عدد أيقونات الميتماب ===="
+          find app/build/generated/launcherIcons/res/mipmap-anydpi-v26 -name "*.xml" 2>/dev/null | wc -l
+          echo "==== فهرس JSON ===="
+          cat app/build/generated/launcherIcons/assets/launcher_icons.json 2>/dev/null | tr -d '\n' | head -c 700
+          echo
+          MERGED=$(find app/build/intermediates -name "AndroidManifest.xml" -path "*merged_manifest*" 2>/dev/null | head -1)
+          echo "==== في البيان المدمج ===="
+          echo "aliases=$(grep -c '<activity-alias' "$MERGED" 2>/dev/null || echo 0) | enabled_true=$(grep -A7 '<activity-alias' "$MERGED" 2>/dev/null | grep -c 'android:enabled=\"true\"' || echo 0)"
+          grep -A8 "LauncherIcon_market_blue" "$MERGED" 2>/dev/null | head -8
+
       - name: Prepare APK for upload
         if: success()
         run: |
