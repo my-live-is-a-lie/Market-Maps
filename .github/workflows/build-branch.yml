@@ -87,28 +87,15 @@ jobs:
             echo "::error title=CC::$l"
           done || true
 
-      - name: عرض أيقونات SVG المولّدة
+      - name: تحقق نهائي من الأيقونات المولّدة
         if: always()
         run: |
-          echo "==== ملفات مولّدة من SVG ===="
-          find app/build/generated/launcherIcons -type f 2>/dev/null | sort | head -40 || true
-          find app/build/generated/launcherIcons -type f 2>/dev/null | sort | head -25 | while IFS= read -r f; do
-            echo "::warning title=GEN::$f"
-          done
           CNT=$(find app/build/generated/launcherIcons -type f 2>/dev/null | wc -l)
-          FG=$(find app/build/generated/launcherIcons/res/drawable -name 'logo_*' 2>/dev/null | wc -l)
-          BG=$(find app/build/generated/launcherIcons/res/drawable -name 'launcher_bg_*' 2>/dev/null | wc -l)
           IC=$(find app/build/generated/launcherIcons/res/mipmap-anydpi-v26 -name '*.xml' 2>/dev/null | wc -l)
-          echo "::warning title=SUMMARY::المجموع=$CNT | شعارات=$FG خلفيات=$BG أيقونات=$IC"
           APK=$(find app/build/outputs/apk/debug -name '*.apk' 2>/dev/null | head -1)
-          NAMES=$(unzip -p "$APK" resources.arsc 2>/dev/null | grep -a -o "ic_launcher_logo_[a-z0-9_]*" | sort -u | tr '\n' ' ' | head -c 700)
-          echo "::warning title=IN_APK::${NAMES:-لم أجد أسماء الأيقونات داخل APK}"
-          JSON=$(cat app/build/generated/launcherIcons/assets/launcher_icons.json 2>/dev/null | tr -d '\n' | head -c 800)
-          echo "::warning title=MARKETMAPS_JSON::${JSON:-لا يوجد فهرس}"
-          grep -h "MARKETMAPS_" build.log 2>/dev/null | head -12 | while IFS= read -r l; do
-            l="${l//'%'/'%25'}"; l="${l//$'\r'/''}"
-            echo "::warning title=DIAG::$l"
-          done || true
+          NAMES=$(unzip -p "$APK" resources.arsc 2>/dev/null | grep -a -o "ic_launcher_logo_[a-z0-9_]*" | sort -u | tr '\n' ' ' | head -c 500)
+          HEAD=$(head -c 150 app/build/generated/launcherIcons/res/drawable/logo_market_foreground.xml 2>/dev/null | tr -d '\n')
+          echo "::error title=FINAL::ملفات=$CNT | أيقونات_تكيفية=$IC | في_APK=[${NAMES:-لا شيء}] | $HEAD"
 
       - name: Prepare APK for upload
         if: success()
