@@ -1,6 +1,7 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileFilter
 import java.nio.file.Path
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
@@ -187,8 +188,11 @@ abstract class GenerateLauncherAliasManifestTask : DefaultTask() {
 
     @TaskAction
     fun generate() {
-        val svgFiles = svgDir.asFile.listFiles { f -> f.isFile && f.extension.equals("svg", true) }
-            ?.sortedBy { it.name }.orEmpty()
+        // أنواع صريحة بالكامل: داخل مهام Gradle لا يُستنتج نوع lambda هنا
+        val svgFolder: File = svgDir.get().asFile
+        val svgFilter = FileFilter { file: File -> file.isFile && file.extension.equals("svg", true) }
+        val svgFiles: List<File> =
+            (svgFolder.listFiles(svgFilter)?.toList() ?: emptyList()).sortedBy { file: File -> file.name }
         val colors = backgroundKeys.get()
         val builder = StringBuilder()
         builder.append("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
@@ -196,7 +200,9 @@ abstract class GenerateLauncherAliasManifestTask : DefaultTask() {
         builder.append("    <application>\n")
         svgFiles.forEachIndexed { index, svg ->
             val logoKey = svg.nameWithoutExtension.lowercase().replace(Regex("[^a-z0-9_]"), "_")
-                .let { if (it.isEmpty() || it[0].isDigit()) "logo_$it" else it }
+                .let { normalized: String ->
+                    if (normalized.isEmpty() || normalized[0].isDigit()) "logo_$normalized" else normalized
+                }
             colors.forEachIndexed { colorIndex, colorKey ->
                 val iconName = "ic_launcher_logo_${logoKey}_$colorKey"
                 // أول تركيبة فقط مفعّلة افتراضياً حتى لا يظهر أكثر من أيقونة
@@ -239,7 +245,7 @@ val launcherAliasManifest = tasks.register<GenerateLauncherAliasManifestTask>("g
 
 androidComponents {
     onVariants { variant ->
-        variant.sources.manifests?.addGeneratedManifestFile(
+        variant.sources.manifests.addGeneratedManifestFile(
             launcherAliasManifest,
             GenerateLauncherAliasManifestTask::manifest
         )
@@ -353,7 +359,13 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
         svgFiles
             .forEach { svg ->
                 val key = svg.nameWithoutExtension.lowercase().replace(Regex("[^a-z0-9_]"), "_")
-                    .let { if (it.isEmpty() || it[0].isDigit()) "logo_$it" else it }
+                    .let { normalized: String ->
+                        if (normalized.isEmpty() || normalized[0].isDigit()) {
+                            "logo_$normalized"
+                        } else {
+                            normalized
+                        }
+                    }
                 val vector = try {
                     withSafeZone(convertSvg(svg), iconScale)
                 } catch (e: Exception) {
