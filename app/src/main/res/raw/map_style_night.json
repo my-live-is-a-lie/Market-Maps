@@ -3,9 +3,9 @@
   { "elementType": "labels.text.fill", "stylers": [{ "color": "#E8EAED" }] },
   { "elementType": "labels.text.stroke", "stylers": [{ "color": "#1B2027" }] },
 
-  { "featureType": "landscape.natural", "elementType": "geometry", "stylers": [{ "color": "#27563A" }] },
-  { "featureType": "landscape.natural.landcover", "elementType": "geometry", "stylers": [{ "color": "#2C6242" }] },
-  { "featureType": "landscape.natural.terrain", "elementType": "geometry", "stylers": [{ "color": "#28323E" }] },
+  { "featureType": "landscape.natural", "elementType": "geometry", "stylers": [{ "color": "#26352F" }] },
+  { "featureType": "landscape.natural.landcover", "elementType": "geometry", "stylers": [{ "color": "#26352F" }] },
+  { "featureType": "landscape.natural.terrain", "elementType": "geometry", "stylers": [{ "color": "#25313C" }] },
   { "featureType": "landscape.man_made", "elementType": "geometry", "stylers": [{ "color": "#2A3542" }] },
 
   { "featureType": "administrative", "elementType": "labels.text.fill", "stylers": [{ "color": "#C6CDD6" }] },
