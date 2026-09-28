@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
@@ -51,8 +52,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -63,6 +66,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -70,6 +77,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.AppThemeMode
 import com.marketmaps.app.data.MapCatalog
@@ -286,6 +294,7 @@ private fun AppearanceSettingsScreen(
     var customHex by remember { mutableStateOf("#00897B") }
     var showCustomHex by remember { mutableStateOf(false) }
     var showColorWheel by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
     val pickerStyleKey by prefs.colorPickerStyle.collectAsState(initial = "disc")
 
     val themeLabel = when (themeMode) {
@@ -508,13 +517,67 @@ private fun AppearanceSettingsScreen(
                         )
                     }
                     if (showCustomHex || accentKey.startsWith("custom:")) {
-                        OutlinedTextField(
-                            value = customHex,
-                            onValueChange = { customHex = it },
-                            label = { Text("لون مخصص (مثال #00897B)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        // الاتجاه مثبّت RTL: أيقونة النهاية (trailing) تكون في الجهة اليسرى
+                        // من الشريط حيث الزران المطلوبان.
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                            OutlinedTextField(
+                                value = customHex,
+                                onValueChange = { customHex = it },
+                                label = { Text("لون مخصص (مثال #00897B)") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                trailingIcon = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        // لصق: يحذف الرمز السابق إن وجد ثم يضع الملصوق
+                                        TextButton(
+                                            onClick = {
+                                                val pasted = clipboard.getText()?.text?.trim().orEmpty()
+                                                if (pasted.isEmpty()) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "الحافظة فارغة",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                } else {
+                                                    customHex = pasted
+                                                    Toast.makeText(
+                                                        context,
+                                                        "تم لصق الرمز",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                                        ) {
+                                            Text("لصق", fontSize = 12.sp)
+                                        }
+                                        // نسخ: ينسخ الرمز الموجود في الشريط
+                                        TextButton(
+                                            onClick = {
+                                                val code = customHex.trim()
+                                                if (code.isEmpty()) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "لا يوجد رمز في الشريط",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                } else {
+                                                    clipboard.setText(AnnotatedString(code))
+                                                    Toast.makeText(
+                                                        context,
+                                                        "تم نسخ الرمز $code",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                                        ) {
+                                            Text("نسخ", fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            )
+                        }
                         Button(
                             onClick = {
                                 val hex = customHex.trim().let {
