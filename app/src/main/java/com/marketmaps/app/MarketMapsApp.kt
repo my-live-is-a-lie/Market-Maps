@@ -5,6 +5,7 @@ import android.content.ComponentCallbacks2
 import com.marketmaps.app.ui.map.MarkerIconHelper
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.marketmaps.app.util.CrashHandler
+import com.marketmaps.app.data.CategoryCatalog
 
 /**
  * نقطة دخول التطبيق — تسجيل معالج الأعطال مرة واحدة فقط.
@@ -18,6 +19,7 @@ class MarketMapsApp : Application() {
         } catch (_: Exception) {
         }
         CrashHandler.install(this)
+        CategoryCatalog.start()
     }
 
     /**
