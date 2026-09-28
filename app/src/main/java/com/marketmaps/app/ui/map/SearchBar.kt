@@ -36,6 +36,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Box
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -79,6 +84,7 @@ fun SearchBar(
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     val categories by CategoryCatalog.categories.collectAsState()
     val mainFilters = listOf(FILTER_ALL) + categories.map { it.name }
@@ -105,9 +111,14 @@ fun SearchBar(
 
     LaunchedEffect(expanded) {
         if (expanded) {
-            focusRequester.requestFocus()
-            keyboard?.show()
+            delay(80)
+            try {
+                focusRequester.requestFocus()
+                keyboard?.show()
+            } catch (_: Exception) {
+            }
         } else {
+            focusManager.clearFocus(force = true)
             keyboard?.hide()
         }
     }
@@ -139,13 +150,16 @@ fun SearchBar(
                     leadingIcon = {
                         IconButton(
                             onClick = {
-                                if (query.isNotEmpty()) onQueryChange("")
-                                else onExpandedChange(false)
+                                // دائماً: مسح + إغلاق (لا يعتمد على حالة النص)
+                                onQueryChange("")
+                                focusManager.clearFocus(force = true)
+                                keyboard?.hide()
+                                onExpandedChange(false)
                             }
                         ) {
                             Icon(
                                 Icons.Default.Close,
-                                contentDescription = if (query.isNotEmpty()) "مسح البحث" else "إغلاق البحث",
+                                contentDescription = "إغلاق البحث",
                                 tint = barContent
                             )
                         }
@@ -245,43 +259,36 @@ Row(
                         filterType == name
                     }
                     val selectedColor = if (showingSubs) {
-                        if (name == FILTER_ALL) typeColor else Color(MarkerIconHelper.colorForCategory("$filterType $name"))
+                        if (name == FILTER_ALL) typeColor
+                        else Color(MarkerIconHelper.colorForCategory("$filterType $name"))
                     } else {
                         if (name == FILTER_ALL) MaterialTheme.colorScheme.primary
                         else Color(MarkerIconHelper.colorForCategory(name))
                     }
-                    FilterChip(
-                        selected = selected,
-                        onClick = {
-                            if (showingSubs) {
-                                if (name == FILTER_ALL) {
-                                    onFilterTypeChange(FILTER_ALL)
+                    // clickable أوثق من FilterChip داخل التمرير الأفقي
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(if (selected) selectedColor else barColor)
+                            .clickable {
+                                if (showingSubs) {
+                                    if (name == FILTER_ALL) {
+                                        onFilterTypeChange(FILTER_ALL)
+                                    } else {
+                                        onFilterSubChange(name)
+                                    }
                                 } else {
-                                    onFilterSubChange(name)
+                                    onFilterTypeChange(name)
                                 }
-                            } else {
-                                onFilterTypeChange(name)
                             }
-                        },
-                        label = {
-                            Text(
-                                name,
-                                color = if (selected) Color.White else barContent
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = barColor,
-                            labelColor = barContent,
-                            selectedContainerColor = selectedColor,
-                            selectedLabelColor = Color.White
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = selected,
-                            borderColor = barContent.copy(alpha = 0.35f),
-                            selectedBorderColor = selectedColor
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = name,
+                            color = if (selected) Color.White else barContent,
+                            style = MaterialTheme.typography.labelLarge
                         )
-                    )
+                    }
                 }
             }
 
@@ -343,7 +350,7 @@ Row(
             ) {
                 FloatingActionButton(
                     onClick = { onExpandedChange(true) },
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(56.dp),
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     shape = CircleShape
