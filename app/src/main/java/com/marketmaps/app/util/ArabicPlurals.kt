@@ -1,68 +1,61 @@
 package com.marketmaps.app.util
 
 /**
- * صيغ الجمع العربية للأعداد (مفرد / مثنى / جمع / 11 فأكثر).
+ * صيغ الجمع العربية للأعداد في الواجهة.
  *
- * قواعد شائعة في الواجهات:
- * - 0: صيغة الجمع أو نص مخصص
- * - 1: مفرد
- * - 2: مثنى
- * - 3–10: جمع
- * - 11+: المفرد بعد العدد (حسب النحو الفصيح)
- *
- * استخدم [format] في أي مكان يظهر فيه عدد + اسم قابل للجمع.
+ * - 1: «نتيجة واحدة» / «محل واحد» (بدون رقم قبل الاسم)
+ * - 2: دائماً «2» + المفرد (مثل: 2 نتيجة)
+ * - 3–10: الجمع (5 نتائج)
+ * - 11+: المفرد بعد العدد (11 نتيجة)
  */
 object ArabicPlurals {
 
     /**
-     * @param count العدد
-     * @param singular المفرد مثل: نتيجة
-     * @param dual المثنى مثل: نتيجتان
-     * @param plural الجمع مثل: نتائج
-     * @param zero نص اختياري للصفر (مثل: معطل أو لا نتائج). إن كان null يُستخدم "0 {plural}"
+     * @param feminine true للكلمات المؤنثة (نتيجة، منطقة، صورة، مرة) → «واحدة»
+     *                 false للمذكر (محل، متر) → «واحد»
      */
     fun format(
         count: Int,
         singular: String,
-        dual: String,
         plural: String,
-        zero: String? = null
+        zero: String? = null,
+        feminine: Boolean = true
     ): String {
         val n = count
         return when {
             n <= 0 -> zero ?: "0 $plural"
-            n == 1 -> "1 $singular"
-            n == 2 -> "2 $dual"
+            n == 1 -> if (feminine) "$singular واحدة" else "$singular واحد"
+            n == 2 -> "2 $singular"
             n in 3..10 -> "$n $plural"
-            else -> "$n $singular" // 11، 12، …
+            else -> "$n $singular"
         }
     }
 
-    /** نتيجة / نتيجتان / نتائج */
+    /** نتيجة واحدة / 2 نتيجة / 5 نتائج */
     fun results(count: Int, zero: String? = null): String =
-        format(count, "نتيجة", "نتيجتان", "نتائج", zero)
+        format(count, "نتيجة", "نتائج", zero, feminine = true)
 
-    /** منطقة / منطقتان / مناطق */
+    /** منطقة واحدة / 2 منطقة / 5 مناطق */
     fun regions(count: Int, zero: String? = null): String =
-        format(count, "منطقة", "منطقتان", "مناطق", zero)
+        format(count, "منطقة", "مناطق", zero, feminine = true)
 
-    /** صورة / صورتان / صور */
+    /** صورة واحدة / 2 صورة / 5 صور */
     fun photos(count: Int, zero: String? = null): String =
-        format(count, "صورة", "صورتان", "صور", zero)
+        format(count, "صورة", "صور", zero, feminine = true)
 
-    /** محل / محلّان / محلات */
+    /** محل واحد / 2 محل / 5 محلات */
     fun stores(count: Int, zero: String? = null): String =
-        format(count, "محل", "محلّان", "محلات", zero)
+        format(count, "محل", "محلات", zero, feminine = false)
 
-    /** مرة / مرتان / مرات */
+    /** مرة واحدة / 2 مرة / 5 مرات */
     fun times(count: Int, zero: String? = null): String =
-        format(count, "مرة", "مرتان", "مرات", zero)
+        format(count, "مرة", "مرات", zero, feminine = true)
 
-    /** متر / متران / أمتار */
+    /** متر واحد / 2 متر / 5 أمتار */
     fun meters(count: Int, zero: String? = null): String =
-        format(count, "متر", "متران", "أمتار", zero)
+        format(count, "متر", "أمتار", zero, feminine = false)
 
-    /** كيلومتر / كيلومتران / كيلومترات */
+    /** كيلومتر واحد / 2 كيلومتر / 5 كيلومترات */
     fun kilometers(count: Int, zero: String? = null): String =
-        format(count, "كيلومتر", "كيلومتران", "كيلومترات", zero)
+        format(count, "كيلومتر", "كيلومترات", zero, feminine = false)
 }
