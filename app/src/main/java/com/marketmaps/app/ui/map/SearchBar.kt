@@ -16,6 +16,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -65,6 +71,16 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+
+
+/** يطابق نص البحث مع اسم زر الفلتر السريع (تطبيع عربي + بادئة أو احتواء). */
+private fun matchingQuickFilter(query: String, filters: List<String>): String? {
+    val q = TextNormalizer.normalize(query)
+    if (q.length < 1) return null
+    val candidates = filters.filter { it != FILTER_ALL }
+    candidates.firstOrNull { TextNormalizer.normalize(it).startsWith(q) }?.let { return it }
+    return candidates.firstOrNull { TextNormalizer.normalize(it).contains(q) }
+}
 
 @Composable
 fun SearchBar(
@@ -248,14 +264,38 @@ fun SearchBar(
                 }
             }
 
-            Row(
+            // تطابق نص البحث مع زر الفلتر السريع → تكبير 10٪ + تمرير للوسط
+            val matchedFilter = remember(query, quickFilters) {
+                matchingQuickFilter(query, quickFilters)
+            }
+            val chipsListState = rememberLazyListState()
+            LaunchedEffect(matchedFilter, query, quickFilters) {
+                if (matchedFilter != null) {
+                    val idx = quickFilters.indexOf(matchedFilter)
+                    if (idx >= 0) {
+                        chipsListState.scrollToItem(idx)
+                        val layoutInfo = chipsListState.layoutInfo
+                        val viewport = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+                        val itemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == idx }
+                        if (itemInfo != null && viewport > 0) {
+                            val scrollOffset = -((viewport - itemInfo.size) / 2)
+                            chipsListState.animateScrollToItem(idx, scrollOffset = scrollOffset)
+                        } else {
+                            chipsListState.animateScrollToItem(idx)
+                        }
+                    }
+                } else if (query.isBlank()) {
+                    chipsListState.animateScrollToItem(0)
+                }
+            }
+            LazyRow(
+                state = chipsListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                quickFilters.forEach { name ->
+                itemsIndexed(quickFilters, key = { _, name -> name }) { _, name ->
                     val selected = if (showingSubs) {
                         if (name == FILTER_ALL) filterSub == FILTER_ALL else filterSub == name
                     } else {
@@ -268,6 +308,12 @@ fun SearchBar(
                         if (name == FILTER_ALL) MaterialTheme.colorScheme.primary
                         else Color(MarkerIconHelper.colorForCategory(name))
                     }
+                    val isMatched = matchedFilter != null && name == matchedFilter
+                    val chipScale by animateFloatAsState(
+                        targetValue = if (isMatched) 1.1f else 1f,
+                        animationSpec = tween(durationMillis = 220),
+                        label = "chipScale"
+                    )
                     FilterChip(
                         selected = selected,
                         onClick = {
@@ -280,6 +326,10 @@ fun SearchBar(
                             } else {
                                 onFilterTypeChange(name)
                             }
+                        },
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = chipScale
+                            scaleY = chipScale
                         },
                         label = {
                             Text(
@@ -299,6 +349,10 @@ fun SearchBar(
                             borderColor = barContent.copy(alpha = 0.35f),
                             selectedBorderColor = selectedColor
                         )
+                    )
+                }
+            }
+
                     )
                 }
             }
