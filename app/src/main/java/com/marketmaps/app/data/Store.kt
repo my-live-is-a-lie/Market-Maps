@@ -10,5 +10,7 @@ data class Store(
     val description: String = "",
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** روابط صور المحل على Firebase Storage (اختياري، حتى 3 صور) */
+    val photoUrls: List<String> = emptyList()
 )
