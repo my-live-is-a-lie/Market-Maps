@@ -295,6 +295,11 @@ private fun AppearanceSettingsScreen(
     var showCustomHex by remember { mutableStateOf(false) }
     var showColorWheel by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+    // شعار التطبيق: الشعارات والألوان تقرأ من فهرس البناء
+    val (appLogos, appLogoBackgrounds) = remember { loadAppLogoCatalog(context) }
+    val appLogoKey by prefs.appLogoKey.collectAsState(initial = "")
+    val appLogoBackground by prefs.appLogoBackground.collectAsState(initial = "blue")
+    var showLogoColorWheel by remember { mutableStateOf(false) }
     // أيقونات الشريط: بيضاء في النمطين الغامق والمظلم كما طُلب
     val fieldActionTint = if (MaterialTheme.colorScheme.background.isDarkSurface()) {
         Color.White
@@ -620,6 +625,43 @@ private fun AppearanceSettingsScreen(
                         }
                     }
                 }
+            }
+
+            Text(text = "شعار التطبيق", style = MaterialTheme.typography.titleLarge)
+
+            AppLogoSection(
+                logos = appLogos,
+                backgrounds = appLogoBackgrounds,
+                selectedLogoKey = appLogoKey.ifBlank { appLogos.firstOrNull()?.key.orEmpty() },
+                backgroundValue = appLogoBackground,
+                accentColor = AccentPresets.colorForKey(accentKey) ?: MaterialTheme.colorScheme.primary,
+                onSelectLogo = { option ->
+                    scope.launch { prefs.setAppLogoKey(option.key) }
+                },
+                onSelectBackground = { key ->
+                    scope.launch { prefs.setAppLogoBackground(key) }
+                },
+                onOpenCustomBackground = { showLogoColorWheel = true }
+            )
+
+            if (showLogoColorWheel) {
+                val currentBackground = resolveLogoBackground(appLogoBackground, appLogoBackgrounds)
+                AccentColorWheelDialog(
+                    initialColor = currentBackground,
+                    style = ColorPickerStyle.fromKey(pickerStyleKey),
+                    onStyleChange = { newStyle ->
+                        scope.launch { prefs.setColorPickerStyle(newStyle.key) }
+                    },
+                    onDismiss = { showLogoColorWheel = false },
+                    onConfirm = { color ->
+                        showLogoColorWheel = false
+                        val hex = colorToHex(color)
+                        scope.launch {
+                            prefs.setAppLogoBackground("custom:$hex")
+                            Toast.makeText(context, "تم تغيير لون خلفية الشعار", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
             }
         }
     }

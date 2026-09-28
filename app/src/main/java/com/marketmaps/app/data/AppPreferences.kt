@@ -84,6 +84,8 @@ class AppPreferences(private val context: Context) {
     private val themeModeKey = stringPreferencesKey("theme_mode")
     private val accentKeyKey = stringPreferencesKey("accent_key")
     private val colorPickerStyleKey = stringPreferencesKey("color_picker_style")
+    private val appLogoKeyKey = stringPreferencesKey("app_logo_key")
+    private val appLogoBackgroundKey = stringPreferencesKey("app_logo_background")
     private val recentSearchesKey = stringPreferencesKey("recent_searches")
     private val recentSearchLimitKey = intPreferencesKey("recent_search_limit")
     private val showMarkerLabelsKey = booleanPreferencesKey("show_marker_labels")
@@ -100,6 +102,8 @@ class AppPreferences(private val context: Context) {
     private fun Preferences.readThemeMode(): AppThemeMode = this[themeModeKey].toEnumOr(AppThemeMode.LIGHT)
     private fun Preferences.readAccentKey(): String = this[accentKeyKey] ?: AccentPresets.DEFAULT
     private fun Preferences.readColorPickerStyle(): String = this[colorPickerStyleKey] ?: "disc"
+    private fun Preferences.readAppLogoKey(): String = this[appLogoKeyKey] ?: ""
+    private fun Preferences.readAppLogoBackground(): String = this[appLogoBackgroundKey] ?: "blue"
     private fun Preferences.readRecentSearches(): List<String> {
         val raw = this[recentSearchesKey] ?: ""
         return if (raw.isBlank()) emptyList() else raw.split(RECENT_SEPARATOR).filter { it.isNotBlank() }
@@ -160,6 +164,10 @@ class AppPreferences(private val context: Context) {
 
     /** نسخة عجلة اختيار الألوان المفضّلة: قرص ملوّن أو حلقة + مربع */
     val colorPickerStyle: Flow<String> = pref { it.readColorPickerStyle() }
+
+    /** شعار التطبيق المختار (مفتاح من assets/launcher)، ولون خلفيته */
+    val appLogoKey: Flow<String> = pref { it.readAppLogoKey() }
+    val appLogoBackground: Flow<String> = pref { it.readAppLogoBackground() }
     val recentSearches: Flow<List<String>> = pref { it.readRecentSearches() }
     val recentSearchLimit: Flow<Int> = pref { it.readRecentSearchLimit() }
 
@@ -216,6 +224,14 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setColorPickerStyle(key: String) {
         context.dataStore.edit { it[colorPickerStyleKey] = key }
+    }
+
+    suspend fun setAppLogoKey(key: String) {
+        context.dataStore.edit { it[appLogoKeyKey] = key }
+    }
+
+    suspend fun setAppLogoBackground(value: String) {
+        context.dataStore.edit { it[appLogoBackgroundKey] = value }
     }
 
     suspend fun setRecentSearchLimit(limit: Int) {

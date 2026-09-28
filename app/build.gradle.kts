@@ -194,7 +194,8 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
             Triple("dark", "أسود", "#111111")
         )
         // منطقة الأمان للأيقونة التكيفية: يُصغَّر الشعار داخل الأيقونة
-        val iconScale = 0.72f
+        // (0.6375 = تصغير 25% عن 0.85 المستخدمة سابقاً)
+        val iconScale = 0.6375f
 
         /** يُغلّف محتوى VectorDrawable بمجموعة تصغير حول مركز الأيقونة */
         fun withSafeZone(vectorXml: String, scale: Float): String {
@@ -257,6 +258,7 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
         }
 
         val logoKeys = mutableListOf<String>()
+        val logoJson = mutableListOf<String>()
         val iconNames = mutableListOf<String>()
         val svgFiles = svgDir.listFiles { f -> f.isFile && f.extension.equals("svg", true) }
             ?.sortedBy { it.name }.orEmpty()
@@ -274,6 +276,8 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
 
                 File(drawableDir, "logo_${key}_foreground.xml").writeText(vector)
                 logoKeys += key
+                logoJson += "{\"key\": \"$key\", \"file\": \"${svg.name}\", " +
+                    "\"label\": \"${svg.nameWithoutExtension}\"}"
 
                 backgrounds.forEach { (colorKey, _, _) ->
                     val iconName = "ic_launcher_logo_${key}_$colorKey"
@@ -292,7 +296,7 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
         // فهرس يقرأه التطبيق لاحقاً في الإعدادات (الشعارات + الألوان المتاحة)
         val json = buildString {
             append("{\n  \"logos\": [")
-            append(logoKeys.joinToString(", ") { "{\"key\": \"$it\"}" })
+            append(logoJson.joinToString(", "))
             append("],\n  \"backgrounds\": [")
             append(backgrounds.joinToString(", ") { (k, label, hex) ->
                 "{\"key\": \"$k\", \"label\": \"$label\", \"hex\": \"$hex\"}"
