@@ -379,9 +379,23 @@ fun buildSearchIndex(stores: List<Store>): List<SearchableStore> = stores.map { 
     SearchableStore(
         store = store,
         normalizedText = buildString {
-            append(TextNormalizer.normalize(store.name)); append(FIELD_SEPARATOR)
-            append(TextNormalizer.normalize(store.category)); append(FIELD_SEPARATOR)
-            append(TextNormalizer.normalize(store.description))
+            val nameN = TextNormalizer.normalize(store.name)
+            val catN = TextNormalizer.normalize(store.category)
+            val descN = TextNormalizer.normalize(store.description)
+            append(nameN); append(FIELD_SEPARATOR)
+            append(catN); append(FIELD_SEPARATOR)
+            append(descN)
+            // أشكال مفرد/جمع لتسريع contains لاحقاً
+            val extra = LinkedHashSet<String>()
+            for (part in listOf(nameN, catN, descN)) {
+                for (tok in part.split(Regex("\\s+"))) {
+                    if (tok.length >= 2) extra.addAll(TextNormalizer.expandToken(tok))
+                }
+            }
+            if (extra.isNotEmpty()) {
+                append(FIELD_SEPARATOR)
+                append(extra.joinToString(" "))
+            }
         },
         categoryType = cat,
         categoryParts = cat.split(WHITESPACE)
@@ -406,7 +420,7 @@ fun filterAndSortStores(
         (filterType == FILTER_ALL || item.categoryType == filterType ||
             item.categoryType.startsWith("$filterType ", ignoreCase = true)) &&
             (filterSub == FILTER_ALL || item.categoryParts.any { it.equals(filterSub, ignoreCase = true) }) &&
-            (nq == null || item.normalizedText.contains(nq))
+            (nq == null || TextNormalizer.matchesSearch(item.normalizedText, nq))
     }
 
     return if (userLat != null && userLon != null) {
