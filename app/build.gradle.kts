@@ -303,9 +303,9 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
             Triple("indigo", "نيلي", "#3949AB"),
             Triple("dark", "أسود", "#111111")
         )
-        // نسبة أكبر بُعد للرسم من عرض اللوحة: 58% تضع الرسم داخل منطقة الأمان
-        // للأيقونة التكيفية (66 من 108) بنفس حجم شعار التطبيق الأصلي
-        val logoSvgFraction = 0.58f
+        // نسبة أكبر بُعد للرسم من عرض اللوحة: 38% (≈41dp من 108dp) — مطابقة
+        // لحجم أيقونات التطبيقات المعتاد في المشغّل (المنطقة المرئية 72dp من 108dp)
+        val logoSvgFraction = 0.38f
 
         /** تنسيق رقم لملف SVG/VectorDrawable (فاصلة عشرية نقطية دائماً) */
         fun formatSvgNumber(value: Float): String {

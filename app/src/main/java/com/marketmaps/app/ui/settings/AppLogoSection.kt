@@ -47,8 +47,12 @@ import org.json.JSONObject
  * فإضافة شعار جديد = ملف SVG في المجلد فقط، وإضافة لون = سطر في مهمة البناء.
  */
 
-/** نسبة حجم الشعار داخل خلفيته (مطابقة لحجمه داخل أيقونة المشغّل) */
-private const val LOGO_INSIDE_BOX_RATIO = 0.64f
+/**
+ * نسبة لوحة الأيقونة إلى المساحة المرئية في المشغّل: لوحة الأيقونة التكيفية
+ * 108dp والنظام يقتصر على ~72dp مرئية، لذا نعرض اللوحة بحجم 1.5× الصندوق
+ * (والصندوق يقصّ الزائد) فيرى المستخدم في المعاينة نفس ما سيراه في المشغّل تماماً.
+ */
+private const val ICON_CANVAS_RATIO = 1.5f
 
 /** مفتاح اللون المخصص في التفضيلات (ترحيل الإعدادات القديمة فقط) */
 const val CUSTOM_PREFIX = "custom:"
@@ -152,7 +156,7 @@ fun AppLogoPreview(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val logoSizePx = with(density) { (boxSize * LOGO_INSIDE_BOX_RATIO).roundToPx() }
+    val logoSizePx = with(density) { (boxSize * ICON_CANVAS_RATIO).roundToPx() }
     val bitmap = remember(logo?.file, logoSizePx) {
         logo?.let { loadSvgBitmap(context, "launcher/${it.file}", logoSizePx) }
     }
@@ -169,7 +173,7 @@ fun AppLogoPreview(
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = null,
-                modifier = Modifier.size(boxSize * LOGO_INSIDE_BOX_RATIO),
+                modifier = Modifier.size(boxSize * ICON_CANVAS_RATIO),
                 contentScale = ContentScale.Fit
             )
         }
