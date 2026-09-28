@@ -225,8 +225,9 @@ object MapLayerHelper {
                 bundle.offlineCache,
                 mapView.model.mapViewPosition,
                 mapFile as MapDataStore,
-                // ثيم Mapsforge الليلي الرسمي في الوضع الليلي، والافتراضي في الفاتح
-                if (night) MapsforgeThemes.DARK else MapsforgeThemes.DEFAULT,
+                // الثيم الليلي الرسمي (من assets) في الوضع الليلي، والافتراضي في الفاتح
+                if (night) AssetRenderTheme(context, AssetRenderTheme.DARK_THEME_ASSET)
+                else MapsforgeThemes.DEFAULT,
                 false,
                 true,
                 false

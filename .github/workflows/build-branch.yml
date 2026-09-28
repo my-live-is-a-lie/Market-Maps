@@ -67,6 +67,47 @@ jobs:
           ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
           echo "::error title=Build failed::$ERRS"
 
+      - name: "تحقق نهائي: الوضع الليلي + الشعارات"
+        if: always()
+        run: |
+          echo "=== 1) ثيم الأوفلاين الليلي ==="
+          ls -l app/src/main/assets/mapsforge/dark.xml || true
+          python3 - <<'PYEOF' || true
+          import re, xml.etree.ElementTree as ET
+          s = open('app/src/main/assets/mapsforge/dark.xml', encoding='utf-8').read()
+          cleaned = re.sub(r'<!--.*?-->', '', s, flags=re.S)
+          ET.fromstring(cleaned)
+          supported = {'rendertheme','rule','area','caption','circle','line','pathText',
+                       'stylemenu','symbol','lineSymbol','hillshading','cat','layer','name','overlay'}
+          tags = set(re.findall(r'<([a-zA-Z][\w-]*)', cleaned))
+          extra = sorted(tags - supported)
+          bg = re.search(r'map-background="(#[0-9A-Fa-f]{6})"', s).group(1)
+          msg = f"THEME=سليم عناصر={len(tags)} خارج_المدعوم={extra or 'لا شيء'} خلفية={bg}"
+          print(msg)
+          print(f"::error title=NIGHT_THEME::{msg}")
+          PYEOF
+          echo "=== 2) نمط خرائط جوجل الليلي ==="
+          ls -l app/src/main/res/raw/map_style_night.json || true
+          python3 - <<'PYEOF' || true
+          import json
+          d = json.load(open('app/src/main/res/raw/map_style_night.json', encoding='utf-8'))
+          msg = f"GOOGLE_STYLE=صحيح قواعد={len(d)}"
+          print(msg)
+          print(f"::error title=NIGHT_STYLE::{msg}")
+          PYEOF
+          echo "=== 3) وجود الموارد داخل APK ==="
+          APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -1)
+          echo "APK=$APK"
+          IN_APK=$(unzip -l "$APK" | grep -cE "assets/mapsforge/dark.xml|raw/map_style_night|map_style_night")
+          unzip -l "$APK" | grep -E "assets/mapsforge/dark.xml|map_style_night" || true
+          echo "::error title=NIGHT_APK::موارد_الوضع_الليلي_في_APK=$IN_APK"
+          echo "=== 4) الأدلة السابقة (الشعارات — لا تراجع) ==="
+          LOGOS=$(find app/build/generated/launcherIcons/res/drawable -name "logo_*_foreground.xml" | sed 's|.*/||' | tr '\n' ' ')
+          IC=$(find app/build/generated/launcherIcons/res/mipmap-anydpi-v26 -name "*.xml" | wc -l)
+          MERGED=$(find app/build/intermediates -name "AndroidManifest.xml" -path "*merged_manifest*" | head -1)
+          AL=$(grep -c "<activity-alias" "$MERGED" || echo 0)
+          echo "::error title=FINAL::شعارات=[$LOGOS] أيقونات=$IC aliases=$AL"
+
       - name: Prepare APK for upload
         if: success()
         run: |

@@ -144,8 +144,8 @@ class AppPreferences(private val context: Context) {
             edgeSwipeSide = p.readEdgeSwipeSide(),
             edgeSwipeSensitivity = p.readEdgeSwipeSensitivity(),
             themeMode = p.readThemeMode(),
-            accentKey = p.readAccentKey()
-            mapNightMode = p.readMapNightMode(),
+            accentKey = p.readAccentKey(),
+            mapNightMode = p.readMapNightMode()
         )
     }
 
