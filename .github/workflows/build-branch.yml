@@ -1,0 +1,195 @@
+name: Build Debug APK (branch)
+
+# سير عمل مؤقت: نفس خطوات Build Debug APK لكن يعمل تلقائياً على فرع المراجعة
+on:
+  push:
+    branches:
+      - arena/01a0e716-market-maps
+
+concurrency:
+  group: build-branch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Inject Google Maps API key
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: |
+          if [ -z "$MAPS_API_KEY" ]; then
+            echo "تحذير: لم يتم العثور على Secret باسم MAPS_API_KEY — خرائط جوجل لن تعمل"
+            echo "MAPS_API_KEY=" >> local.properties
+          else
+            echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
+            echo "تم حقن مفتاح API (الطول: ${#MAPS_API_KEY})"
+          fi
+
+      - name: Build Debug APK (arm64-v8a only)
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace --no-daemon --build-cache 2>&1 | tee build.log
+
+      - name: Report compile errors
+        if: failure()
+        run: |
+          ERRS=$(grep -E "^e: |What went wrong" -A2 build.log | grep -vE "^\s+at " | head -60 || true)
+          [ -z "$ERRS" ] && ERRS=$(tail -40 build.log)
+          ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
+          echo "::error title=Build failed::$ERRS"
+
+      - name: "تحقق نهائي: مطابقة لوحة جوجل الليلية في OSM + الخضرة + عدم التراجع"
+        if: always()
+        run: |
+          SRC=app/src/main/java/com/marketmaps/app/ui/map
+          echo "=== 1) تلوين بلاطات OSM أونلاين: محاكاة ألوان Mapnik بلوحة جوجل ==="
+          python3 - <<'PYEOF' || true
+          import re, colorsys
+          code = open('app/src/main/java/com/marketmaps/app/ui/map/NightTileCache.kt', encoding='utf-8').read()
+          nums = [int(x) for x in re.findall(r'-?\d+', re.search(r'CONTROL = intArrayOf\((.*?)\)', code, re.S).group(1))]
+          ctrl = [(nums[i], nums[i + 1]) for i in range(0, len(nums), 2)]
+          lut = []
+          for i in range(256):
+              p = 0
+              while p < len(ctrl) - 2 and ctrl[p + 1][0] < i:
+                  p += 1
+              x0, y0 = ctrl[p]; x1, y1 = ctrl[p + 1]
+              lut.append(y1 if x1 <= x0 else y0 + (y1 - y0) * (i - x0) // (x1 - x0))
+          def num(name):
+              return float(re.search(name + r' = ([\d.]+)f?', code).group(1))
+          spread_max = int(num('LOW_CHROMA_SPREAD'))
+          cool_r, cool_b = int(num('COOL_R')), int(num('COOL_B'))
+          blue_bias, green_bias = int(num('BLUE_BIAS')), int(num('GREEN_BIAS'))
+          blue_t, green_t, warm_t = (int(num(k)) for k in ('BLUE_TARGET', 'GREEN_TARGET', 'WARM_TARGET'))
+          cb, cg, cw = num('CHROMA_BLUE'), num('CHROMA_GREEN'), num('CHROMA_WARM')
+
+          def apply(hx):
+              r = int(hx[1:3], 16); g = int(hx[3:5], 16); b = int(hx[5:7], 16)
+              luma = (r * 77 + g * 150 + b * 29) >> 8
+              if max(r, g, b) - min(r, g, b) < spread_max:
+                  t = lut[max(0, min(255, luma))]
+                  out = (t - cool_r, t, t + cool_b)
+              else:
+                  bluish = b - r > blue_bias
+                  greenish = (not bluish) and g - r > green_bias
+                  t = blue_t if bluish else (green_t if greenish else warm_t)
+                  k = cb if bluish else (cg if greenish else cw)
+                  out = (t + int((r - luma) * k), t + int((g - luma) * k), t + int((b - luma) * k))
+              return tuple(max(0, min(255, c)) for c in out)
+
+          def hx(t): return '#%02X%02X%02X' % t
+          def luma(t): return 0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2]
+          def hsv(t):
+              h, s, v = colorsys.rgb_to_hsv(t[0] / 255, t[1] / 255, t[2] / 255)
+              return h * 360, s, v
+          out = {k: apply(v) for k, v in {
+              'أرض': '#F2EFE9', 'شارع': '#FFFFFF', 'إطار': '#C0C0C0', 'نص': '#202020',
+              'مياه': '#AAD3DF', 'غابة': '#ADD19E', 'طريق كبير': '#FCD6A4',
+          }.items()}
+          for k, v in out.items():
+              h, s, _ = hsv(v)
+              print(f"  {k:12s} → {hx(v)} إضاءة={luma(v):5.1f} طور={h:5.1f}° صفاء={s*100:3.0f}%")
+          road, land, casing, text = (luma(out[k]) for k in ('شارع', 'أرض', 'إطار', 'نص'))
+          wh, ws, _ = hsv(out['مياه']); gh, gs, _ = hsv(out['غابة'])
+          ok = (road > land + 20) and (casing < road) and (text > 190) and (180 <= wh <= 250) and (ws >= 0.35) and (90 <= gh <= 170) and (gs >= 0.25)
+          msg = (f"شوارع={road:.0f} أرض={land:.0f} إطار={casing:.0f} نص={text:.0f} "
+                 f"مياه={hx(out['مياه'])}({wh:.0f}°,{ws*100:.0f}%) خضرة={hx(out['غابة'])}({gh:.0f}°,{gs*100:.0f}%) "
+                 f"مطابقة_جوجل={'نعم' if ok else 'لا'}")
+          print(msg)
+          print(f"::error title=OSM_TILES::{msg}")
+          PYEOF
+          echo "=== 2) ثيم OSM الأوفلاين: نفس لوحة جوجل ==="
+          python3 - <<'PYEOF' || true
+          import re
+          s = open('app/src/main/assets/mapsforge/dark.xml', encoding='utf-8').read()
+          def lu(c): return 0.2126 * int(c[1:3], 16) + 0.7152 * int(c[3:5], 16) + 0.0722 * int(c[5:7], 16)
+          bg = re.search(r'map-background="(#\w{6})"', s).group(1)
+          need = {'أرض': '#242F3E', 'شوارع': '#46505F', 'إطار': '#232C38', 'مياه': '#17639B',
+                  'خضرة': '#2E7D4F', 'غابات': '#2C6242', 'تسميات': '#E8EAED', 'طرق كبيرة': '#4E5A6B'}
+          missing = [k for k, v in need.items() if v.upper() not in s.upper()]
+          stale = [c for c in ['#EEEEEE', '#CCCCCC', '#a6a6a6', '#8c8c8c', '#999999', '#DDDDDD', '#E3E3E3', '#D0D0D0']
+                   if c.upper() in s.upper()]
+          order = lu('#232C38') < lu(bg) < lu('#46505F')
+          msg = (f"خلفية={bg} شوارع={lu('#46505F'):.0f} إطار={lu('#232C38'):.0f} أرض={lu(bg):.0f} "
+                 f"مفقود={missing or 'لا شيء'} ألوان_فاتحة_قديمة={stale or 'لا شيء'} ترتيب_جوجل={'نعم' if order else 'لا'}")
+          print(msg)
+          print(f"::error title=OFFLINE_THEME::{msg}")
+          PYEOF
+          echo "=== 3) نمط جوجل: خضرة واضحة مثل زرقة البحر ==="
+          python3 - <<'PYEOF' || true
+          import json, colorsys
+          d = json.load(open('app/src/main/res/raw/map_style_night.json', encoding='utf-8'))
+          def color(f, e='geometry'):
+              for r in d:
+                  if r.get('featureType') == f and r.get('elementType') == e:
+                      for st in r.get('stylers', []):
+                          if 'color' in st: return st['color']
+          def hsv(c):
+              r, g, b = (int(c[i:i+2], 16) / 255 for i in (1, 3, 5))
+              h, s, v = colorsys.rgb_to_hsv(r, g, b)
+              return h * 360, s, v
+          veg, cover, park, water = (color('landscape.natural'), color('landscape.natural.landcover'),
+                                     color('poi.park'), color('water'))
+          vh, vs, _ = hsv(veg); ch, cs, _ = hsv(cover); ph, ps, _ = hsv(park); wh, ws, _ = hsv(water)
+          ok = (120 <= vh <= 170 and vs >= 0.30) and (120 <= ch <= 170 and cs >= 0.30) and (180 <= wh <= 240 and ws >= 0.60)
+          msg = (f"قواعد={len(d)} خضرة_طبيعية={veg}({vh:.0f}°,{vs*100:.0f}%) غطاء_نباتي={cover}({ch:.0f}°,{cs*100:.0f}%) "
+                 f"متنزهات={park}({ph:.0f}°,{ps*100:.0f}%) مياه={water}({wh:.0f}°,{ws*100:.0f}%) واضحة={'نعم' if ok else 'لا'}")
+          print(msg)
+          print(f"::error title=GOOGLE_GREEN::{msg}")
+          PYEOF
+          echo "=== 4) لا فلتر عرض على الخريطة ==="
+          OLD=$(grep -rl "applyNightFilter\|setLayerType" $SRC | wc -l)
+          echo "::error title=NO_VIEW_FILTER::ملفات_بفلتر_العرض=$OLD (المطلوب 0)"
+          echo "=== 5) أحجام العلامات وأسماء OSM ==="
+          grep -nE "BUBBLE_LARGE_PX = |BUBBLE_MEDIUM_PX = |CIRCLE_PX = " $SRC/MarkerIconHelper.kt
+          grep -n "getMarkerBitmapWithLabel" $SRC/MapScreen.kt | head -1
+          echo "=== 6) داخل APK ==="
+          APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -1)
+          MATCH=$(unzip -l "$APK" | grep -E "assets/mapsforge/dark\.xml|map_style_night" || true)
+          echo "$MATCH"
+          echo "::error title=NIGHT_APK::$(echo "$MATCH" | tr '\n' '|')"
+          echo "=== 7) لا تراجع: الشعارات ==="
+          LOGOS=$(find app/build/generated/launcherIcons/res/drawable -name "logo_*_foreground.xml" | sed 's|.*/||' | tr '\n' ' ')
+          IC=$(find app/build/generated/launcherIcons/res/mipmap-anydpi-v26 -name "*.xml" | wc -l)
+          MERGED=$(find app/build/intermediates -name "AndroidManifest.xml" -path "*merged_manifest*" | head -1)
+          AL=$(grep -c "<activity-alias" "$MERGED" || echo 0)
+          echo "::error title=FINAL::شعارات=[$LOGOS] أيقونات=$IC aliases=$AL"
+
+      - name: Prepare APK for upload
+        if: success()
+        run: |
+          cp "$(find app/build/outputs/apk/debug -name '*.apk' | head -1)" ./MarketMaps-debug-arm64.apk
+          ls -lh ./MarketMaps-debug-arm64.apk
+
+      - name: Upload APK Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarketMaps-debug-arm64-branch
+          path: MarketMaps-debug-arm64.apk
+          if-no-files-found: error
+          retention-days: 14
