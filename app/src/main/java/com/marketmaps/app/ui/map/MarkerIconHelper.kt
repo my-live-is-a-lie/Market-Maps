@@ -105,10 +105,13 @@ object MarkerIconHelper {
      * ~50م فقاعة كبيرة، ~100م متوسطة، ~200م/500قدم نقطة، أبعد = مخفي
      */
     fun displayModeForZoom(zoom: Int, latitude: Double = 30.0): DisplayMode = when {
-        zoom >= 17 -> DisplayMode.BUBBLE_LARGE   // حوالي 50 متر
-        zoom >= 16 -> DisplayMode.BUBBLE_MEDIUM  // حوالي 100 متر
-        zoom >= 15 -> DisplayMode.CIRCLE         // حوالي 200 متر / 500 قدم
-        else -> DisplayMode.HIDDEN               // أبعد من 200م (لا دوائر)
+        // أقرب من ~200م/500قدم: فقاعات كاملة
+        zoom >= 18 -> DisplayMode.BUBBLE_LARGE
+        zoom >= 17 -> DisplayMode.BUBBLE_MEDIUM
+        // عند ~200م / 500 قدم فقط: نقاط دائرية
+        zoom >= 16 -> DisplayMode.CIRCLE
+        // أبعد (مثل 200م/1000قدم فأكثر): لا أيقونات محلات
+        else -> DisplayMode.HIDDEN
     }
 
     fun displayModeForGoogleZoom(zoom: Float, latitude: Double = 30.0): DisplayMode =
