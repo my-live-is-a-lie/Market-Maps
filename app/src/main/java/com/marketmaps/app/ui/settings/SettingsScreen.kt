@@ -286,6 +286,7 @@ private fun AppearanceSettingsScreen(
     var customHex by remember { mutableStateOf("#00897B") }
     var showCustomHex by remember { mutableStateOf(false) }
     var showColorWheel by remember { mutableStateOf(false) }
+    val pickerStyleKey by prefs.colorPickerStyle.collectAsState(initial = "disc")
 
     val themeLabel = when (themeMode) {
         AppThemeMode.LIGHT -> "فاتح"
@@ -490,6 +491,10 @@ private fun AppearanceSettingsScreen(
                         AccentColorWheelDialog(
                             initialColor = AccentPresets.colorForKey(accentKey)
                                 ?: AccentPresets.list.first().color,
+                            style = ColorPickerStyle.fromKey(pickerStyleKey),
+                            onStyleChange = { newStyle ->
+                                scope.launch { prefs.setColorPickerStyle(newStyle.key) }
+                            },
                             onDismiss = { showColorWheel = false },
                             onConfirm = { color ->
                                 showColorWheel = false

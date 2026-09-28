@@ -83,6 +83,7 @@ class AppPreferences(private val context: Context) {
     private val filterSubKey = stringPreferencesKey("filter_sub")
     private val themeModeKey = stringPreferencesKey("theme_mode")
     private val accentKeyKey = stringPreferencesKey("accent_key")
+    private val colorPickerStyleKey = stringPreferencesKey("color_picker_style")
     private val recentSearchesKey = stringPreferencesKey("recent_searches")
     private val recentSearchLimitKey = intPreferencesKey("recent_search_limit")
     private val showMarkerLabelsKey = booleanPreferencesKey("show_marker_labels")
@@ -98,6 +99,7 @@ class AppPreferences(private val context: Context) {
     private fun Preferences.readMapProvider(): MapProvider = this[mapProviderKey].toEnumOr(MapProvider.MAPSFORGE)
     private fun Preferences.readThemeMode(): AppThemeMode = this[themeModeKey].toEnumOr(AppThemeMode.LIGHT)
     private fun Preferences.readAccentKey(): String = this[accentKeyKey] ?: AccentPresets.DEFAULT
+    private fun Preferences.readColorPickerStyle(): String = this[colorPickerStyleKey] ?: "disc"
     private fun Preferences.readRecentSearches(): List<String> {
         val raw = this[recentSearchesKey] ?: ""
         return if (raw.isBlank()) emptyList() else raw.split(RECENT_SEPARATOR).filter { it.isNotBlank() }
@@ -155,6 +157,9 @@ class AppPreferences(private val context: Context) {
     val savedFilterSub: Flow<String> = pref { it[filterSubKey] ?: FILTER_ALL }
     val themeMode: Flow<AppThemeMode> = pref { it.readThemeMode() }
     val accentKey: Flow<String> = pref { it.readAccentKey() }
+
+    /** نسخة عجلة اختيار الألوان المفضّلة: قرص ملوّن أو حلقة + مربع */
+    val colorPickerStyle: Flow<String> = pref { it.readColorPickerStyle() }
     val recentSearches: Flow<List<String>> = pref { it.readRecentSearches() }
     val recentSearchLimit: Flow<Int> = pref { it.readRecentSearchLimit() }
 
@@ -207,6 +212,10 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setAccentKey(key: String) {
         context.dataStore.edit { it[accentKeyKey] = key }
+    }
+
+    suspend fun setColorPickerStyle(key: String) {
+        context.dataStore.edit { it[colorPickerStyleKey] = key }
     }
 
     suspend fun setRecentSearchLimit(limit: Int) {
