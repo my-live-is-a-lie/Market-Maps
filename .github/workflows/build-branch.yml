@@ -84,6 +84,10 @@ jobs:
           echo "::warning title=MARKETMAPS_COUNT::$CNT ملف مولّد"
           JSON=$(cat app/build/generated/launcherIcons/assets/launcher_icons.json 2>/dev/null | tr -d '\n' | head -c 800)
           echo "::warning title=MARKETMAPS_JSON::${JSON:-لا يوجد فهرس}"
+          grep -h "MARKETMAPS_" build.log 2>/dev/null | head -12 | while IFS= read -r l; do
+            l="${l//'%'/'%25'}"; l="${l//$'\r'/''}"
+            echo "::warning title=DIAG::$l"
+          done || true
 
       - name: Prepare APK for upload
         if: success()

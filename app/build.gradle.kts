@@ -222,9 +222,17 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
                 ?: error("لم أجد دالة التحويل parseSvgToXml في Svg2Vector")
             val argument: Any = if (method.parameterTypes[0] == Path::class.java) svg.toPath() else svg
             val out = ByteArrayOutputStream()
-            val errorLog = method.invoke(null, argument, out) as? String ?: ""
-            if (errorLog.isNotBlank()) error(errorLog)
-            return out.toString("UTF-8")
+            val errorLog = try {
+                method.invoke(null, argument, out) as? String ?: ""
+            } catch (e: Exception) {
+                e.cause?.message ?: e.message ?: "فشل استدعاء المحوّل"
+            }
+            val xml = out.toString("UTF-8")
+            // المحوّل يكتب الملف الناتج حتى مع وجود تنبيهات (سمات غير مدعومة مثلاً)،
+            // فالفشل الحقيقي هو ألا يُكتب شيء، لا وجود تنبيهات.
+            if (xml.isBlank()) error("تعذّر التحويل: ${errorLog.ifBlank { "سبب غير معروف" }}")
+            if (errorLog.isNotBlank()) logger.lifecycle("MARKETMAPS_NOTE=${svg.name}: $errorLog")
+            return xml
         }
 
         val resRoot = File(outRoot, "res")
@@ -247,15 +255,17 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
 
         val logoKeys = mutableListOf<String>()
         val iconNames = mutableListOf<String>()
-        svgDir.listFiles { f -> f.isFile && f.extension.equals("svg", true) }
-            ?.sortedBy { it.name }
-            ?.forEach { svg ->
+        val svgFiles = svgDir.listFiles { f -> f.isFile && f.extension.equals("svg", true) }
+            ?.sortedBy { it.name }.orEmpty()
+        logger.lifecycle("MARKETMAPS_SVG_FOUND=${svgFiles.size} dir=${svgDir.absolutePath}")
+        svgFiles
+            .forEach { svg ->
                 val key = svg.nameWithoutExtension.lowercase().replace(Regex("[^a-z0-9_]"), "_")
                     .let { if (it.isEmpty() || it[0].isDigit()) "logo_$it" else it }
                 val vector = try {
                     withSafeZone(convertSvg(svg), iconScale)
                 } catch (e: Exception) {
-                    logger.warn("تخطّي الشعار ${svg.name}: ${e.message}")
+                    logger.lifecycle("MARKETMAPS_SKIP=${svg.name}: ${e.message}")
                     null
                 } ?: return@forEach
 
@@ -290,6 +300,7 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
         }
         File(assetsRoot, "launcher_icons.json").writeText(json)
 
+        logger.lifecycle("MARKETMAPS_LOGOS=${logoKeys.joinToString(",")}")
         logger.lifecycle(
             "أيقونات الشعارات: ${logoKeys.size} شعاراً × ${backgrounds.size} لوناً = " +
                 "${iconNames.size} أيقونة مكتملة"
