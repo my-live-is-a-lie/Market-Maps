@@ -610,7 +610,7 @@ fun MapScreen(
                 onSearchCommit = { q ->
                     scope.launch { appPreferences.addRecentSearch(q) }
                 },
-                modifier = Modifier.align(Alignment.TopCenter).zIndex(if (searchExpanded) 3f else 1f)
+                modifier = Modifier.align(Alignment.TopCenter).zIndex(if (searchExpanded) 16f else 14f)
             )
 
 
