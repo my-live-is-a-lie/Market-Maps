@@ -1,11 +1,26 @@
 package com.marketmaps.app.ui.map
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.matchParentSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -13,7 +28,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -22,14 +40,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.marketmaps.app.data.CategoryData
 import com.marketmaps.app.data.Store
 import java.util.Locale
 
+private const val MAX_PHOTOS = 3
+
 /**
- * نافذة إضافة أو تعديل موقع — التصنيف دائماً من القوائم المنسدلة.
+ * نافذة إضافة أو تعديل موقع — التصنيف من القوائم + صور اختيارية (حتى 3).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,7 +63,14 @@ fun AddStoreDialog(
     longitude: Double,
     initialStore: Store? = null,
     onDismiss: () -> Unit,
-    onSave: (name: String, categoryPath: String, description: String, onComplete: (success: Boolean) -> Unit) -> Unit
+    onSave: (
+        name: String,
+        categoryPath: String,
+        description: String,
+        newPhotoUris: List<Uri>,
+        existingPhotoUrls: List<String>,
+        onComplete: (success: Boolean) -> Unit
+    ) -> Unit
 ) {
     val isEditMode = initialStore != null
     val parsed = remember(initialStore?.id, initialStore?.category) {
@@ -56,50 +88,62 @@ fun AddStoreDialog(
     var selectedLevel3 by remember { mutableStateOf(parsed.third) }
     var expanded3 by remember { mutableStateOf(false) }
 
+    var existingPhotos by remember {
+        mutableStateOf(initialStore?.photoUrls.orEmpty())
+    }
+    var newPhotoUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+
+    val slotsLeft = (MAX_PHOTOS - existingPhotos.size - newPhotoUris.size).coerceAtLeast(0)
+
+    val photoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = MAX_PHOTOS)
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        val room = (MAX_PHOTOS - existingPhotos.size - newPhotoUris.size).coerceAtLeast(0)
+        if (room <= 0) return@rememberLauncherForActivityResult
+        newPhotoUris = (newPhotoUris + uris).distinct().take(newPhotoUris.size + room)
+    }
+
     val needsLevel3 = selectedLevel2 != null && selectedLevel2!!.thirdLevel.isNotEmpty()
-    val isValid = name.isNotBlank() &&
-        selectedLevel1 != null &&
-        selectedLevel2 != null &&
+    val isValid = name.isNotBlank() && selectedLevel1 != null && selectedLevel2 != null &&
         (!needsLevel3 || !selectedLevel3.isNullOrBlank())
 
-    fun buildCategoryPath(): String = buildString {
-        append(selectedLevel1?.name ?: "")
-        append(" ")
-        append(selectedLevel2?.name ?: "")
-        if (!selectedLevel3.isNullOrBlank()) {
-            append(" ")
-            append(selectedLevel3)
-        }
-    }.trim()
+    fun buildCategoryPath(): String {
+        val parts = mutableListOf<String>()
+        selectedLevel1?.name?.let { parts.add(it) }
+        selectedLevel2?.name?.let { parts.add(it) }
+        if (needsLevel3) selectedLevel3?.let { parts.add(it) }
+        return parts.joinToString(" ")
+    }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (isEditMode) "تعديل الموقع" else "إضافة موقع جديد") },
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        title = { Text(if (isEditMode) "تعديل موقع" else "إضافة موقع جديد") },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("اسم المكان *") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
 
                 ExposedDropdownMenuBox(
                     expanded = expanded1,
-                    onExpandedChange = { expanded1 = it }
+                    onExpandedChange = { expanded1 = !expanded1 }
                 ) {
                     OutlinedTextField(
                         value = selectedLevel1?.name ?: "",
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("نوع المكان *") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded1) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded1) },
                         modifier = Modifier
                             .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                             .fillMaxWidth()
@@ -108,11 +152,11 @@ fun AddStoreDialog(
                         expanded = expanded1,
                         onDismissRequest = { expanded1 = false }
                     ) {
-                        CategoryData.categories.forEach { category ->
+                        CategoryData.categories.forEach { cat ->
                             DropdownMenuItem(
-                                text = { Text(category.name) },
+                                text = { Text(cat.name) },
                                 onClick = {
-                                    selectedLevel1 = category
+                                    selectedLevel1 = cat
                                     selectedLevel2 = null
                                     selectedLevel3 = null
                                     expanded1 = false
@@ -125,14 +169,14 @@ fun AddStoreDialog(
                 if (selectedLevel1 != null) {
                     ExposedDropdownMenuBox(
                         expanded = expanded2,
-                        onExpandedChange = { expanded2 = it }
+                        onExpandedChange = { expanded2 = !expanded2 }
                     ) {
                         OutlinedTextField(
                             value = selectedLevel2?.name ?: "",
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("التصنيف *") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded2) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded2) },
                             modifier = Modifier
                                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                                 .fillMaxWidth()
@@ -158,14 +202,14 @@ fun AddStoreDialog(
                 if (needsLevel3) {
                     ExposedDropdownMenuBox(
                         expanded = expanded3,
-                        onExpandedChange = { expanded3 = it }
+                        onExpandedChange = { expanded3 = !expanded3 }
                     ) {
                         OutlinedTextField(
                             value = selectedLevel3 ?: "",
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("تفاصيل إضافية *") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded3) },
+                            label = { Text("تفصيل إضافي *") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded3) },
                             modifier = Modifier
                                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                                 .fillMaxWidth()
@@ -197,6 +241,43 @@ fun AddStoreDialog(
                 )
 
                 Text(
+                    text = "صور المكان (اختياري — حتى $MAX_PHOTOS)",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    existingPhotos.forEach { url ->
+                        PhotoThumb(
+                            model = url,
+                            onRemove = { existingPhotos = existingPhotos.filter { it != url } }
+                        )
+                    }
+                    newPhotoUris.forEach { uri ->
+                        PhotoThumb(
+                            model = uri,
+                            onRemove = { newPhotoUris = newPhotoUris.filter { it != uri } }
+                        )
+                    }
+                    if (slotsLeft > 0) {
+                        OutlinedButton(
+                            onClick = {
+                                photoPicker.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            modifier = Modifier.size(72.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "إضافة صورة")
+                        }
+                    }
+                }
+
+                Text(
                     text = String.format(
                         Locale.US,
                         "الموقع: %.5f, %.5f",
@@ -212,7 +293,13 @@ fun AddStoreDialog(
                 onClick = {
                     if (isSaving) return@Button
                     isSaving = true
-                    onSave(name.trim(), buildCategoryPath(), description.trim()) { _ ->
+                    onSave(
+                        name.trim(),
+                        buildCategoryPath(),
+                        description.trim(),
+                        newPhotoUris,
+                        existingPhotos
+                    ) { _ ->
                         isSaving = false
                     }
                 },
@@ -229,11 +316,45 @@ fun AddStoreDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isSaving) {
                 Text("إلغاء")
             }
         }
     )
+}
+
+@Composable
+private fun PhotoThumb(model: Any, onRemove: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(72.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.LightGray.copy(alpha = 0.4f))
+    ) {
+        AsyncImage(
+            model = model,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .matchParentSize()
+        )
+        IconButton(
+            onClick = onRemove,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(28.dp)
+                .padding(2.dp)
+        ) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "حذف",
+                tint = Color.White,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))
+                    .padding(2.dp)
+            )
+        }
+    }
 }
 
 /** تفكيك نص التصنيف المحفوظ إلى مستويات القائمة */
