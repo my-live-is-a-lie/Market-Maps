@@ -125,8 +125,8 @@ object MarkerIconHelper {
     fun markerSizePxForZoom(zoom: Int): Int = when {
         zoom >= 18 -> 62   // أقرب من 50م
         zoom >= 17 -> 57   // ~50م
-        zoom >= 16 -> 34   // ~100م
-        zoom >= 15 -> 16   // ~200م / 500 قدم — دائرة فقط
+        zoom >= 16 -> 11   // ~200م / 500قدم — دائرة (−30٪)
+        zoom >= 15 -> 11   // دائرة (−30٪)
         else -> 0          // أبعد من 200م: مخفي بالكامل
     }
 
@@ -135,7 +135,7 @@ object MarkerIconHelper {
     fun markerSizePxForMode(mode: DisplayMode): Int = when (mode) {
         DisplayMode.BUBBLE_LARGE -> 57   // 50م +10٪
         DisplayMode.BUBBLE_MEDIUM -> 34  // 100م
-        DisplayMode.CIRCLE -> 16         // 200م نقطة
+        DisplayMode.CIRCLE -> 11         // 200م نقطة (−30٪)
         DisplayMode.HIDDEN -> 0
     }
 
@@ -146,10 +146,10 @@ object MarkerIconHelper {
      * ~50م و~100م: أكبر 100٪، ~200م/500قدم: أكبر 50٪.
      */
     private fun userPinSizePx(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.BUBBLE_LARGE -> 146   // ~50م / 100قدم — ×2
-        DisplayMode.BUBBLE_MEDIUM -> 104  // ~100م / 200قدم — ×2
-        DisplayMode.CIRCLE -> 32          // ~200م / 500قدم — ×1.5
-        DisplayMode.HIDDEN -> 52          // أبعد: يبقى ظاهراً بحجم متوسط
+        DisplayMode.BUBBLE_LARGE -> 88    // ~50م / 100قدم — أصغر 40٪ من 146
+        DisplayMode.BUBBLE_MEDIUM -> 104  // ~100م / 200قدم
+        DisplayMode.CIRCLE -> 52          // ~200م / 500قدم = نفس حجم 200م/1000قدم
+        DisplayMode.HIDDEN -> 52          // ~200م / 1000قدم فأكثر
     }
 
     fun colorForCategory(category: String): Int = CategoryStyles.colorFor(category)
