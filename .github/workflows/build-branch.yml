@@ -1,0 +1,182 @@
+name: Build Debug APK (branch)
+
+on:
+  push:
+    branches:
+      - arena/01a0e716-market-maps
+
+concurrency:
+  group: build-branch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Inject Google Maps API key
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: |
+          if [ -z "$MAPS_API_KEY" ]; then
+            echo "MAPS_API_KEY=" >> local.properties
+          else
+            echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
+          fi
+
+      - name: Build Debug APK (arm64-v8a only)
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace --no-daemon --build-cache 2>&1 | tee build.log
+
+      - name: Report compile errors
+        if: failure()
+        run: |
+          ERRS=$(grep -E "^e: |What went wrong" -A2 build.log | grep -vE "^\s+at " | head -60 || true)
+          [ -z "$ERRS" ] && ERRS=$(tail -40 build.log)
+          ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
+          echo "::error title=Build failed::$ERRS"
+
+      - name: "تحقق نهائي: لا أخضر على اليابسة + OSM مطابق لجوجل"
+        if: always()
+        run: |
+          echo "=== 1) جوجل ليلاً: لا أخضر على اليابسة إطلاقاً (الأخضر للحدائق فقط) ==="
+          python3 - <<'PYEOF' || true
+          import json, colorsys
+          d = json.load(open('app/src/main/res/raw/map_style_night.json', encoding='utf-8'))
+          def show(c):
+              r, g, b = (int(c[i:i+2], 16) / 255 for i in (1, 3, 5))
+              h, s, v = colorsys.rgb_to_hsv(r, g, b)
+              return h * 360, s, v
+          greens = []
+          natural_colors = []
+          park = None
+          water = None
+          for r in d:
+              ft = r.get('featureType', '(عام)')
+              et = r.get('elementType', '(عام)')
+              for st in r.get('stylers', []):
+                  if 'color' not in st:
+                      continue
+                  c = st['color']
+                  h, s, _ = show(c)
+                  # نفحص مساحات الرسم فقط (geometry) — ألوان نص التسميات ليست تغطية
+                  if et == 'geometry' and 90 <= h <= 180 and s > 0.20:
+                      if ft == 'poi.park':
+                          park = c
+                      else:
+                          greens.append(f"{ft}.{et}:{c}")
+                  if ft in ('landscape.natural', 'landscape.natural.landcover', 'landscape.natural.terrain') and et == 'geometry':
+                      natural_colors.append((ft, c))
+                  if ft == 'water' and et == 'geometry':
+                      water = c
+          base = '#242f3e'
+          land_ok = bool(natural_colors) and all(c.upper() == base.upper() for _, c in natural_colors)
+          ph, ps, _ = show(park) if park else (0, 0, 0)
+          wh, ws, _ = show(water) if water else (0, 0, 0)
+          ok = land_ok and not greens and park is not None and ps >= 0.45 and water is not None and ws >= 0.60
+          msg = (f"قواعد={len(d)} يابسة_طبيعية={natural_colors} "
+                 f"أي_أخضر_على_اليابسة={greens or 'لا شيء'} يابسة_موحّدة={'نعم' if land_ok else 'لا'} "
+                 f"أخضر_الحدائق={park}(صفاء{ps*100:.0f}%) مياه={water}(صفاء{ws*100:.0f}%)")
+          print(f"::error title=GOOGLE_NO_GREEN::{msg} نتيجة={'صحيح' if ok else 'خطأ'}")
+          PYEOF
+          echo "=== 2) ثيم OSM الأوفلاين مطابق لجوجل ==="
+          python3 - <<'PYEOF' || true
+          import re
+          s = open('app/src/main/assets/mapsforge/dark.xml', encoding='utf-8').read()
+          def lu(c): return 0.2126 * int(c[1:3], 16) + 0.7152 * int(c[3:5], 16) + 0.0722 * int(c[5:7], 16)
+          bg = re.search(r'map-background="(#\w{6})"', s).group(1)
+          need = {'أرض': '#242F3E', 'شوارع': '#46505F', 'إطار': '#232C38', 'مياه': '#17639B', 'تسميات': '#E8EAED'}
+          missing = [k for k, v in need.items() if v.upper() not in s.upper()]
+          stale = [c for c in ['#EEEEEE', '#CCCCCC', '#a6a6a6', '#8c8c8c', '#999999', '#DDDDDD', '#E3E3E3']
+                   if c.upper() in s.upper()]
+          order = lu('#232C38') < lu(bg) < lu('#46505F')
+          msg = (f"خلفية={bg} شوارع={lu('#46505F'):.0f} إطار={lu('#232C38'):.0f} أرض={lu(bg):.0f} "
+                 f"مفقود={missing or 'لا شيء'} ألوان_قديمة={stale or 'لا شيء'} ترتيب_جوجل={'نعم' if order else 'لا'}")
+          print(msg); print(f"::error title=OFFLINE_THEME::{msg}")
+          PYEOF
+          echo "=== 3) تلوين بلاطات OSM أونلاين ==="
+          python3 - <<'PYEOF' || true
+          import re, colorsys
+          code = open('app/src/main/java/com/marketmaps/app/ui/map/NightTileCache.kt', encoding='utf-8').read()
+          nums = [int(x) for x in re.findall(r'-?\d+', re.search(r'CONTROL = intArrayOf\((.*?)\)', code, re.S).group(1))]
+          ctrl = [(nums[i], nums[i + 1]) for i in range(0, len(nums), 2)]
+          lut = []
+          for i in range(256):
+              p = 0
+              while p < len(ctrl) - 2 and ctrl[p + 1][0] < i: p += 1
+              x0, y0 = ctrl[p]; x1, y1 = ctrl[p + 1]
+              lut.append(y1 if x1 <= x0 else y0 + (y1 - y0) * (i - x0) // (x1 - x0))
+          def num(n): return float(re.search(n + r' = ([\d.]+)f?', code).group(1))
+          sp = int(num('LOW_CHROMA_SPREAD')); bb, gb = int(num('BLUE_BIAS')), int(num('GREEN_BIAS'))
+          bt, gt, wt = (int(num(k)) for k in ('BLUE_TARGET', 'GREEN_TARGET', 'WARM_TARGET'))
+          cb, cg, cw = num('CHROMA_BLUE'), num('CHROMA_GREEN'), num('CHROMA_WARM')
+          cr, cb2 = int(num('COOL_R')), int(num('COOL_B'))
+          def apply(hx):
+              r = int(hx[1:3], 16); g = int(hx[3:5], 16); b = int(hx[5:7], 16)
+              y = (r * 77 + g * 150 + b * 29) >> 8
+              if max(r, g, b) - min(r, g, b) < sp:
+                  t = lut[max(0, min(255, y))]; out = (t - cr, t, t + cb2)
+              else:
+                  bl = b - r > bb; gr = (not bl) and g - r > gb
+                  t = bt if bl else (gt if gr else wt); k = cb if bl else (cg if gr else cw)
+                  out = (t + int((r - y) * k), t + int((g - y) * k), t + int((b - y) * k))
+              return tuple(max(0, min(255, c)) for c in out)
+          def hx(t): return '#%02X%02X%02X' % t
+          def lum(t): return 0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2]
+          def hsv(t):
+              h, s, v = colorsys.rgb_to_hsv(t[0] / 255, t[1] / 255, t[2] / 255); return h * 360, s, v
+          o = {k: apply(v) for k, v in {'أرض': '#F2EFE9', 'شارع': '#FFFFFF', 'إطار': '#C0C0C0',
+                                        'نص': '#202020', 'مياه': '#AAD3DF', 'غابة': '#ADD19E'}.items()}
+          road, land, casing, text = (lum(o[k]) for k in ('شارع', 'أرض', 'إطار', 'نص'))
+          wh, ws, _ = hsv(o['مياه']); gh, gs, _ = hsv(o['غابة'])
+          ok = road > land + 20 and casing < road and text > 190 and 180 <= wh <= 250 and ws >= 0.35 and 90 <= gh <= 170 and gs >= 0.25
+          msg = (f"شوارع={road:.0f} أرض={land:.0f} إطار={casing:.0f} نص={text:.0f} "
+                 f"مياه={hx(o['مياه'])}({wh:.0f}°,{ws*100:.0f}%) خضرة={hx(o['غابة'])}({gh:.0f}°,{gs*100:.0f}%) مطابقة={'نعم' if ok else 'لا'}")
+          print(msg); print(f"::error title=OSM_TILES::{msg}")
+          PYEOF
+          echo "=== 4) داخل APK + الشعارات ==="
+          APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -1)
+          MATCH=$(unzip -l "$APK" | grep -E "assets/mapsforge/dark\.xml|map_style_night" || true)
+          echo "$MATCH"; echo "::error title=NIGHT_APK::$(echo "$MATCH" | tr '\n' '|')"
+          LOGOS=$(find app/build/generated/launcherIcons/res/drawable -name "logo_*_foreground.xml" | sed 's|.*/||' | tr '\n' ' ')
+          IC=$(find app/build/generated/launcherIcons/res/mipmap-anydpi-v26 -name "*.xml" | wc -l)
+          MERGED=$(find app/build/intermediates -name "AndroidManifest.xml" -path "*merged_manifest*" | head -1)
+          AL=$(grep -c "<activity-alias" "$MERGED" || echo 0)
+          echo "::error title=FINAL::شعارات=[$LOGOS] أيقونات=$IC aliases=$AL"
+
+      - name: Prepare APK for upload
+        if: success()
+        run: |
+          cp "$(find app/build/outputs/apk/debug -name '*.apk' | head -1)" ./MarketMaps-debug-arm64.apk
+          ls -lh ./MarketMaps-debug-arm64.apk
+
+      - name: Upload APK Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarketMaps-debug-arm64-branch
+          path: MarketMaps-debug-arm64.apk
+          if-no-files-found: error
+          retention-days: 14
