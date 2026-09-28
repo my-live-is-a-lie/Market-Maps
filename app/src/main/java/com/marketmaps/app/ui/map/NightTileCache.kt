@@ -49,8 +49,6 @@ class NightTileCache(
 
     override fun purge() = delegate.purge()
 
-    override fun setCapacity(capacity: Int) = delegate.setCapacity(capacity)
-
     override fun setWorkingSet(workingSet: MutableSet<Job>) = delegate.setWorkingSet(workingSet)
 
     override fun addObserver(observer: Observer) = delegate.addObserver(observer)
