@@ -67,6 +67,16 @@ jobs:
           ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
           echo "::error title=Build failed::$ERRS"
 
+      - name: "تحقق من الهندسة والحجم"
+        if: always()
+        run: |
+          GEO=$(grep -h "MARKETMAPS_GEO" build.log gen.log 2>/dev/null | sed 's/.*MARKETMAPS_GEO=//' | tr '\n' ' | ')
+          VB=$(grep -h -o 'viewportWidth="[0-9.]*"' app/build/generated/launcherIcons/res/drawable/logo_google_maps_foreground.xml 2>/dev/null | head -1)
+          ASSET=$(grep -o 'viewBox="[^"]*"' app/src/main/assets/launcher/google-maps.svg | head -1)
+          IC=$(find app/build/generated/launcherIcons/res/mipmap-anydpi-v26 -name "*.xml" | wc -l)
+          echo "::error title=GEO::[$GEO]"
+          echo "::error title=ARTIFACT::$VB | asset:$ASSET | أيقونات=$IC"
+
       - name: Prepare APK for upload
         if: success()
         run: |
