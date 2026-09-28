@@ -101,53 +101,47 @@ object MarkerIconHelper {
     private fun dpF(value: Float): Float = value * density
 
     /**
-     * أوضاع العرض حسب التكبير (كما النسخة السابقة):
-     * ≥16 فقاعة كبيرة، ≥14 متوسطة، ≥12 نقطة، أقل من 12 مخفي
-     * (حوالي أكثر من ~200م على مستوى الشارع تتحول لنقاط ثم تختفي).
+     * أوضاع العرض حسب مقياس الشارع (شريط المسافة):
+     * ~50م فقاعة كبيرة، ~100م متوسطة، ~200م/500قدم نقطة، أبعد = مخفي
      */
     fun displayModeForZoom(zoom: Int, latitude: Double = 30.0): DisplayMode = when {
-        zoom >= 16 -> DisplayMode.BUBBLE_LARGE
-        zoom >= 14 -> DisplayMode.BUBBLE_MEDIUM
-        zoom >= 12 -> DisplayMode.CIRCLE
-        else -> DisplayMode.HIDDEN
+        zoom >= 17 -> DisplayMode.BUBBLE_LARGE   // حوالي 50 متر
+        zoom >= 15 -> DisplayMode.BUBBLE_MEDIUM  // حوالي 100 متر
+        zoom >= 14 -> DisplayMode.CIRCLE         // حوالي 200 متر / 500 قدم
+        else -> DisplayMode.HIDDEN               // أبعد من 200م
     }
 
     fun displayModeForGoogleZoom(zoom: Float, latitude: Double = 30.0): DisplayMode =
         displayModeForZoom(zoom.toInt().coerceIn(1, 22), latitude)
 
     /**
-     * مبدأ تكبير الأيقونات — النسخة المعتمدة (لا تُغيَّر إلا بطلب صريح):
-     * أحجام ثابتة بالبكسل حسب مستوى الزوم، كما قبل تحسينات الأداء.
-     * الهدف لاحقاً: انتقال أكثر سلاسة بأسلوب خرائط جوجل مع الإبقاء على نفس الإحساس البصري.
+     * أحجام مستوحاة من لقطات 50م / 100م / 200م.
+     * عند 50م: أكبر بنسبة 15٪ عن الحجم الظاهر في الصور المرجعية.
      */
     fun markerSizePxForZoom(zoom: Int): Int = when {
-        zoom >= 18 -> 88
-        zoom >= 17 -> 80
-        zoom >= 16 -> 72
-        zoom >= 15 -> 64
-        zoom >= 14 -> 56
-        zoom >= 13 -> 44
-        zoom >= 12 -> 32
-        zoom >= 11 -> 22
+        zoom >= 18 -> 56   // أقرب من 50م
+        zoom >= 17 -> 52   // ~50م (+15٪ عن الصورة)
+        zoom >= 16 -> 40   // بين 50 و 100
+        zoom >= 15 -> 34   // ~100م
+        zoom >= 14 -> 16   // ~200م نقطة
         else -> 0
     }
 
     fun sizeForZoom(zoom: Int): Int = markerSizePxForZoom(zoom)
 
     fun markerSizePxForMode(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.BUBBLE_LARGE -> 80
-        DisplayMode.BUBBLE_MEDIUM -> 56
-        DisplayMode.CIRCLE -> 28
+        DisplayMode.BUBBLE_LARGE -> 52   // 50م +15٪
+        DisplayMode.BUBBLE_MEDIUM -> 34  // 100م
+        DisplayMode.CIRCLE -> 16         // 200م
         DisplayMode.HIDDEN -> 0
     }
 
-    /** توافق مع الاستدعاءات القديمة */
     fun sizeForMode(mode: DisplayMode): Int = markerSizePxForMode(mode)
 
     private fun userPinSizePx(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 28
-        DisplayMode.BUBBLE_MEDIUM -> 80
-        DisplayMode.BUBBLE_LARGE -> 96
+        DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 16
+        DisplayMode.BUBBLE_MEDIUM -> 40
+        DisplayMode.BUBBLE_LARGE -> 56
     }
 
     fun colorForCategory(category: String): Int = CategoryStyles.colorFor(category)
