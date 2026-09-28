@@ -67,18 +67,18 @@ jobs:
           ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
           echo "::error title=Build failed::$ERRS"
 
-      - name: "تحقق من الأيقونات البديلة في البيان والـAPK"
+      - name: "تحقق نهائي من أيقونات المشغّل البديلة"
         if: always()
         run: |
           MERGED=$(find app/build/intermediates -name "AndroidManifest.xml" -path "*merged_manifest*" 2>/dev/null | head -1)
-          ALIASES=$(grep -c "activity-alias" "$MERGED" 2>/dev/null || echo 0)
-          LAUNCH=$(grep -o 'LauncherIcon_[a-z0-9_]*' "$MERGED" 2>/dev/null | sort -u | head -3 | tr '\n' ' ')
+          AL=$(grep -c "<activity-alias" "$MERGED" 2>/dev/null || echo 0)
+          EN=$(grep -A7 "<activity-alias" "$MERGED" 2>/dev/null | grep -c 'android:enabled="true"' || echo 0)
+          MAIN=$(grep -A9 'android:name="com.marketmaps.app.MainActivity"' "$MERGED" 2>/dev/null | grep -c "LAUNCHER" || echo 0)
           APK=$(find app/build/outputs/apk/debug -name '*.apk' 2>/dev/null | head -1)
-          AAPT=$(find "$ANDROID_HOME/build-tools" -name "aapt2" 2>/dev/null | sort | tail -1)
-          BADGING=$("$AAPT" dump badging "$APK" 2>/dev/null | grep -c "launchable-activity" || echo "?")
-          LAUNCH_LIST=$("$AAPT" dump badging "$APK" 2>/dev/null | grep "launchable-activity" | head -2 | tr '\n' ' ')
-          echo "::error title=MANIFEST::aliases=$ALIASES | نماذج=[$LAUNCH]"
-          echo "::error title=APK_LAUNCHERS::count=$BADGING | [$LAUNCH_LIST]"
+          unzip -p "$APK" AndroidManifest.xml > /tmp/axml.bin 2>/dev/null || true
+          S1=$(strings -el /tmp/axml.bin 2>/dev/null | grep -c "LauncherIcon" || echo 0)
+          NAMES=$(strings -el /tmp/axml.bin 2>/dev/null | grep "LauncherIcon" | sort -u | head -3 | tr '\n' ' ')
+          echo "::error title=VERIFY::aliases=$AL | مفعّلة_افتراضياً=$EN | فلتر_LAUNCHER_في_النشاط_الرئيسي=$MAIN | في_APK=$S1 | [$NAMES]"
 
       - name: Prepare APK for upload
         if: success()
