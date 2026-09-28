@@ -254,13 +254,23 @@ fun MapScreen(
     }
     var cameraTarget by remember { mutableStateOf<CameraTarget?>(null) }
     var detailsCardHeightPx by remember { mutableIntStateOf(0) }
+    // ارتفاع بطاقة الإضافة السفلية (لرفع زر الزائد فوقها كما في التصميم)
+    var addSheetHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val detailsCardVisible = selectedStore != null
-    val cardLiftTargetPx = if (detailsCardVisible) {
-        val hPx = if (detailsCardHeightPx > 0) detailsCardHeightPx.toFloat()
-        else with(density) { 128.dp.toPx() }
-        hPx + with(density) { 8.dp.toPx() }
-    } else 0f
+    val cardLiftTargetPx = when {
+        detailsCardVisible -> {
+            val hPx = if (detailsCardHeightPx > 0) detailsCardHeightPx.toFloat()
+            else with(density) { 128.dp.toPx() }
+            hPx + with(density) { 8.dp.toPx() }
+        }
+        showAddPlaceSheet -> {
+            val hPx = if (addSheetHeightPx > 0) addSheetHeightPx.toFloat()
+            else with(density) { 176.dp.toPx() }
+            hPx + with(density) { 8.dp.toPx() }
+        }
+        else -> 0f
+    }
     val cardLiftAnim = remember { Animatable(0f) }
     LaunchedEffect(cardLiftTargetPx) {
         cardLiftAnim.animateTo(
@@ -695,7 +705,8 @@ fun MapScreen(
                     .align(Alignment.BottomStart)
                     .padding(start = 16.dp, bottom = 16.dp, end = 16.dp)
                     .offset(cardLiftOffset)
-                    .zIndex(15f),
+                    // أعلى من بطاقة الإضافة (18f) ليبقى زر الزائد ظاهراً فوقها
+                    .zIndex(19f),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -862,6 +873,7 @@ fun MapScreen(
                         selectedLon = lon
                         showAddDialog = true
                     },
+                    onHeightChanged = { addSheetHeightPx = it },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .zIndex(18f)
@@ -1082,25 +1094,25 @@ private fun isLocationEnabled(context: Context): Boolean {
 
 // مؤشر إضافة المكان — ثلاث قطع كما في التصميم:
 // 1) النقطة البيضاء بإطار لون التمييز (أعلى) = إحداثيات المكان المُضاف.
-// 2) السهم: رأسه ملاصق للنقطة ويشير إليها.
-// 3) نقطة الإصبع (الأيقونة المرفقة) أسفل السهم، فيكون السهم أمام الإصبع لا تحته.
-// القطع الثلاث تتحرك معاً، وكل الحاوية مساحة سحب (فالمؤشر يُسحب من أي جزء منه).
+// 2) السهم ورأسه ملاصق للنقطة ويشير إليها.
+// 3) نقطة الإصبع أسفل السهم: هي التي يمسكها الإصبع، فيبقى السهم أمام الإصبع لا تحته.
+// القطع الثلاث تتحرك معاً، ومساحة السحب تغطيها كلها فيعمل السحب من نقطة الإصبع نفسها.
 private val AddPinPointSize = 14.dp
 private val AddPinPointBorder = 2.dp
 private val AddPinArrowSize = 24.dp
+private val AddPinDotSize = 22.dp
 
-/** مركز صورة السهم أسفل مركز النقطة (داخل الصورة فراغ أعلى، فرأس السهم يلاصق النقطة) */
-private val AddPinArrowOffset = 16.dp
-private val AddPinDotSize = 30.dp
+/** داخل صورة السهم فراغ أعلى وأسفل؛ هاتان النسبتان تحدّدان رأس السهم وقاعدته */
+private val AddPinArrowApexInset = AddPinArrowSize * 0.166f
+private val AddPinArrowBaseInset = AddPinArrowSize * 0.78f
 
-/** مركز نقطة الإصبع أسفل مركز النقطة البيضاء */
-private val AddPinDotOffset = 46.dp
+/** بين حافة النقطة ورأس السهم، وبين قاعدة السهم وحافة نقطة الإصبع */
+private val AddPinGapPointToArrow = 1.dp
+private val AddPinGapArrowToDot = 6.dp
 
-/** هامش حول القطع داخل مساحة السحب */
-private val AddPinTouchMargin = 8.dp
-
-/** عرض مساحة السحب (أعرض قطعة + هامش) */
-private val AddPinTouchWidth = AddPinDotSize + AddPinTouchMargin * 2f
+/** هامش لمس مريح حول القطع */
+private val AddPinTouchPadding = 10.dp
+private val AddPinTouchWidth = 44.dp
 
 @Composable
 private fun AddPlaceCenterPin(
@@ -1128,17 +1140,21 @@ private fun AddPlaceCenterPin(
         loadAssetSvgTinted(context, "icons/add_pin_dot.svg", px, accentArgb)
     }
 
-    // الحدّان العلوي والسفلي للقطع حول مركز النقطة، ومنهما ارتفاع الحاوية وإزاحتها
-    // حتى يبقى مركز النقطة البيضاء = مركز الحاوية = إحداثيات المكان على الخريطة.
-    val topExtent = AddPinPointSize / 2f + AddPinTouchMargin
-    val bottomExtent = AddPinDotOffset + AddPinDotSize / 2f + AddPinTouchMargin
-    val boxHeight = topExtent + bottomExtent
+    // مواضع القطع من أعلى الحاوية: النقطة، ثم السهم، ثم نقطة الإصبع
+    val pointTop = AddPinTouchPadding
+    val arrowTop = pointTop + AddPinPointSize + AddPinGapPointToArrow - AddPinArrowApexInset
+    val dotTop = arrowTop + AddPinArrowBaseInset + AddPinGapArrowToDot
+
+    // ارتفاع الحاوية = أسفل نقطة الإصبع + الهامش، ومركز النقطة البيضاء = مركز الحاوية
+    val topExtent = AddPinPointSize / 2f + AddPinTouchPadding
+    val boxHeight = dotTop + AddPinDotSize + AddPinTouchPadding
     val anchorShift = boxHeight / 2f - topExtent
 
     Box(
         modifier = modifier
             .size(width = AddPinTouchWidth, height = boxHeight)
-            .offset {
+            // absoluteOffset: offset العادي ينعكس مع RTL فيتحرك المؤشر عكس الإصبع
+            .absoluteOffset {
                 IntOffset(offsetX.roundToInt(), offsetY.roundToInt() + anchorShift.roundToPx())
             }
             .pointerInput(Unit) {
@@ -1147,11 +1163,12 @@ private fun AddPlaceCenterPin(
                     onDrag(drag.x, drag.y)
                 }
             },
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.TopCenter
     ) {
         // النقطة البيضاء: مركزها = إحداثيات المكان
         Box(
             modifier = Modifier
+                .offset(y = pointTop)
                 .size(AddPinPointSize)
                 .background(Color.White, CircleShape)
                 .border(width = AddPinPointBorder, color = accent, shape = CircleShape)
@@ -1162,18 +1179,18 @@ private fun AddPlaceCenterPin(
                 bitmap = arrow.asImageBitmap(),
                 contentDescription = null,
                 modifier = Modifier
+                    .offset(y = arrowTop)
                     .size(AddPinArrowSize)
-                    .offset(y = AddPinArrowOffset)
             )
         }
-        // نقطة الإصبع أسفل السهم
+        // نقطة الإصبع أسفل السهم (تُسحب من هنا)
         if (dot != null) {
             Image(
                 bitmap = dot.asImageBitmap(),
-                contentDescription = null,
+                contentDescription = "اسحب من هنا لتحريك المؤشر",
                 modifier = Modifier
+                    .offset(y = dotTop)
                     .size(AddPinDotSize)
-                    .offset(y = AddPinDotOffset)
             )
         }
     }
@@ -1184,6 +1201,7 @@ private fun AddPlaceBottomSheet(
     onDismiss: () -> Unit,
     onPickCurrentLocation: () -> Unit,
     onPickPinLocation: () -> Unit,
+    onHeightChanged: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -1204,8 +1222,10 @@ private fun AddPlaceBottomSheet(
             .onGloballyPositioned { coords ->
                 cardW = coords.size.width.toFloat().coerceAtLeast(1f)
                 cardH = coords.size.height.toFloat().coerceAtLeast(1f)
+                onHeightChanged(coords.size.height)
             }
-            .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
+            // absoluteOffset: offset العادي ينعكس مع RTL فتتحرك البطاقة عكس الإصبع
+            .absoluteOffset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
             .pointerInput(Unit) {
                 // نفس منطق سحب بطاقة تفاصيل المحل: محور واحد ثم إغلاق أو ارتداد
                 detectDragGestures(
@@ -1254,7 +1274,9 @@ private fun AddPlaceBottomSheet(
                 )
             },
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        color = scheme.surface,
+        // بيضاء كما في التصميم في الوضع الفاتح (لون السمة قد يكون مائلاً للأخضر
+        // مع الثيم الديناميكي)، وسطح السمة في الوضع الغامق
+        color = if (scheme.surface.luminance() > 0.5f) Color.White else scheme.surface,
         shadowElevation = 8.dp
     ) {
         Column(
@@ -1282,7 +1304,7 @@ private fun AddPlaceBottomSheet(
                             .weight(1f)
                             .heightIn(min = 48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.5.dp, scheme.primary.copy(alpha = 0.55f)),
+                        border = BorderStroke(1.5.dp, scheme.primary.copy(alpha = 0.7f)),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = scheme.primary)
                     ) {
                         Text("اختر موقعك الحالي")
@@ -1293,7 +1315,7 @@ private fun AddPlaceBottomSheet(
                             .weight(1f)
                             .heightIn(min = 48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.5.dp, scheme.primary.copy(alpha = 0.55f)),
+                        border = BorderStroke(1.5.dp, scheme.primary.copy(alpha = 0.7f)),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = scheme.primary)
                     ) {
                         Text("اختر موقع المؤشر")

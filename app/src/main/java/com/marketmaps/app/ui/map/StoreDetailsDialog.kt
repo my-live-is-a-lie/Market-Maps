@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -137,7 +138,8 @@ fun StoreDetailsBottomCard(
                 .graphicsLayer {
                     translationY = enterY.value
                 }
-                .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
+                // absoluteOffset: offset العادي ينعكس مع RTL فتتحرك البطاقة عكس الإصبع
+                .absoluteOffset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
                 .pointerInput(store.id) {
                     detectDragGestures(
                         onDragStart = {
