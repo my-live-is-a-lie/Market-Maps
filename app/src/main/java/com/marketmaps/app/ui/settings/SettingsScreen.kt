@@ -1,5 +1,6 @@
 package com.marketmaps.app.ui.settings
 
+import com.marketmaps.app.R
 import com.marketmaps.app.ui.theme.darkerShade
 import com.marketmaps.app.ui.theme.isDarkSurface
 import com.marketmaps.app.ui.theme.selectionBorder
