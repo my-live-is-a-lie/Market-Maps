@@ -191,8 +191,14 @@ abstract class GenerateLauncherAliasManifestTask : DefaultTask() {
         // أنواع صريحة بالكامل: داخل مهام Gradle لا يُستنتج نوع lambda هنا
         val svgFolder: File = svgDir.get().asFile
         val svgFilter = FileFilter { file: File -> file.isFile && file.extension.equals("svg", true) }
+        val order = logoSvgOrder.get()
         val svgFiles: List<File> =
-            (svgFolder.listFiles(svgFilter)?.toList() ?: emptyList()).sortedBy { file: File -> file.name }
+            (svgFolder.listFiles(svgFilter)?.toList() ?: emptyList()).sortedWith(
+                compareBy(
+                    { file: File -> order.indexOf(file.nameWithoutExtension).let { i: Int -> if (i < 0) order.size else i } },
+                    { file: File -> file.name }
+                )
+            )
         val colors = backgroundKeys.get()
         val builder = StringBuilder()
         builder.append("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
@@ -274,6 +280,7 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
     doLast {
         val svgDir = File(inputs.properties.getValue("svgDirPath") as String)
         val outRoot = File(inputs.properties.getValue("outDirPath") as String)
+        val svgFilter = FileFilter { file: File -> file.isFile && file.extension.equals("svg", true) }
 
         // ألوان خلفية الأيقونة: key للأيقونة، تسمية عربية، وHEX
         val backgrounds = listOf(
@@ -353,8 +360,15 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
         val logoKeys = mutableListOf<String>()
         val logoJson = mutableListOf<String>()
         val iconNames = mutableListOf<String>()
-        val svgFiles = svgDir.listFiles { f -> f.isFile && f.extension.equals("svg", true) }
-            ?.sortedBy { it.name }.orEmpty()
+        // الترتيب حسب القائمة المعلنة أولاً، ثم أي شعار جديد أبجدياً في الآخر
+        val logoSvgOrder = inputs.properties.getValue("logoSvgOrder") as List<*>
+        val svgFiles: List<File> =
+            (svgDir.listFiles(svgFilter)?.toList() ?: emptyList()).sortedWith(
+                compareBy(
+                    { file: File -> logoSvgOrder.indexOf(file.nameWithoutExtension).let { i: Int -> if (i < 0) logoSvgOrder.size else i } },
+                    { file: File -> file.name }
+                )
+            )
         logger.lifecycle("MARKETMAPS_SVG_FOUND=${svgFiles.size} dir=${svgDir.absolutePath}")
         svgFiles
             .forEach { svg ->
