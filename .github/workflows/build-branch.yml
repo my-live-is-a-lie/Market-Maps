@@ -1,0 +1,125 @@
+name: Build Debug APK (branch)
+
+# سير عمل مؤقت: نفس خطوات Build Debug APK لكن يعمل تلقائياً على فرع المراجعة
+on:
+  push:
+    branches:
+      - arena/01a0e716-market-maps
+
+concurrency:
+  group: build-branch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Inject Google Maps API key
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: |
+          if [ -z "$MAPS_API_KEY" ]; then
+            echo "تحذير: لم يتم العثور على Secret باسم MAPS_API_KEY — خرائط جوجل لن تعمل"
+            echo "MAPS_API_KEY=" >> local.properties
+          else
+            echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
+            echo "تم حقن مفتاح API (الطول: ${#MAPS_API_KEY})"
+          fi
+          if [ -f app/debug.keystore ]; then
+            echo "===== SHA-1 Debug (أضفه في Google Cloud Console) ====="
+            keytool -list -v -keystore app/debug.keystore -storepass android -alias androiddebugkey 2>/dev/null | grep -E "SHA1:|SHA256:" || true
+            echo "======================================================"
+          fi
+
+      - name: Build Debug APK (arm64-v8a only)
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace --no-daemon --build-cache 2>&1 | tee build.log
+
+      - name: Report compile errors
+        if: failure()
+        run: |
+          ERRS=$(grep -E "^e: |What went wrong" -A2 build.log | grep -vE "^\s+at " | head -60 || true)
+          [ -z "$ERRS" ] && ERRS=$(tail -40 build.log)
+          ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
+          echo "::error title=Build failed::$ERRS"
+
+      - name: "تحقق نهائي: الوضع الليلي (بلاطات/ثيم/علامات) + الشعارات"
+        if: always()
+        run: |
+          SRC=app/src/main/java/com/marketmaps/app/ui/map
+          echo "=== 1) نمط خرائط جوجل الليلي ==="
+          python3 - <<'PYEOF' || true
+          import json
+          d = json.load(open('app/src/main/res/raw/map_style_night.json', encoding='utf-8'))
+          vis = [r for r in d if any('visibility' in s for s in r.get('stylers', []))]
+          txt = json.dumps(d, ensure_ascii=False)
+          has_business = 'poi.business' in txt and '"visibility": "on"' in txt
+          msg = f"GOOGLE_STYLE=قواعد:{len(d)} إظهار_نقاط_الاهتمام:{'نعم' if has_business else 'لا'}"
+          print(msg); print(f"::error title=NIGHT_STYLE::{msg}")
+          PYEOF
+          echo "=== 2) الفلتر القديم أُزيل تماماً (كان يُسوّد رموز الشعارات) ==="
+          OLD=$(grep -rl "applyNightFilter\|setLayerType" $SRC | wc -l)
+          echo "::error title=NO_VIEW_FILTER::ملفات_تحتوي_فلتر_العرض=$OLD (المطلوب 0)"
+          echo "=== 3) تلوين بلاطات الأونلاين على مستوى الكاش ==="
+          grep -c "NightTileCache" $SRC/MapLayerHelper.kt
+          ls -l $SRC/NightTileCache.kt
+          grep -n "class NightTileCache" -A 2 $SRC/NightTileCache.kt
+          echo "=== 4) أحجام العلامات الجديدة (كانت 57/34/11) ==="
+          grep -nE "BUBBLE_LARGE_PX = |BUBBLE_MEDIUM_PX = |CIRCLE_PX = " $SRC/MarkerIconHelper.kt
+          echo "=== 5) أسماء الأماكن أسفل أيقونات OSM ==="
+          grep -n "getMarkerBitmapWithLabel" $SRC/MapScreen.kt | head -3
+          grep -n "showLabels = showMarkerLabels, night = mapNight" -B 3 $SRC/MapScreen.kt | head -8
+          echo "=== 6) ألوان التسميات الليلية ==="
+          grep -n "NIGHT_LABEL_TEXT\|NIGHT_LABEL_STROKE" $SRC/MarkerIconHelper.kt | head -4
+          echo "=== 7) داخل APK: الثيم الليلي ونمط جوجل ==="
+          APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -1)
+          MATCH=$(unzip -l "$APK" | grep -E "assets/mapsforge/dark\.xml|map_style_night" || true)
+          echo "$MATCH"
+          echo "::error title=NIGHT_APK::$(echo "$MATCH" | tr '\n' '|')"
+          echo "=== 8) تحقق الفئات المُصرَّفة ==="
+          ls -l app/build/tmp/kotlin-classes/debug/com/marketmaps/app/ui/map/NightTileCache.class || true
+          echo "=== 9) لا تراجع: الشعارات ==="
+          LOGOS=$(find app/build/generated/launcherIcons/res/drawable -name "logo_*_foreground.xml" | sed 's|.*/||' | tr '\n' ' ')
+          IC=$(find app/build/generated/launcherIcons/res/mipmap-anydpi-v26 -name "*.xml" | wc -l)
+          MERGED=$(find app/build/intermediates -name "AndroidManifest.xml" -path "*merged_manifest*" | head -1)
+          AL=$(grep -c "<activity-alias" "$MERGED" || echo 0)
+          echo "::error title=FINAL::شعارات=[$LOGOS] أيقونات=$IC aliases=$AL"
+
+      - name: Prepare APK for upload
+        if: success()
+        run: |
+          cp "$(find app/build/outputs/apk/debug -name '*.apk' | head -1)" ./MarketMaps-debug-arm64.apk
+          ls -lh ./MarketMaps-debug-arm64.apk
+
+      - name: Upload APK Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarketMaps-debug-arm64-branch
+          path: MarketMaps-debug-arm64.apk
+          if-no-files-found: error
+          retention-days: 14
