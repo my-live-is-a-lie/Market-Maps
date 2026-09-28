@@ -1,8 +1,8 @@
 package com.marketmaps.app.data
 
 /**
- * بيانات التصنيفات الهرمية المؤقتة.
- * لاحقاً سننقلها إلى Firebase ليتم تعديلها بدون تحديث التطبيق.
+ * هيكل التصنيفات الهرمية + القائمة الافتراضية المضمّنة في التطبيق.
+ * القائمة الحية تُدار عبر [CategoryCatalog] (Firestore مع احتياطي محلي).
  */
 object CategoryData {
 
@@ -16,7 +16,8 @@ object CategoryData {
         val thirdLevel: List<String> = emptyList()
     )
 
-    val categories = listOf(
+    /** القائمة الافتراضية — تُستخدم عند عدم توفر السحابة وتُزرع في Firestore أول مرة */
+    val defaultCategories: List<Category> = listOf(
         Category(
             name = "محل",
             subCategories = listOf(
