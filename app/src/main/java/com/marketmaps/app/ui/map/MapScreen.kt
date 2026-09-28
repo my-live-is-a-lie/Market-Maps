@@ -367,21 +367,19 @@ fun MapScreen(
             filtersInitialized = true
         }
         tryGetLastLocation(context) { lat, lon -> userLat = lat; userLon = lon }
-        val result = storeRepository.getAllStores()
-        if (result.isSuccess) {
-            stores = result.getOrDefault(emptyList())
-            if (stores.isEmpty()) {
-                Toast.makeText(
-                    context,
-                    "السحابة رجعت 0 محل — تحقق من الإنترنت وقواعد Firestore لمجموعة stores",
-                    Toast.LENGTH_LONG
-                ).show()
-            } else {
-                Toast.makeText(context, "تم تحميل ${stores.size} محل", Toast.LENGTH_SHORT).show()
+    }
+
+    // مزامنة حية: أي إضافة/تعديل/حذف من أي جهاز يظهر فوراً
+    LaunchedEffect(storeRepository) {
+        var firstEmission = true
+        storeRepository.observeStores().collect { list ->
+            stores = list
+            if (firstEmission) {
+                firstEmission = false
+                if (list.isEmpty()) {
+                    // لا نزعج المستخدم فوراً — قد تصل بيانات السيرفر بعد الكاش الفارغ
+                }
             }
-        } else {
-            val err = result.exceptionOrNull()?.message ?: "خطأ غير معروف"
-            Toast.makeText(context, "تعذر تحميل المحلات: $err", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -436,6 +434,7 @@ fun MapScreen(
         } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
 
+    // المزامنة الحية تحدّث القائمة تلقائياً؛ هذه للدفع اليدوي إن لزم
     fun refreshStores() {
         scope.launch {
             val refreshed = storeRepository.getAllStores()
