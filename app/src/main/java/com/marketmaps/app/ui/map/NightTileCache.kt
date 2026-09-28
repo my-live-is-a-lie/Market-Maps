@@ -20,10 +20,10 @@ import com.marketmaps.app.util.logW
  * بلاطات Mapnik فاتحة: الأرض بيج، الشوارع بيضاء، حدود الشوارع رمادي، النصوص داكنة.
  * نستخدم:
  *   1) جدول إضاءة (LUT) للعناصر الرمادية يقلب الترتيب ليطابق جوجل:
- *      نصوص داكنة ← فاتحة #E8EAED، حدود ← #232C38، أرض ← #242F3E، شوارع ← #46505F.
+ *      نصوص داكنة ← بيضاء #FFFFFF، حدود ← #16202C، أرض ← #1B2531، شوارع ← #3F5261.
  *   2) للعناصر الملوّنة (مياه/خضرة/طرق ملوّنة): نحفظ اللون ونقوّيه، مع هدف إضاءة
- *      مختلف لكل عائلة لونية ليطابق لون جوجل (مياه #17639B، خضرة #2E7D4F،
- *      طرق كبيرة #7A6A52).
+ *      مختلف لكل عائلة لونية ليطابق لون جوجل (مياه كحلية #11304C، خضرة #1D4239،
+ *      طرق كبيرة #556C7A).
  * الكاش يحفظ البلاطات الملوَّنة، لذلك [MapLayerHelper.applyOnline] يمسح كاش
  * الأونلاين عند تغيير الوضع الليلي ليعاد التحميل بالألوان الصحيحة.
  */
@@ -98,22 +98,28 @@ class NightTileCache(
                     ng = target
                     nb = target + COOL_B
                 } else {
-                    // ملوّن: نحفظ اللون ونقوّيه مع هدف إضاءة حسب عائلة اللون
+                    // ملوّن: نُعيّن لون تطبيق جوجل الرسمي مباشرة (كما في نمط الليل)
+                    // مع الحفاظ على تفاوت الإضاءة داخل العنصر نفسه (غابة أغمق من مرج)
                     val bluish = b - r > BLUE_BIAS
                     val greenish = !bluish && g - r > GREEN_BIAS
-                    val target = when {
-                        bluish -> BLUE_TARGET    // مياه ونصوصها
-                        greenish -> GREEN_TARGET // خضرة وغابات
-                        else -> WARM_TARGET      // طرق كبيرة ورمال ملوّنة
+                    val factor = (luma / 190f).coerceIn(0.75f, 1.3f)
+                    if (bluish) {
+                        // مياه كحلية #11304C
+                        nr = (17 * factor).toInt()
+                        ng = (48 * factor).toInt()
+                        nb = (76 * factor).toInt()
+                    } else if (greenish) {
+                        // خضرة مزرقّة #1D4239
+                        nr = (29 * factor).toInt()
+                        ng = (66 * factor).toInt()
+                        nb = (57 * factor).toInt()
+                    } else {
+                        // طرق كبيرة مائلة إلى الأزرق #556C7A
+                        val warm = (luma / 200f).coerceIn(0.85f, 1.1f)
+                        nr = (85 * warm).toInt()
+                        ng = (108 * warm).toInt()
+                        nb = (122 * warm).toInt()
                     }
-                    val chroma = when {
-                        bluish -> CHROMA_BLUE
-                        greenish -> CHROMA_GREEN
-                        else -> CHROMA_WARM
-                    }
-                    nr = target + ((r - luma) * chroma).toInt()
-                    ng = target + ((g - luma) * chroma).toInt()
-                    nb = target + ((b - luma) * chroma).toInt()
                 }
 
                 pixels[i] = (alpha shl 24) or
@@ -142,13 +148,13 @@ class NightTileCache(
         private const val GREEN_BIAS = 8
 
         /** أهداف الإضاءة لمطابقة لوحة جوجل الليلية */
-        private const val BLUE_TARGET = 83    // مياه #17639B
-        private const val GREEN_TARGET = 105  // خضرة #2E7D4F
-        private const val WARM_TARGET = 108   // طرق كبيرة #7A6A52
+        private const val BLUE_TARGET = 43    // مياه #17639B
+        private const val GREEN_TARGET = 57  // خضرة #2E7D4F
+        private const val WARM_TARGET = 90   // طرق كبيرة #7A6A52
 
         /** ميل أزرق بارد للعناصر الرمادية ليطابق لون الأرض/الطرق في جوجل */
-        private const val COOL_R = 3
-        private const val COOL_B = 6
+        private const val COOL_R = -6
+        private const val COOL_B = 14
 
         /** تقوية اللون لتعويض بهتان بلاطات Mapnik */
         private const val CHROMA_BLUE = 1.9f
@@ -163,14 +169,14 @@ class NightTileCache(
          * وحدودها أغمق منها، تماماً كترتيب خرائط جوجل الليلية.
          */
         private val CONTROL = intArrayOf(
-            0, 232,
-            60, 226,
-            110, 190,
-            150, 105,
+            0, 250,
+            60, 244,
+            110, 205,
+            150, 120,
             175, 55,
-            200, 43,
-            225, 45,
-            242, 46,
+            200, 33,
+            225, 34,
+            242, 36,
             250, 58,
             255, 79
         )
