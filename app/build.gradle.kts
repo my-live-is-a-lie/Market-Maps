@@ -302,23 +302,86 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
             Triple("indigo", "نيلي", "#3949AB"),
             Triple("dark", "أسود", "#111111")
         )
-        // منطقة الأمان للأيقونة التكيفية: يُصغَّر الشعار داخل الأيقونة
-        // (0.6375 = تصغير 25% عن 0.85 المستخدمة سابقاً)
-        val iconScale = 0.6375f
+        // نسبة أكبر بُعد للرسم من عرض اللوحة: 58% تضع الرسم داخل منطقة الأمان
+        // للأيقونة التكيفية (66 من 108) بنفس حجم شعار التطبيق الأصلي
+        val logoSvgFraction = 0.58f
 
-        /** يُغلّف محتوى VectorDrawable بمجموعة تصغير حول مركز الأيقونة */
-        fun withSafeZone(vectorXml: String, scale: Float): String {
-            val vpW = Regex("android:viewportWidth=\"([0-9.]+)\"").find(vectorXml)
-                ?.groupValues?.get(1)?.toFloatOrNull() ?: return vectorXml
-            val vpH = Regex("android:viewportHeight=\"([0-9.]+)\"").find(vectorXml)
-                ?.groupValues?.get(1)?.toFloatOrNull() ?: return vectorXml
-            val open = vectorXml.indexOf('>')
-            val close = vectorXml.lastIndexOf("</vector>")
-            if (open < 0 || close <= open) return vectorXml
-            return vectorXml.substring(0, open + 1) +
-                "\n<group android:pivotX=\"" + (vpW / 2f) + "\" android:pivotY=\"" + (vpH / 2f) +
-                "\" android:scaleX=\"" + scale + "\" android:scaleY=\"" + scale + "\">" +
-                vectorXml.substring(open + 1, close) + "</group>\n" + vectorXml.substring(close)
+        /** تنسيق رقم لملف SVG/VectorDrawable (فاصلة عشرية نقطية دائماً) */
+        fun formatSvgNumber(value: Float): String {
+            if (value == value.toInt().toFloat()) return value.toInt().toString()
+            return String.format(java.util.Locale.US, "%.2f", value).trimEnd('0').trimEnd('.')
+        }
+
+        /**
+         * تطبيع هندسة الشعار: ملفات SVG المتتبَّعة (VTracer) تأتي بلا viewBox
+         * وإحداثياتها مُزاحة بـ transform=translate، فتُرسم أكبر من مساحتها وتنزاح
+         * للزاوية ويختلف حجمها بين شعار وآخر. هنا:
+         * 1) تُخبز الإزاحة داخل مسار الرسم (تُحذف الحاجة إلى transform).
+         * 2) تُكتب لوحة مربّعة حول الرسم نفسه بحشو ثابت (الرسم = 58% من اللوحة)
+         *    فتظهر كل الشعارات بنفس الحجم — مطابقة لشعار التطبيق الأصلي.
+         * التطبيع متكرّر الأثر (idempotent): تشغيله على ملف مُطبَّع لا يغيّره.
+         */
+        fun normalizeSvgText(svgText: String): String {
+            val numberRegex = Regex("-?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?")
+            val allowedCommands = "MmLlCcSsQqTtZz"
+            var result = svgText
+            var skipBake = false
+            val xs = mutableListOf<Float>()
+            val ys = mutableListOf<Float>()
+
+            Regex("<path\\b[^>]*?/?>", RegexOption.DOT_MATCHES_ALL).findAll(svgText).forEach { match ->
+                val element = match.value
+                val d = Regex("\\bd=\"([^\"]*)\"").find(element)?.groupValues?.get(1)
+                if (d != null) {
+                    val tr = Regex("translate\\(\\s*([-0-9.]+)(?:[ ,]+([-0-9.]+))?\\s*\\)").find(element)
+                    val tx = tr?.groupValues?.getOrNull(1)?.toFloatOrNull() ?: 0f
+                    val tyRaw = tr?.groupValues?.getOrNull(2)
+                    val ty = if (tyRaw.isNullOrBlank()) 0f else tyRaw.toFloatOrNull() ?: 0f
+
+                    if (Regex("[A-Za-z]").findAll(d).any { !allowedCommands.contains(it.value) }) {
+                        skipBake = true
+                    }
+                    val numbers = numberRegex.findAll(d).map { it.value.toFloat() }.toList()
+                    var i = 0
+                    while (i + 1 < numbers.size) {
+                        xs += numbers[i] + tx
+                        ys += numbers[i + 1] + ty
+                        i += 2
+                    }
+
+                    if (!skipBake && (tx != 0f || ty != 0f)) {
+                        var index = 0
+                        val baked = numberRegex.replace(d) { found ->
+                            val shifted = found.value.toFloat() + if (index % 2 == 0) tx else ty
+                            index++
+                            formatSvgNumber(shifted)
+                        }
+                        val elementNew = element.replace(d, baked)
+                            .replace(Regex("\\s*transform=\"[^\"]*\""), "")
+                        result = result.replace(element, elementNew)
+                    }
+                }
+            }
+
+            if (xs.isEmpty()) return svgText
+            val minX = xs.min(); val maxX = xs.max()
+            val minY = ys.min(); val maxY = ys.max()
+            val artwork = maxOf(maxX - minX, maxY - minY)
+            if (artwork <= 0f) return svgText
+            val side = artwork / logoSvgFraction
+            val centerX = (minX + maxX) / 2f
+            val centerY = (minY + maxY) / 2f
+            val viewX = centerX - side / 2f
+            val viewY = centerY - side / 2f
+            val tag = "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" " +
+                "width=\"" + formatSvgNumber(side) + "\" height=\"" + formatSvgNumber(side) + "\" " +
+                "viewBox=\"" + formatSvgNumber(viewX) + " " + formatSvgNumber(viewY) + " " +
+                formatSvgNumber(side) + " " + formatSvgNumber(side) + "\">"
+            logger.lifecycle(
+                "MARKETMAPS_GEO=رسم=" + formatSvgNumber(artwork) + " لوحة=" + formatSvgNumber(side) +
+                    " نسبة=" + (100f * artwork / side).toInt() + "% مخبوز=" + if (skipBake) "لا" else "نعم"
+            )
+            return Regex("<svg\\b[^>]*>").replaceFirst(result, tag)
         }
 
         /** تحويل SVG إلى VectorDrawable بالمحوّل الرسمي (انعكاس: التوقيع يختلف بين إصدارات الأدوات) */
@@ -390,7 +453,11 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
                         }
                     }
                 val vector = try {
-                    withSafeZone(convertSvg(svg), iconScale)
+                    // التطبيع ثم التحويل: هندسة موحّدة لكل شعار
+                    val normalizedDir = File(outRoot, "normalized").apply { mkdirs() }
+                    val normalizedFile = File(normalizedDir, svg.name)
+                    normalizedFile.writeText(normalizeSvgText(svg.readText()))
+                    convertSvg(normalizedFile)
                 } catch (e: Exception) {
                     logger.lifecycle("MARKETMAPS_SKIP=${svg.name}: ${e.message}")
                     null
