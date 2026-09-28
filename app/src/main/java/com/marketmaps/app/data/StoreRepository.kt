@@ -2,19 +2,66 @@ package com.marketmaps.app.data
 
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Source
-import kotlinx.coroutines.tasks.await
 import com.marketmaps.app.util.logE
 import com.marketmaps.app.util.logW
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
 
 /**
- * مستودع للتعامل مع المحلات في Firestore.
+ * مستودع المحلات في Firestore.
+ * المزامنة الحية عبر [observeStores] تُحدّث القائمة عند أي إضافة/تعديل/حذف من أي جهاز.
  */
 class StoreRepository {
 
     private val db = FirebaseFirestore.getInstance()
     private val collection = db.collection("stores")
+
+    /**
+     * استماع مستمر لمجموعة stores.
+     * يرسل القائمة كاملة عند كل تغيير (ومن الكاش أولاً إن وُجد ثم من السيرفر).
+     */
+    fun observeStores(): Flow<List<Store>> = callbackFlow {
+        var registration: ListenerRegistration? = null
+        try {
+            registration = collection.addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+                if (error != null) {
+                    logE(TAG, "observeStores خطأ في المستمع", error)
+                    // نبقي المستمع؛ قد يعود الاتصال لاحقاً
+                    return@addSnapshotListener
+                }
+                if (snapshot == null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                val stores = snapshot.documents.mapNotNull { doc ->
+                    try {
+                        parseStore(doc.id, doc.data ?: emptyMap())
+                    } catch (e: Exception) {
+                        logW(TAG, "مستند غير صالح ${doc.id}", e)
+                        null
+                    }
+                }
+                logW(
+                    TAG,
+                    "مزامنة: ${stores.size} محل (fromCache=${snapshot.metadata.isFromCache}, pending=${snapshot.metadata.hasPendingWrites()})"
+                )
+                trySend(stores)
+            }
+        } catch (e: Exception) {
+            logE(TAG, "فشل بدء observeStores", e)
+            close(e)
+            return@callbackFlow
+        }
+        awaitClose {
+            registration?.remove()
+        }
+    }
 
     suspend fun addStore(store: Store): Result<String> {
         return try {
@@ -36,16 +83,15 @@ class StoreRepository {
         }
     }
 
+    /** تحميل لمرة واحدة (اختياري — المزامنة الحية تغطي الاستخدام العادي) */
     suspend fun getAllStores(): Result<List<Store>> {
         return try {
-            // نفضّل السيرفر حتى لا تُرجع ذاكرة فارغة بعد تثبيت جديد
             val snapshot = try {
                 collection.get(Source.SERVER).await()
             } catch (e: Exception) {
                 logW(TAG, "السيرفر غير متاح — محاولة من الكاش", e)
                 collection.get(Source.CACHE).await()
             }
-            logW(TAG, "عدد المستندات من Firestore: ${snapshot.size()} (fromCache=${snapshot.metadata.isFromCache})")
             val stores = snapshot.documents.mapNotNull { doc ->
                 try {
                     parseStore(doc.id, doc.data ?: emptyMap())
