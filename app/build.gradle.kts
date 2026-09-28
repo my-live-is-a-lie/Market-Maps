@@ -162,6 +162,8 @@ dependencies {
     // وحدات -ktx أُزيلت من Firebase BoM 34؛ نفس الـ API موجود في الوحدة الرئيسية
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.storage)
+    implementation(libs.coil.compose)
 
     implementation(libs.okhttp)
 
