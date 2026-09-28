@@ -192,7 +192,7 @@ fun AccentColorWheelDialog(
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "اللون المختار (اضغط نسخ لنسخ الرمز)",
+                            text = "اللون المختار",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -201,8 +201,9 @@ fun AccentColorWheelDialog(
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
-                    // نسخ رمز اللون إلى الحافظة
+                    // نسخ رمز اللون إلى الحافظة (الزر في الأسفل بمحاذاة سطر الرمز)
                     TextButton(
+                        modifier = Modifier.align(Alignment.Bottom),
                         onClick = {
                             clipboard.setText(AnnotatedString(hex))
                             Toast.makeText(context, "تم نسخ رمز اللون $hex", Toast.LENGTH_SHORT).show()
