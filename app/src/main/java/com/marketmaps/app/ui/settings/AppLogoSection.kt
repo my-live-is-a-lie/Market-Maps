@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -30,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -193,6 +196,7 @@ fun AppLogoSection(
     onSelectLogo: (AppLogoOption) -> Unit,
     onSelectBackground: (String) -> Unit,
     launcherNote: String,
+    onApplyLauncherIcon: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -286,6 +290,19 @@ fun AppLogoSection(
                         )
                     }
                 }
+            }
+
+            // زر تطبيق الأيقونة: ينفّذ التغيير فوراً بلا حاجة لغلق التطبيق وإعادة فتحه
+            Button(
+                onClick = onApplyLauncherIcon,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = accentColor,
+                    contentColor = if (accentColor.luminance() > 0.55f) Color.Black else Color.White
+                )
+            ) {
+                Text("تطبيق الأيقونة الآن على الشاشة الرئيسية")
             }
 
             // توضيح ما سيحدث لأيقونة الشاشة الرئيسية (قيود نظام أندرويد)

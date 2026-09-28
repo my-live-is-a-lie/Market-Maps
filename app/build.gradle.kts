@@ -169,7 +169,7 @@ kotlin {
 val launcherSvgDir = layout.projectDirectory.dir("src/main/assets/launcher")
 
 /** ترتيب الشعارات كما تظهر في الإعدادات (الشعار 1، الشعار 2، ...) — أي ملف جديد يُضاف في الآخر */
-val launcherLogoSvgOrder = listOf("market", "google-maps", "location", "location_pin")
+val launcherLogoSvgOrder = listOf("market", "location", "location_pin")
 val launcherIconsOutDir = layout.buildDirectory.dir("generated/launcherIcons").get().asFile
 
 /**

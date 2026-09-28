@@ -321,6 +321,13 @@ private fun AppearanceSettingsScreen(
                 " — قد يتأخر ظهورها قليلاً في بعض المشغّلات"
     }
 
+    // تصحيح اختيار قديم: إن حُذف الشعار المحفوظ من مجلد الأصول نعود للأول تلقائياً
+    LaunchedEffect(appLogos, appLogoKey) {
+        if (appLogos.isNotEmpty() && appLogos.none { it.key == appLogoKey }) {
+            prefs.setAppLogoKey(appLogos.first().key)
+        }
+    }
+
     // ترحيل لون قديم مخصص إلى أقرب لون جاهز حتى تبقى الحالة نظيفة
     LaunchedEffect(appLogoBackground) {
         if (appLogoBackground.startsWith(CUSTOM_PREFIX)) {
@@ -683,7 +690,29 @@ private fun AppearanceSettingsScreen(
                 onSelectBackground = { key ->
                     scope.launch { prefs.setAppLogoBackground(key) }
                 },
-                launcherNote = launcherNote
+                launcherNote = launcherNote,
+                onApplyLauncherIcon = {
+                    // تنفيذ التطبيق فوراً بضغطة واحدة (بلا غلق التطبيق وإعادة فتحه)
+                    val logo = appLogos.find { it.key == activeLogoKey } ?: appLogos.firstOrNull()
+                    val backgroundKey = launcherBackground?.key ?: AppLogoDefaults.defaultBackground
+                    if (logo == null) {
+                        Toast.makeText(context, "لا يوجد شعار متاح", Toast.LENGTH_SHORT).show()
+                    } else {
+                        scope.launch {
+                            val applied = withContext(Dispatchers.IO) {
+                                LauncherIconSwitcher.apply(context, logo.key, backgroundKey)
+                            }
+                            val backgroundLabel = launcherBackground?.label.orEmpty()
+                            val message = if (applied) {
+                                "تم تطبيق الأيقونة: ${logo.label}" +
+                                    (if (backgroundLabel.isNotBlank()) " — خلفية $backgroundLabel" else "")
+                            } else {
+                                "تعذّر تطبيق الأيقونة على هذا الجهاز"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
             )
 
         }
