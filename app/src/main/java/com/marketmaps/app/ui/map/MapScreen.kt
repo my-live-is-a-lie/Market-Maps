@@ -613,22 +613,6 @@ fun MapScreen(
                 modifier = Modifier.align(Alignment.TopCenter).zIndex(if (searchExpanded) 16f else 14f)
             )
 
-
-            // نسب OpenStreetMap (مطلوب بترخيص ODbL) — يظهر مع Mapsforge
-            if (mapProvider == MapProvider.MAPSFORGE) {
-                Text(
-                    text = "© OpenStreetMap contributors",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Black.copy(alpha = 0.65f),
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 8.dp, bottom = 8.dp)
-                        .background(Color.White.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                        .zIndex(2f)
-                )
-            }
-
             if (showFilterDialog) {
                 FilterDialog(
                     initialType = filterType, initialSub = filterSub,
@@ -1150,8 +1134,7 @@ private fun BoxScope.MapSideMenuOverlay(
             .fillMaxWidth(0.55f)
             .zIndex(21f)
             .absoluteOffset { IntOffset(offsetX.roundToInt(), 0) }
-            .shadow(elevation = 18.dp, shape = panelShape, clip = false)
-            .clip(panelShape)
+            .shadow(elevation = 10.dp, shape = panelShape, clip = true)
             .background(panelBg)
             .draggable(
                 orientation = Orientation.Horizontal,
