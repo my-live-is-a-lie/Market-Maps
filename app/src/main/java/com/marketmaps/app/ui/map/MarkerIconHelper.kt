@@ -106,9 +106,9 @@ object MarkerIconHelper {
      */
     fun displayModeForZoom(zoom: Int, latitude: Double = 30.0): DisplayMode = when {
         zoom >= 17 -> DisplayMode.BUBBLE_LARGE   // حوالي 50 متر
-        zoom >= 15 -> DisplayMode.BUBBLE_MEDIUM  // حوالي 100 متر
-        zoom >= 14 -> DisplayMode.CIRCLE         // حوالي 200 متر / 500 قدم
-        else -> DisplayMode.HIDDEN               // أبعد من 200م
+        zoom >= 16 -> DisplayMode.BUBBLE_MEDIUM  // حوالي 100 متر
+        zoom >= 15 -> DisplayMode.CIRCLE         // حوالي 200 متر / 500 قدم
+        else -> DisplayMode.HIDDEN               // أبعد من 200م (لا دوائر)
     }
 
     fun displayModeForGoogleZoom(zoom: Float, latitude: Double = 30.0): DisplayMode =
@@ -121,11 +121,10 @@ object MarkerIconHelper {
      */
     fun markerSizePxForZoom(zoom: Int): Int = when {
         zoom >= 18 -> 62   // أقرب من 50م
-        zoom >= 17 -> 57   // ~50م (+10٪)
-        zoom >= 16 -> 40   // بين 50 و 100
-        zoom >= 15 -> 34   // ~100م
-        zoom >= 14 -> 16   // ~200م / 500 قدم — نقطة
-        else -> 0          // أبعد: لا أيقونات أماكن
+        zoom >= 17 -> 57   // ~50م
+        zoom >= 16 -> 34   // ~100م
+        zoom >= 15 -> 16   // ~200م / 500 قدم — دائرة فقط
+        else -> 0          // أبعد من 200م: مخفي بالكامل
     }
 
     fun sizeForZoom(zoom: Int): Int = markerSizePxForZoom(zoom)
