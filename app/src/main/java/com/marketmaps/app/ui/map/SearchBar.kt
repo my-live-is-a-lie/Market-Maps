@@ -353,10 +353,6 @@ fun SearchBar(
                 }
             }
 
-                    )
-                }
-            }
-
             if (query.isNotBlank() || filterType != FILTER_ALL || filterSub != FILTER_ALL) {
                 Card(
                     modifier = Modifier
