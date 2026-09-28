@@ -76,9 +76,14 @@ jobs:
         if: always()
         run: |
           echo "==== ملفات مولّدة من SVG ===="
-          find app/build/generated/launcherIcons -type f 2>/dev/null | sort | head -60 || true
-          echo "==== فهرس الشعارات والألوان ===="
-          cat app/build/generated/launcherIcons/assets/launcher_icons.json 2>/dev/null || echo "لا يوجد فهرس"
+          find app/build/generated/launcherIcons -type f 2>/dev/null | sort | head -40 || true
+          find app/build/generated/launcherIcons -type f 2>/dev/null | sort | head -25 | while IFS= read -r f; do
+            echo "::warning title=GEN::$f"
+          done
+          CNT=$(find app/build/generated/launcherIcons -type f 2>/dev/null | wc -l)
+          echo "::warning title=MARKETMAPS_COUNT::$CNT ملف مولّد"
+          JSON=$(cat app/build/generated/launcherIcons/assets/launcher_icons.json 2>/dev/null | tr -d '\n' | head -c 800)
+          echo "::warning title=MARKETMAPS_JSON::${JSON:-لا يوجد فهرس}"
 
       - name: Prepare APK for upload
         if: success()
