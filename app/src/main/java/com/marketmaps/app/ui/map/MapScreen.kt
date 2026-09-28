@@ -987,7 +987,7 @@ fun MapScreen(
                         // فوق بطاقة الإضافة (18f) ودون اللوحة الجانبية (20f)
                         .zIndex(19.5f)
                         // ترتفع فوق بطاقة الإضافة عند ظهورهما معاً (كانت تختفي خلفها)
-                        .absoluteOffset { IntOffset(0, -detailsCardLift.roundToInt()) }
+                        .absoluteOffset { detailsCardLift }
                 )
             }
         }
@@ -1219,7 +1219,6 @@ private fun AddPlaceCenterPin(
     }
 }
 
-@Composable
 /** هامش خارجي صغير حول بطاقة الإضافة فتبدو عائمة وتظهر حوافها الأربع */
 private val AddSheetMarginHorizontal = 12.dp
 private val AddSheetMarginBottom = 8.dp
