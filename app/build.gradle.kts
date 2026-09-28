@@ -1,4 +1,7 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.nio.file.Path
 import java.util.Properties
 
 // أداة تحويل SVG إلى VectorDrawable الرسمية من أندرويد (نفس أداة Vector Asset في
@@ -186,16 +189,20 @@ fun withLauncherSafeZone(vectorXml: String, scale: Float): String {
 }
 
 /** تحويل SVG إلى VectorDrawable بالمحوّل الرسمي (انعكاس: التوقيع يختلف بين إصدارات الأدوات) */
-fun convertSvgToVector(svg: java.io.File): String {
-    val loader = object {}.javaClass.classLoader
-    val cls = Class.forName("com.android.ide.common.vectordrawable.Svg2Vector", true, loader)
+fun convertSvgToVector(svg: File): String {
+    val className = "com.android.ide.common.vectordrawable.Svg2Vector"
+    val cls = try {
+        Class.forName(className)
+    } catch (_: ClassNotFoundException) {
+        Class.forName(className, true, Thread.currentThread().contextClassLoader)
+    }
     val candidates = cls.methods.filter { it.name == "parseSvgToXml" && it.parameterCount == 2 }
-    val method = candidates.firstOrNull { it.parameterTypes[0] == java.nio.file.Path::class.java }
-        ?: candidates.firstOrNull { it.parameterTypes[0] == java.io.File::class.java }
+    val method = candidates.firstOrNull { it.parameterTypes[0] == Path::class.java }
+        ?: candidates.firstOrNull { it.parameterTypes[0] == File::class.java }
         ?: error("لم أجد دالة التحويل parseSvgToXml في Svg2Vector")
     val argument: Any =
-        if (method.parameterTypes[0] == java.nio.file.Path::class.java) svg.toPath() else svg
-    val out = java.io.ByteArrayOutputStream()
+        if (method.parameterTypes[0] == Path::class.java) svg.toPath() else svg
+    val out = ByteArrayOutputStream()
     val errorLog = method.invoke(null, argument, out) as? String ?: ""
     if (errorLog.isNotBlank()) error(errorLog)
     return out.toString("UTF-8")
@@ -204,9 +211,9 @@ fun convertSvgToVector(svg: java.io.File): String {
 android {
     sourceSets.getByName("main") {
         // موارد مولّدة: VectorDrawable + أيقونات تكيفية
-        res.srcDir(java.io.File(launcherIconsOutDir, "res"))
+        res.srcDir(File(launcherIconsOutDir, "res"))
         // أصول مولّدة: فهرس الشعارات والألوان لواجهة الإعدادات
-        assets.srcDir(java.io.File(launcherIconsOutDir, "assets"))
+        assets.srcDir(File(launcherIconsOutDir, "assets"))
     }
 }
 
@@ -217,17 +224,17 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
     outputs.dir(launcherIconsOutDir)
 
     doLast {
-        val resRoot = java.io.File(launcherIconsOutDir, "res")
-        val assetsRoot = java.io.File(launcherIconsOutDir, "assets")
+        val resRoot = File(launcherIconsOutDir, "res")
+        val assetsRoot = File(launcherIconsOutDir, "assets")
         resRoot.deleteRecursively()
         assetsRoot.deleteRecursively()
-        val drawableDir = java.io.File(resRoot, "drawable").apply { mkdirs() }
-        val mipmapDir = java.io.File(resRoot, "mipmap-anydpi-v26").apply { mkdirs() }
+        val drawableDir = File(resRoot, "drawable").apply { mkdirs() }
+        val mipmapDir = File(resRoot, "mipmap-anydpi-v26").apply { mkdirs() }
         assetsRoot.mkdirs()
 
         // ملف خلفية لكل لون
         launcherIconBackgrounds.forEach { (colorKey, _, hex) ->
-            java.io.File(drawableDir, "launcher_bg_$colorKey.xml").writeText(
+            File(drawableDir, "launcher_bg_$colorKey.xml").writeText(
                 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
                     "<shape xmlns:android=\"http://schemas.android.com/apk/res/android\" " +
                     "android:shape=\"rectangle\">\n" +
@@ -249,12 +256,12 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
                     null
                 } ?: return@forEach
 
-                java.io.File(drawableDir, "logo_${key}_foreground.xml").writeText(vector)
+                File(drawableDir, "logo_${key}_foreground.xml").writeText(vector)
                 logoKeys += key
 
                 launcherIconBackgrounds.forEach { (colorKey, _, _) ->
                     val iconName = "ic_launcher_logo_${key}_$colorKey"
-                    java.io.File(mipmapDir, "$iconName.xml").writeText(
+                    File(mipmapDir, "$iconName.xml").writeText(
                         "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
                             "<adaptive-icon xmlns:android=\"http://schemas.android.com/apk/res/android\">\n" +
                             "    <background android:drawable=\"@drawable/launcher_bg_$colorKey\" />\n" +
@@ -278,7 +285,7 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
             append(iconNames.joinToString(", ") { "\"$it\"" })
             append("]\n}\n")
         }
-        java.io.File(assetsRoot, "launcher_icons.json").writeText(json)
+        File(assetsRoot, "launcher_icons.json").writeText(json)
 
         logger.lifecycle(
             "أيقونات الشعارات: ${logoKeys.size} شعاراً × ${launcherIconBackgrounds.size} لوناً = " +
