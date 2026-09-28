@@ -1,0 +1,27 @@
+name: Patch User Pin Zoom Size
+
+on:
+  push:
+    paths:
+      - 'scripts/patch_user_pin_zoom.py'
+      - '.github/workflows/patch-user-pin-zoom.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_user_pin_zoom.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/marketmaps/app/ui/map/MarkerIconHelper.kt \
+                  app/src/main/java/com/marketmaps/app/ui/map/MapScreen.kt
+          git diff --staged --stat
+          git commit -m "UI: تكبير علامة الموقع 100٪ عند 50م/100م و50٪ عند 200م" || true
+          git push
