@@ -54,7 +54,14 @@ import java.util.Locale
 private const val MAX_PHOTOS = 3
 
 /**
- * نافذة إضافة أو تعديل موقع — التصنيف من القوائم + صور اختيارية (حتى 3).
+ * رفع الصور يحتاج Firebase Storage (خطة Blaze).
+ * اجعلها true بعد تفعيل Storage وربط الفوترة.
+ */
+private const val ENABLE_STORE_PHOTOS = false
+
+/**
+ * نافذة إضافة أو تعديل موقع — التصنيف من القوائم.
+ * الصور اختيارية وتظهر فقط عند تفعيل [ENABLE_STORE_PHOTOS].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -240,39 +247,41 @@ fun AddStoreDialog(
                     maxLines = 4
                 )
 
-                Text(
-                    text = "صور المكان (اختياري — حتى $MAX_PHOTOS)",
-                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    existingPhotos.forEach { url ->
-                        PhotoThumb(
-                            model = url,
-                            onRemove = { existingPhotos = existingPhotos.filter { it != url } }
-                        )
-                    }
-                    newPhotoUris.forEach { uri ->
-                        PhotoThumb(
-                            model = uri,
-                            onRemove = { newPhotoUris = newPhotoUris.filter { it != uri } }
-                        )
-                    }
-                    if (slotsLeft > 0) {
-                        OutlinedButton(
-                            onClick = {
-                                photoPicker.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
-                            },
-                            modifier = Modifier.size(72.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = "إضافة صورة")
+                if (ENABLE_STORE_PHOTOS) {
+                    Text(
+                        text = "صور المكان (اختياري — حتى $MAX_PHOTOS)",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        existingPhotos.forEach { url ->
+                            PhotoThumb(
+                                model = url,
+                                onRemove = { existingPhotos = existingPhotos.filter { it != url } }
+                            )
+                        }
+                        newPhotoUris.forEach { uri ->
+                            PhotoThumb(
+                                model = uri,
+                                onRemove = { newPhotoUris = newPhotoUris.filter { it != uri } }
+                            )
+                        }
+                        if (slotsLeft > 0) {
+                            OutlinedButton(
+                                onClick = {
+                                    photoPicker.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                },
+                                modifier = Modifier.size(72.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "إضافة صورة")
+                            }
                         }
                     }
                 }
