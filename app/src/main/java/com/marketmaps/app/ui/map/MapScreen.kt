@@ -48,6 +48,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.absoluteOffset
@@ -665,7 +667,6 @@ fun MapScreen(
                         .offset(cardLiftOffset)
                         .zIndex(3f)
                 )
-            }
             }
 
             Column(
