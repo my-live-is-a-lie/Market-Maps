@@ -113,6 +113,7 @@ import com.marketmaps.app.data.DrawerSide
 import com.marketmaps.app.data.EdgeSwipeSide
 import com.marketmaps.app.data.Store
 import com.marketmaps.app.data.StoreRepository
+import com.marketmaps.app.data.StorePhotoUploader
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.marketmaps.app.util.logged
@@ -783,13 +784,26 @@ fun MapScreen(
                 AddStoreDialog(
                     latitude = selectedLat, longitude = selectedLon,
                     onDismiss = { showAddDialog = false },
-                    onSave = { name, categoryPath, description, onComplete ->
+                    onSave = { name, categoryPath, description, newPhotoUris, existingPhotoUrls, onComplete ->
                         scope.launch {
-                            val store = Store(name = name, category = categoryPath, description = description, latitude = selectedLat, longitude = selectedLon)
+                            val store = Store(
+                                name = name,
+                                category = categoryPath,
+                                description = description,
+                                latitude = selectedLat,
+                                longitude = selectedLon
+                            )
                             val result = storeRepository.addStore(store)
                             if (result.isSuccess) {
+                                val id = result.getOrNull().orEmpty()
+                                if (newPhotoUris.isNotEmpty() && id.isNotBlank()) {
+                                    val urls = StorePhotoUploader(context).upload(id, newPhotoUris)
+                                    if (urls.isNotEmpty()) {
+                                        storeRepository.setPhotoUrls(id, urls)
+                                    }
+                                }
                                 Toast.makeText(context, "تم حفظ الموقع بنجاح", Toast.LENGTH_SHORT).show()
-                                refreshStores(); showAddDialog = false; isAddMode = false
+                                showAddDialog = false; isAddMode = false
                                 onComplete(true)
                             } else {
                                 Toast.makeText(context, "فشل الحفظ: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
@@ -804,17 +818,25 @@ fun MapScreen(
                 AddStoreDialog(
                     latitude = store.latitude, longitude = store.longitude, initialStore = store,
                     onDismiss = { storeToEdit = null },
-                    onSave = { name, categoryPath, description, onComplete ->
+                    onSave = { name, categoryPath, description, newPhotoUris, existingPhotoUrls, onComplete ->
                         scope.launch {
-                            val updated = store.copy(name = name, category = categoryPath, description = description)
+                            var photos = existingPhotoUrls
+                            if (newPhotoUris.isNotEmpty()) {
+                                val uploaded = StorePhotoUploader(context).upload(store.id, newPhotoUris)
+                                photos = (photos + uploaded).distinct().take(3)
+                            }
+                            val updated = store.copy(
+                                name = name,
+                                category = categoryPath,
+                                description = description,
+                                photoUrls = photos
+                            )
                             val result = storeRepository.updateStore(updated)
                             if (result.isSuccess) {
                                 Toast.makeText(context, "تم التحديث", Toast.LENGTH_SHORT).show()
                                 storeToEdit = null
-                                // أغلق ثم أعد فتح البطاقة لعرض البيانات المحدّثة
                                 selectedStore = null
                                 detailsCardHeightPx = 0
-                                refreshStores()
                                 selectedStore = updated
                                 onComplete(true)
                             } else {
