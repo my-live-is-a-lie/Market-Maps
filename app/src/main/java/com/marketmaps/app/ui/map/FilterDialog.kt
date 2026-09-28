@@ -34,6 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.marketmaps.app.data.FILTER_ALL
+import androidx.compose.runtime.collectAsState
+import com.marketmaps.app.data.CategoryCatalog
 import com.marketmaps.app.data.CategoryData
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,12 +52,13 @@ fun FilterDialog(
     var typeExpanded by remember { mutableStateOf(false) }
     var subExpanded by remember { mutableStateOf(false) }
 
-    val typeOptions = listOf(FILTER_ALL) + CategoryData.categories.map { it.name }
+    val categories by CategoryCatalog.categories.collectAsState()
+    val typeOptions = listOf(FILTER_ALL) + categories.map { it.name }
     val subOptions = remember(type) {
         if (type == FILTER_ALL) {
             listOf(FILTER_ALL)
         } else {
-            val cat = CategoryData.categories.find { it.name == type }
+            val cat = categories.find { it.name == type }
             listOf(FILTER_ALL) + (cat?.subCategories?.map { it.name } ?: emptyList())
         }
     }
