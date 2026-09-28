@@ -1,6 +1,16 @@
 package com.marketmaps.app.ui.map
 
 import android.Manifest
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
+import android.location.LocationManager
+import android.content.Intent
+import android.provider.Settings
 import android.view.View
 import android.content.res.Configuration
 import android.content.ComponentCallbacks2
@@ -180,9 +190,11 @@ fun MapScreen(
 
     var layerBundle by remember { mutableStateOf<MapLayerHelper.LayerBundle?>(null) }
     var isMenuExpanded by remember { mutableStateOf(false) }
-    var isAddMode by remember { mutableStateOf(false) }
+    var showAddPlaceSheet by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedLat by remember { mutableDoubleStateOf(0.0) }
+    var mapCenterLat by remember { mutableDoubleStateOf(0.0) }
+    var mapCenterLon by remember { mutableDoubleStateOf(0.0) }
     var selectedLon by remember { mutableDoubleStateOf(0.0) }
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
     var stores by remember { mutableStateOf<List<Store>>(emptyList()) }
@@ -278,8 +290,7 @@ fun MapScreen(
         moveCamera(store.latitude, store.longitude, 17f)
     }
 
-    val isAddModeRef = remember { mutableStateOf(isAddMode) }
-    isAddModeRef.value = isAddMode
+    // إضافة عبر القائمة السفلية + المؤشر (لا ضغط مطول)
     val storesRef = remember { mutableStateOf(stores) }
     storesRef.value = stores
     val selectedStoreRef = remember { mutableStateOf(selectedStore) }
@@ -449,13 +460,13 @@ fun MapScreen(
 
 
     // زر الرجوع يغلق الطبقات المفتوحة أولاً بدل الخروج من التطبيق
-    BackHandler(enabled = sideMenuOpen || searchExpanded || selectedStore != null || isAddMode || isMenuExpanded || showAddDialog || showFilterDialog) {
+    BackHandler(enabled = sideMenuOpen || searchExpanded || selectedStore != null || showAddPlaceSheet || isMenuExpanded || showAddDialog || showFilterDialog) {
         when {
             showFilterDialog -> showFilterDialog = false
             showAddDialog -> showAddDialog = false
             sideMenuOpen -> sideMenuOpen = false
             selectedStore != null -> { selectedStore = null; detailsCardHeightPx = 0 }
-            isAddMode -> isAddMode = false
+            showAddPlaceSheet -> if (!showAddDialog) showAddPlaceSheet = false
             searchExpanded -> searchExpanded = false
             isMenuExpanded -> isMenuExpanded = false
         }
@@ -482,7 +493,7 @@ fun MapScreen(
                     userLat = userLat,
                     userLon = userLon,
                     cameraTarget = cameraTarget,
-                    isAddMode = isAddMode,
+                    isAddMode = false,
                     showLabels = showMarkerLabels,
                     highlightedStoreId = highlightedStoreId,
                     highlightScale = highlightScale,
@@ -496,6 +507,8 @@ fun MapScreen(
                         if (selectedStore == null) detailsCardHeightPx = 0
                     },
                     onCameraIdle = { lat, lon, zoom ->
+                        mapCenterLat = lat
+                        mapCenterLon = lon
                         scope.launch {
                             appPreferences.saveLastLocation(lat, lon, zoom.toDouble())
                         }
@@ -517,6 +530,8 @@ fun MapScreen(
                     layerBundle = bundle
                     MapLayerHelper.applyOnline(mapView, bundle)
                     mapView.model.mapViewPosition.setCenter(LatLong(initialLat, initialLon))
+                    mapCenterLat = initialLat
+                    mapCenterLon = initialLon
                     mapView.model.mapViewPosition.zoomLevel = initialZoom.toInt().toByte()
                     mapViewRef = mapView
 
@@ -531,17 +546,15 @@ fun MapScreen(
                     }
                     mapView.model.mapViewPosition.addObserver {
                         val z = mapView.model.mapViewPosition.zoomLevel.toInt()
-                        if (lastZoom.getAndSet(z) == z) return@addObserver
-                        mapView.post { mapsforgeZoom = z }
+                        val c = mapView.model.mapViewPosition.center
+                        mapView.post {
+                            if (lastZoom.getAndSet(z) != z) mapsforgeZoom = z
+                            mapCenterLat = c.latitude
+                            mapCenterLon = c.longitude
+                        }
                     }
 
                     val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
-                        override fun onLongPress(e: MotionEvent) {
-                            if (isAddModeRef.value) {
-                                val latLong = mapView.mapViewProjection.fromPixels(e.x.toDouble(), e.y.toDouble())
-                                selectedLat = latLong.latitude; selectedLon = latLong.longitude; showAddDialog = true
-                            }
-                        }
                         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                             val tapped = mapView.mapViewProjection.fromPixels(e.x.toDouble(), e.y.toDouble())
                             val nearest = findNearestStore(storesRef.value, tapped.latitude, tapped.longitude, 80.0)
@@ -653,19 +666,6 @@ fun MapScreen(
                         .zIndex(3f)
                 )
             }
-
-            AnimatedVisibility(
-                visible = isAddMode,
-                enter = fadeIn() + slideInVertically { it },
-                exit = fadeOut() + slideOutVertically { it },
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 100.dp)
-            ) {
-                Text(
-                    text = "اضغط مطولاً على أي مكان في الخريطة لإضافة موقع",
-                    style = MaterialTheme.typography.bodyMedium, color = Color.White, textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f), RoundedCornerShape(12.dp)).padding(16.dp)
-                )
             }
 
             Column(
@@ -713,11 +713,11 @@ fun MapScreen(
                             shape = CircleShape, modifier = Modifier.size(48.dp)
                         ) { Icon(Icons.Default.LocationOn, contentDescription = "موقعي الحالي") }
                         FloatingActionButton(
-                            onClick = { isAddMode = !isAddMode; isMenuExpanded = false },
-                            containerColor = if (isAddMode) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
-                            contentColor = if (isAddMode) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onTertiaryContainer,
+                            onClick = { showAddPlaceSheet = true; isMenuExpanded = false },
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                             shape = CircleShape, modifier = Modifier.size(48.dp)
-                        ) { Icon(if (isAddMode) Icons.Default.Close else Icons.Default.Add, contentDescription = null) }
+                        ) { Icon(Icons.Default.Add, contentDescription = "إضافة مكان") }
                     }
                 }
                 Box(
@@ -764,6 +764,78 @@ fun MapScreen(
                 }
             )
 
+
+            // مؤشر إضافة المكان (ثابت في وسط الشاشة — النقطة = الإحداثيات)
+            if (showAddPlaceSheet && !showAddDialog) {
+                AddPlaceCenterPin(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .zIndex(11f)
+                )
+            }
+
+            if (showAddPlaceSheet && !showAddDialog) {
+                AddPlaceBottomSheet(
+                    onDismiss = { showAddPlaceSheet = false },
+                    onPickCurrentLocation = {
+                        // صلاحية + GPS
+                        val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                        val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+                        if (fine != PackageManager.PERMISSION_GRANTED && coarse != PackageManager.PERMISSION_GRANTED) {
+                            Toast.makeText(context, "يلزم السماح بالوصول للموقع", Toast.LENGTH_LONG).show()
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                            return@AddPlaceBottomSheet
+                        }
+                        if (!isLocationEnabled(context)) {
+                            Toast.makeText(context, "فعّل خدمة الموقع (GPS) لاستخدام هذا الخيار", Toast.LENGTH_LONG).show()
+                            try {
+                                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                            } catch (_: Exception) {
+                            }
+                            return@AddPlaceBottomSheet
+                        }
+                        moveToCurrentLocation(context) { lat, lon ->
+                            userLat = lat
+                            userLon = lon
+                            moveCamera(lat, lon, 18f)
+                            selectedLat = lat
+                            selectedLon = lon
+                            showAddPlaceSheet = false
+                            showAddDialog = true
+                        }
+                    },
+                    onPickPinLocation = {
+                        val lat: Double
+                        val lon: Double
+                        val mv = mapViewRef
+                        if (mapProvider == MapProvider.MAPSFORGE && mv != null) {
+                            val c = mv.model.mapViewPosition.center
+                            lat = c.latitude
+                            lon = c.longitude
+                        } else {
+                            lat = mapCenterLat
+                            lon = mapCenterLon
+                        }
+                        if (lat == 0.0 && lon == 0.0) {
+                            Toast.makeText(context, "حرّك الخريطة ثم أعد المحاولة", Toast.LENGTH_SHORT).show()
+                            return@AddPlaceBottomSheet
+                        }
+                        selectedLat = lat
+                        selectedLon = lon
+                        showAddPlaceSheet = false
+                        showAddDialog = true
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .zIndex(18f)
+                )
+            }
+
             if (showAddDialog) {
                 AddStoreDialog(
                     latitude = selectedLat, longitude = selectedLon,
@@ -787,7 +859,7 @@ fun MapScreen(
                                     }
                                 }
                                 Toast.makeText(context, "تم حفظ الموقع بنجاح", Toast.LENGTH_SHORT).show()
-                                showAddDialog = false; isAddMode = false
+                                showAddDialog = false; showAddPlaceSheet = false
                                 onComplete(true)
                             } else {
                                 Toast.makeText(context, "فشل الحفظ: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
@@ -959,6 +1031,166 @@ private fun tryGetLastLocation(context: Context, onLocation: (Double, Double) ->
     if (fine != PackageManager.PERMISSION_GRANTED && coarse != PackageManager.PERMISSION_GRANTED) return
     LocationServices.getFusedLocationProviderClient(context).lastLocation.addOnSuccessListener { location ->
         if (location != null) onLocation(location.latitude, location.longitude)
+    }
+}
+
+
+
+
+private fun isLocationEnabled(context: Context): Boolean {
+    return try {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+            lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    } catch (_: Exception) {
+        false
+    }
+}
+
+/**
+ * مؤشر الإضافة: السهم فوق والنقطة أسفله = موقع الإحداثيات (تحت الإصبع عند التمرير).
+ */
+@Composable
+private fun AddPlaceCenterPin(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val arrow = remember {
+        loadAssetSvgTinted(context, "icons/add_pin_arrow.svg", 56, 0xFF2E7D32.toInt())
+    }
+    val dot = remember {
+        loadAssetSvgTinted(context, "icons/add_pin_dot.svg", 28, 0xFF2E7D32.toInt())
+    }
+    // النقطة في منتصف الشاشة تماماً (إحداثيات الإضافة)، والسهم فوقها أمام الإصبع
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        if (dot != null) {
+            Image(
+                bitmap = dot.asImageBitmap(),
+                contentDescription = "موقع المؤشر",
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        if (arrow != null) {
+            Image(
+                bitmap = arrow.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(40.dp)
+                    .offset(y = (-34).dp) // فوق النقطة بمسافة قابلة للضبط
+            )
+        }
+    }
+}
+
+@Composable
+private fun AddPlaceBottomSheet(
+    onDismiss: () -> Unit,
+    onPickCurrentLocation: () -> Unit,
+    onPickPinLocation: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    var dragX by remember { mutableFloatStateOf(0f) }
+    var dragY by remember { mutableFloatStateOf(0f) }
+    val scope = rememberCoroutineScope()
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .offset { IntOffset(dragX.roundToInt(), dragY.roundToInt()) }
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragEnd = {
+                        val close = kotlin.math.abs(dragX) > 120f || dragY > 100f
+                        if (close) onDismiss()
+                        else {
+                            dragX = 0f
+                            dragY = 0f
+                        }
+                    },
+                    onDragCancel = { dragX = 0f; dragY = 0f },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        dragX += amount.x
+                        // السحب للأسفل فقط عمودياً (موجب)
+                        if (amount.y > 0 || dragY > 0) dragY = (dragY + amount.y).coerceAtLeast(0f)
+                    }
+                )
+            },
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        color = scheme.surface,
+        shadowElevation = 12.dp,
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(40.dp)
+                    .height(4.dp)
+                    .background(scheme.onSurface.copy(alpha = 0.25f), RoundedCornerShape(2.dp))
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "إضافة مكان جديد",
+                style = MaterialTheme.typography.titleMedium,
+                color = scheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onPickPinLocation,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.5.dp, scheme.primary.copy(alpha = 0.6f))
+                ) {
+                    Text("اختر موقع المؤشر", color = scheme.primary)
+                }
+                OutlinedButton(
+                    onClick = onPickCurrentLocation,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.5.dp, scheme.primary.copy(alpha = 0.6f))
+                ) {
+                    Text("اختر موقعك الحالي", color = scheme.primary)
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "وجّه المؤشر للمكان الذي تريد إضافته على الخريطة أو اختر إضافة موقعك الحالي",
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+}
+
+private fun loadAssetSvgTinted(context: Context, assetPath: String, sizePx: Int, color: Int): android.graphics.Bitmap? {
+    return try {
+        context.assets.open(assetPath).use { input ->
+            val svg = com.caverock.androidsvg.SVG.getFromInputStream(input)
+            val bmp = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bmp)
+            svg.setDocumentWidth(sizePx.toFloat())
+            svg.setDocumentHeight(sizePx.toFloat())
+            svg.renderToCanvas(canvas)
+            // تلوين غير الشفاف
+            val paint = android.graphics.Paint()
+            paint.colorFilter = android.graphics.PorterDuffColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN)
+            val out = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
+            android.graphics.Canvas(out).drawBitmap(bmp, 0f, 0f, paint)
+            if (bmp != out) bmp.recycle()
+            out
+        }
+    } catch (e: Exception) {
+        null
     }
 }
 
