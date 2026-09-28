@@ -173,11 +173,14 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
     description = "يولّد أيقونات المشغّل من ملفات SVG في assets/launcher لكل لون خلفية"
     inputs.dir(launcherSvgDir).withPropertyName("launcherSvg")
     outputs.dir(launcherIconsOutDir).withPropertyName("launcherIcons")
+    // المساران كخصائص نصية: inputs.files يعيد محتوى المجلد لا المجلد نفسه،
+    // وهذه الطريقة تبقى صحيحة مع ذاكرة الإعدادات.
+    inputs.property("svgDirPath", launcherSvgDir.asFile.absolutePath)
+    inputs.property("outDirPath", launcherIconsOutDir.absolutePath)
 
     doLast {
-        // مسارات من مدخلات/مخرجات المهمة نفسها (متوافق مع ذاكرة الإعدادات)
-        val svgDir = inputs.files.singleFile
-        val outRoot = outputs.files.singleFile
+        val svgDir = File(inputs.properties.getValue("svgDirPath") as String)
+        val outRoot = File(inputs.properties.getValue("outDirPath") as String)
 
         // ألوان خلفية الأيقونة: key للأيقونة، تسمية عربية، وHEX
         val backgrounds = listOf(
