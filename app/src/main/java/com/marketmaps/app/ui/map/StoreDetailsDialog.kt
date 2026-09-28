@@ -68,6 +68,10 @@ import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import com.caverock.androidsvg.SVG
+import coil.compose.AsyncImage
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.layout.ContentScale
 import com.marketmaps.app.data.Store
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -271,6 +275,27 @@ fun StoreDetailsBottomCard(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
+                            }
+                        }
+                    }
+
+                    if (store.photoUrls.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            store.photoUrls.forEach { url ->
+                                AsyncImage(
+                                    model = url,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(88.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                )
                             }
                         }
                     }
