@@ -18,12 +18,14 @@ import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.marketmaps.app.R
 import com.marketmaps.app.data.Store
 
 /**
@@ -47,6 +49,8 @@ fun GoogleMapContent(
     cameraTarget: CameraTarget?,
     isAddMode: Boolean,
     showLabels: Boolean = true,
+    /** وضع ليلي: يُطبَّق نمط خريطة جوجل الليلي (يُمرَّر true فقط في الوضع الغامق/المظلم) */
+    nightMode: Boolean = false,
     highlightedStoreId: String? = null,
     highlightScale: Float = 1f,
     onLongPress: (Double, Double) -> Unit,
@@ -55,6 +59,18 @@ fun GoogleMapContent(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    // نمط ليلي جاهز من موارد التطبيق (يُحمَّل مرة واحدة ويُعاد استخدامه)
+    val nightStyleOptions = remember {
+        runCatching {
+            MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style_night)
+        }.getOrNull()
+    }
+    val mapProperties = remember(nightMode, nightStyleOptions) {
+        MapProperties(
+            isMyLocationEnabled = false,
+            mapStyleOptions = if (nightMode) nightStyleOptions else null
+        )
+    }
 
     LaunchedEffect(Unit) {
         try {
@@ -141,7 +157,7 @@ fun GoogleMapContent(
     GoogleMap(
         modifier = modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
-        properties = MapProperties(isMyLocationEnabled = false),
+        properties = mapProperties,
         uiSettings = MapUiSettings(
             zoomControlsEnabled = false,
             myLocationButtonEnabled = false,

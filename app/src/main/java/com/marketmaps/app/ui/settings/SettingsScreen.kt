@@ -290,6 +290,7 @@ private fun AppearanceSettingsScreen(
 ) {
     val context = LocalContext.current
     val themeMode by prefs.themeMode.collectAsState(initial = AppThemeMode.LIGHT)
+    val mapNightMode by prefs.mapNightMode.collectAsState(initial = false)
     val accentKey by prefs.accentKey.collectAsState(initial = AccentPresets.DEFAULT)
 
     var themeMenuExpanded by remember { mutableStateOf(false) }
@@ -673,6 +674,57 @@ private fun AppearanceSettingsScreen(
                             Text("تطبيق اللون المخصص")
                         }
                     }
+                }
+            }
+
+            Text(text = "الوضع الليلي للخرائط", style = MaterialTheme.typography.titleLarge)
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "تمكين الوضع الليلي للخرائط",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "خرائط جوجل و OSM (المباشرة والأوفلاين)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = mapNightMode,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    prefs.setMapNightMode(enabled)
+                                    Toast.makeText(
+                                        context,
+                                        if (enabled) "تم تفعيل الوضع الليلي للخرائط" else "تم إيقاف الوضع الليلي للخرائط",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        )
+                    }
+                    Text(
+                        text = if (themeMode == AppThemeMode.LIGHT) {
+                            "لا يظهر أثره الآن: الوضع الفاتح مفعّل، وستبقى الخريطة فاتحة حتى مع تفعيل الخيار. " +
+                                "فعّل الوضع الغامق أو المظلم ليُطبَّق."
+                        } else {
+                            "سيُطبَّق الوضع الليلي على الخريطة الآن. في الوضع الفاتح تبقى الخريطة فاتحة دائماً."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 

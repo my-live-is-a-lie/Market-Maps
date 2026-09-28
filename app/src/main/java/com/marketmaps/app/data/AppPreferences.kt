@@ -56,7 +56,9 @@ data class AppSettings(
     val edgeSwipeSide: EdgeSwipeSide = EdgeSwipeSide.BOTH,
     val edgeSwipeSensitivity: Float = 0.55f,
     val themeMode: AppThemeMode = AppThemeMode.LIGHT,
-    val accentKey: String = AccentPresets.DEFAULT
+    val accentKey: String = AccentPresets.DEFAULT,
+    /** وضع ليلي للخرائط: يُطبَّق في الوضع الغامق/المظلم فقط */
+    val mapNightMode: Boolean = false
 )
 
 /** قيمة فلتر «الكل» (كانت مكررة كنص في عشرات المواضع) */
@@ -84,6 +86,7 @@ class AppPreferences(private val context: Context) {
     private val themeModeKey = stringPreferencesKey("theme_mode")
     private val accentKeyKey = stringPreferencesKey("accent_key")
     private val colorPickerStyleKey = stringPreferencesKey("color_picker_style")
+    private val mapNightModeKey = booleanPreferencesKey("map_night_mode")
     private val appLogoKeyKey = stringPreferencesKey("app_logo_key")
     private val appLogoBackgroundKey = stringPreferencesKey("app_logo_background")
     private val recentSearchesKey = stringPreferencesKey("recent_searches")
@@ -102,6 +105,7 @@ class AppPreferences(private val context: Context) {
     private fun Preferences.readThemeMode(): AppThemeMode = this[themeModeKey].toEnumOr(AppThemeMode.LIGHT)
     private fun Preferences.readAccentKey(): String = this[accentKeyKey] ?: AccentPresets.DEFAULT
     private fun Preferences.readColorPickerStyle(): String = this[colorPickerStyleKey] ?: "disc"
+    private fun Preferences.readMapNightMode(): Boolean = this[mapNightModeKey] ?: false
     private fun Preferences.readAppLogoKey(): String = this[appLogoKeyKey] ?: ""
     private fun Preferences.readAppLogoBackground(): String = this[appLogoBackgroundKey] ?: "blue"
     private fun Preferences.readRecentSearches(): List<String> {
@@ -141,6 +145,7 @@ class AppPreferences(private val context: Context) {
             edgeSwipeSensitivity = p.readEdgeSwipeSensitivity(),
             themeMode = p.readThemeMode(),
             accentKey = p.readAccentKey()
+            mapNightMode = p.readMapNightMode(),
         )
     }
 
@@ -161,6 +166,9 @@ class AppPreferences(private val context: Context) {
     val savedFilterSub: Flow<String> = pref { it[filterSubKey] ?: FILTER_ALL }
     val themeMode: Flow<AppThemeMode> = pref { it.readThemeMode() }
     val accentKey: Flow<String> = pref { it.readAccentKey() }
+
+    /** وضع ليلي لخرائط جوجل و OSM (يُطبَّق في الوضع الغامق/المظلم فقط) */
+    val mapNightMode: Flow<Boolean> = pref { it.readMapNightMode() }
 
     /** نسخة عجلة اختيار الألوان المفضّلة: قرص ملوّن أو حلقة + مربع */
     val colorPickerStyle: Flow<String> = pref { it.readColorPickerStyle() }
@@ -224,6 +232,10 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setColorPickerStyle(key: String) {
         context.dataStore.edit { it[colorPickerStyleKey] = key }
+    }
+
+    suspend fun setMapNightMode(enabled: Boolean) {
+        context.dataStore.edit { it[mapNightModeKey] = enabled }
     }
 
     suspend fun setAppLogoKey(key: String) {

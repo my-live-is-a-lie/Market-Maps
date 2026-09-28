@@ -129,6 +129,7 @@ import com.marketmaps.app.data.FILTER_ALL
 import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.SavedLocation
 import com.marketmaps.app.data.AppSettings
+import com.marketmaps.app.data.AppThemeMode
 import com.marketmaps.app.data.MapDownloader
 import com.marketmaps.app.data.MapProvider
 import com.marketmaps.app.data.DrawerSide
@@ -431,10 +432,14 @@ fun MapScreen(
         }
     }
 
+    // الوضع الليلي للخرائط: يُطبَّق فقط عندما يكون النمط غامقاً أو مظلماً —
+    // في الوضع الفاتح تبقى الخريطة فاتحة حتى لو كان الخيار مفعّلاً.
+    val mapNight = settings.mapNightMode && settings.themeMode != AppThemeMode.LIGHT
+
     // لا حاجة لنقل Mapsforge للموقع المحفوظ بعد إنشائها: الخريطة لا تُنشأ إلا بعد
     // قراءة الموقع (locationReady)، فالموضع الأولي في factory صحيح من البداية.
 
-    LaunchedEffect(offlineMode, mapViewRef, mapProvider, activeMapFileName) {
+    LaunchedEffect(offlineMode, mapViewRef, mapProvider, activeMapFileName, mapNight) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
         val mapView = mapViewRef ?: return@LaunchedEffect
         val bundle = layerBundle ?: return@LaunchedEffect
@@ -443,13 +448,13 @@ fun MapScreen(
             val anyFile = preferred
                 ?: MapDownloader.listDownloaded(context).firstOrNull()?.fileName
             if (anyFile != null) {
-                MapLayerHelper.applyOffline(context, mapView, bundle, anyFile)
+                MapLayerHelper.applyOffline(context, mapView, bundle, anyFile, night = mapNight)
             } else {
                 Toast.makeText(context, "لا توجد خريطة محمّلة. حمّلها من الإعدادات.", Toast.LENGTH_LONG).show()
-                MapLayerHelper.applyOnline(mapView, bundle)
+                MapLayerHelper.applyOnline(mapView, bundle, night = mapNight)
             }
         } else {
-            MapLayerHelper.applyOnline(mapView, bundle)
+            MapLayerHelper.applyOnline(mapView, bundle, night = mapNight)
         }
         // تبديل الوضع يتم عادة من الإعدادات والخريطة مغطاة: applyOnline يشغّل الطبقة
         // الجديدة، فنوقفها حتى العودة إلى الخريطة.
@@ -540,6 +545,7 @@ fun MapScreen(
                     cameraTarget = cameraTarget,
                     isAddMode = false,
                     showLabels = showMarkerLabels,
+                    nightMode = mapNight,
                     highlightedStoreId = highlightedStoreId,
                     highlightScale = highlightScale,
                     onLongPress = { lat, lon ->
@@ -574,7 +580,8 @@ fun MapScreen(
                     }
                     val bundle = MapLayerHelper.createBundle(ctx, mapView)
                     layerBundle = bundle
-                    MapLayerHelper.applyOnline(mapView, bundle)
+                    // الحالة الأولية: ستُصحَّح فوراً في LaunchedEffect أدناه حسب الإعداد والنمط
+                    MapLayerHelper.applyOnline(mapView, bundle, night = mapNight)
                     mapView.model.mapViewPosition.setCenter(LatLong(initialLat, initialLon))
                     mapCenterLat = initialLat
                     mapCenterLon = initialLon
