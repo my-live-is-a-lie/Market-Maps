@@ -47,6 +47,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import androidx.compose.runtime.collectAsState
+import com.marketmaps.app.data.CategoryCatalog
 import com.marketmaps.app.data.CategoryData
 import com.marketmaps.app.data.Store
 import java.util.Locale
@@ -80,6 +82,7 @@ fun AddStoreDialog(
     ) -> Unit
 ) {
     val isEditMode = initialStore != null
+    val categories by CategoryCatalog.categories.collectAsState()
     val parsed = remember(initialStore?.id, initialStore?.category) {
         parseCategoryPath(initialStore?.category.orEmpty())
     }
@@ -159,7 +162,7 @@ fun AddStoreDialog(
                         expanded = expanded1,
                         onDismissRequest = { expanded1 = false }
                     ) {
-                        CategoryData.categories.forEach { cat ->
+                        categories.forEach { cat ->
                             DropdownMenuItem(
                                 text = { Text(cat.name) },
                                 onClick = {
@@ -372,7 +375,7 @@ private fun parseCategoryPath(
 ): Triple<CategoryData.Category?, CategoryData.SubCategory?, String?> {
     val trimmed = path.trim()
     if (trimmed.isEmpty()) return Triple(null, null, null)
-    val cat = CategoryData.categories
+    val cat = CategoryCatalog.categories.value
         .sortedByDescending { it.name.length }
         .find { trimmed == it.name || trimmed.startsWith(it.name + " ") }
         ?: return Triple(null, null, null)
