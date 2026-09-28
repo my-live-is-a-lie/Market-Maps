@@ -1135,6 +1135,13 @@ private fun BoxScope.MapSideMenuOverlay(
         AbsoluteRoundedCornerShape(topRight = cornerRadius, bottomRight = cornerRadius)
     }
 
+    // لون اللوحة يتبع سمة التطبيق (فاتح = أبيض، غامق = سطح داكن)
+    val scheme = MaterialTheme.colorScheme
+    val panelBg = scheme.surface
+    val isLightPanel = panelBg.luminance() > 0.5f
+    val navIconTint = if (isLightPanel) scheme.onSurface else Color.White
+    val settingsTint = if (isLightPanel) scheme.primary else Color(0xFF4CAF50)
+
     // اللوحة: absoluteOffset لتفادي انعكاس RTL + ظل + سحب بسرعة
     Box(
         modifier = Modifier
@@ -1145,7 +1152,7 @@ private fun BoxScope.MapSideMenuOverlay(
             .absoluteOffset { IntOffset(offsetX.roundToInt(), 0) }
             .shadow(elevation = 18.dp, shape = panelShape, clip = false)
             .clip(panelShape)
-            .background(Color(0xFF121212))
+            .background(panelBg)
             .draggable(
                 orientation = Orientation.Horizontal,
                 state = rememberDraggableState { dx ->
@@ -1169,48 +1176,63 @@ private fun BoxScope.MapSideMenuOverlay(
             verticalArrangement = Arrangement.Bottom,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // الإعدادات يساراً قليلاً، زر النقل يميناً قليلاً (SpaceBetween + حواف)
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 4.dp, end = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (activeSide == DrawerSide.LEFT) {
-                    IconButton(onClick = onTogglePanelSide) {
+                    IconButton(
+                        onClick = onTogglePanelSide,
+                        modifier = Modifier.padding(start = 4.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowRight,
                             contentDescription = "نقل القائمة لليمين",
-                            tint = Color.White,
+                            tint = navIconTint,
                             modifier = Modifier.size(32.dp)
                         )
                     }
-                    IconButton(onClick = {
-                        scope.launch { settle(false) }
-                        onOpenFullSettings()
-                    }) {
+                    IconButton(
+                        onClick = {
+                            scope.launch { settle(false) }
+                            onOpenFullSettings()
+                        },
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
                         Icon(
                             Icons.Default.Settings,
                             contentDescription = "الإعدادات",
-                            tint = Color(0xFF4CAF50),
+                            tint = settingsTint,
                             modifier = Modifier.size(28.dp)
                         )
                     }
                 } else {
-                    IconButton(onClick = {
-                        scope.launch { settle(false) }
-                        onOpenFullSettings()
-                    }) {
+                    IconButton(
+                        onClick = {
+                            scope.launch { settle(false) }
+                            onOpenFullSettings()
+                        },
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) {
                         Icon(
                             Icons.Default.Settings,
                             contentDescription = "الإعدادات",
-                            tint = Color(0xFF4CAF50),
+                            tint = settingsTint,
                             modifier = Modifier.size(28.dp)
                         )
                     }
-                    IconButton(onClick = onTogglePanelSide) {
+                    IconButton(
+                        onClick = onTogglePanelSide,
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowLeft,
                             contentDescription = "نقل القائمة لليسار",
-                            tint = Color.White,
+                            tint = navIconTint,
                             modifier = Modifier.size(32.dp)
                         )
                     }
