@@ -152,16 +152,13 @@ fun SearchBar(
                     leadingIcon = {
                         IconButton(
                             onClick = {
-                                // دائماً: مسح + إغلاق (لا يعتمد على حالة النص)
-                                onQueryChange("")
-                                focusManager.clearFocus(force = true)
-                                keyboard?.hide()
-                                onExpandedChange(false)
+                                // مسح النص فقط — لا يغلق شريط البحث
+                                if (query.isNotEmpty()) onQueryChange("")
                             }
                         ) {
                             Icon(
                                 Icons.Default.Close,
-                                contentDescription = "إغلاق البحث",
+                                contentDescription = "مسح البحث",
                                 tint = barContent
                             )
                         }
@@ -267,30 +264,58 @@ Row(
                         if (name == FILTER_ALL) MaterialTheme.colorScheme.primary
                         else Color(MarkerIconHelper.colorForCategory(name))
                     }
-                    // clickable أوثق من FilterChip داخل التمرير الأفقي
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(if (selected) selectedColor else barColor)
-                            .clickable {
-                                if (showingSubs) {
-                                    if (name == FILTER_ALL) {
-                                        onFilterTypeChange(FILTER_ALL)
-                                    } else {
-                                        onFilterSubChange(name)
-                                    }
-                                } else {
-                                    onFilterTypeChange(name)
-                                }
-                            }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = name,
-                            color = if (selected) Color.White else barContent,
-                            style = MaterialTheme.typography.labelLarge
-                        )
+Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                quickFilters.forEach { name ->
+                    val selected = if (showingSubs) {
+                        if (name == FILTER_ALL) filterSub == FILTER_ALL else filterSub == name
+                    } else {
+                        filterType == name
                     }
+                    val selectedColor = if (showingSubs) {
+                        if (name == FILTER_ALL) typeColor
+                        else Color(MarkerIconHelper.colorForCategory("$filterType $name"))
+                    } else {
+                        if (name == FILTER_ALL) MaterialTheme.colorScheme.primary
+                        else Color(MarkerIconHelper.colorForCategory(name))
+                    }
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            if (showingSubs) {
+                                if (name == FILTER_ALL) {
+                                    onFilterTypeChange(FILTER_ALL)
+                                } else {
+                                    onFilterSubChange(name)
+                                }
+                            } else {
+                                onFilterTypeChange(name)
+                            }
+                        },
+                        label = {
+                            Text(
+                                name,
+                                color = if (selected) Color.White else barContent
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = barColor,
+                            labelColor = barContent,
+                            selectedContainerColor = selectedColor,
+                            selectedLabelColor = Color.White
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selected,
+                            borderColor = barContent.copy(alpha = 0.35f),
+                            selectedBorderColor = selectedColor
+                        )
+                    )
                 }
             }
 
