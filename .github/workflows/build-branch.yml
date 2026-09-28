@@ -54,6 +54,21 @@ jobs:
             echo "======================================================"
           fi
 
+      - name: توليد أيقونات SVG (تشخيص صريح)
+        if: always()
+        run: |
+          ./gradlew generateLauncherIcons --no-build-cache --no-configuration-cache --stacktrace 2>&1 | tee gen.log || true
+          echo "==== أسطر التشخيص ===="
+          grep -hE "MARKETMAPS_|تخطّي|أيقونات الشعارات" gen.log | head -15 || true
+          grep -hE "MARKETMAPS_|تخطّي|أيقونات الشعارات" gen.log | head -12 | while IFS= read -r l; do
+            l="${l//'%'/'%25'}"; l="${l//$'\r'/''}"
+            echo "::warning title=GEN::$l"
+          done
+          echo "==== ملفات المولّدة بعد التشغيل ===="
+          find app/build/generated/launcherIcons -type f 2>/dev/null | sort | head -25 | while IFS= read -r f; do
+            echo "::warning title=GENFILE::$f"
+          done
+
       - name: Build Debug APK (arm64-v8a only)
         run: |
           set -o pipefail
