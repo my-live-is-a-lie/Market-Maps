@@ -22,17 +22,12 @@ class StoreRepository {
     private val db = FirebaseFirestore.getInstance()
     private val collection = db.collection("stores")
 
-    /**
-     * استماع مستمر لمجموعة stores.
-     * يرسل القائمة كاملة عند كل تغيير (ومن الكاش أولاً إن وُجد ثم من السيرفر).
-     */
     fun observeStores(): Flow<List<Store>> = callbackFlow {
         var registration: ListenerRegistration? = null
         try {
             registration = collection.addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
                 if (error != null) {
                     logE(TAG, "observeStores خطأ في المستمع", error)
-                    // نبقي المستمع؛ قد يعود الاتصال لاحقاً
                     return@addSnapshotListener
                 }
                 if (snapshot == null) {
@@ -58,23 +53,19 @@ class StoreRepository {
             close(e)
             return@callbackFlow
         }
-        awaitClose {
-            registration?.remove()
-        }
+        awaitClose { registration?.remove() }
     }
 
+    /**
+     * إضافة محل. إن وُجدت [photoUrls] تُحفظ مع المستند.
+     * يُفضّل رفع الصور أولاً عبر [StorePhotoUploader] بعد الحصول على معرّف المستند.
+     */
     suspend fun addStore(store: Store): Result<String> {
         return try {
-            val data = hashMapOf<String, Any>(
-                "name" to store.name,
-                "category" to store.category,
-                "description" to store.description,
-                "latitude" to store.latitude,
-                "longitude" to store.longitude,
-                "createdAt" to FieldValue.serverTimestamp()
-            )
-            val documentRef = collection.add(data).await()
-            Result.success(documentRef.id)
+            val docRef = collection.document()
+            val data = storeToMap(store, includeCreated = true)
+            docRef.set(data).await()
+            Result.success(docRef.id)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -83,7 +74,20 @@ class StoreRepository {
         }
     }
 
-    /** تحميل لمرة واحدة (اختياري — المزامنة الحية تغطي الاستخدام العادي) */
+    /** يحدّث روابط الصور فقط بعد اكتمال الرفع */
+    suspend fun setPhotoUrls(storeId: String, photoUrls: List<String>): Result<Unit> {
+        return try {
+            if (storeId.isBlank()) return Result.failure(Exception("معرف المحل غير موجود"))
+            collection.document(storeId).update("photoUrls", photoUrls).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logW(TAG, "setPhotoUrls", e)
+            Result.failure(e)
+        }
+    }
+
     suspend fun getAllStores(): Result<List<Store>> {
         return try {
             val snapshot = try {
@@ -109,6 +113,23 @@ class StoreRepository {
         }
     }
 
+    private fun storeToMap(store: Store, includeCreated: Boolean): HashMap<String, Any> {
+        val data = hashMapOf<String, Any>(
+            "name" to store.name,
+            "category" to store.category,
+            "description" to store.description,
+            "latitude" to store.latitude,
+            "longitude" to store.longitude,
+            "photoUrls" to store.photoUrls
+        )
+        if (includeCreated) {
+            data["createdAt"] = FieldValue.serverTimestamp()
+        } else {
+            data["updatedAt"] = FieldValue.serverTimestamp()
+        }
+        return data
+    }
+
     private fun parseStore(id: String, data: Map<String, Any?>): Store {
         val createdRaw = data["createdAt"]
         val created = when (createdRaw) {
@@ -117,6 +138,10 @@ class StoreRepository {
             is Double -> createdRaw.toLong()
             else -> 0L
         }
+        val photos = when (val p = data["photoUrls"]) {
+            is List<*> -> p.mapNotNull { it as? String }.filter { it.isNotBlank() }
+            else -> emptyList()
+        }
         return Store(
             id = id,
             name = data["name"] as? String ?: "",
@@ -124,7 +149,8 @@ class StoreRepository {
             description = data["description"] as? String ?: "",
             latitude = numberToDouble(data["latitude"]),
             longitude = numberToDouble(data["longitude"]),
-            createdAt = created
+            createdAt = created,
+            photoUrls = photos
         )
     }
 
@@ -143,15 +169,7 @@ class StoreRepository {
     suspend fun updateStore(store: Store): Result<Unit> {
         return try {
             if (store.id.isBlank()) return Result.failure(Exception("معرف المحل غير موجود"))
-            val data = hashMapOf<String, Any>(
-                "name" to store.name,
-                "category" to store.category,
-                "description" to store.description,
-                "latitude" to store.latitude,
-                "longitude" to store.longitude,
-                "updatedAt" to FieldValue.serverTimestamp()
-            )
-            collection.document(store.id).update(data).await()
+            collection.document(store.id).update(storeToMap(store, includeCreated = false) as Map<String, Any>).await()
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
