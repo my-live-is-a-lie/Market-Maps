@@ -67,6 +67,17 @@ jobs:
           ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
           echo "::error title=Build failed::$ERRS"
 
+      - name: "تحقق نهائي: عدد الشعارات والأيقونات"
+        if: always()
+        run: |
+          LOGOS=$(find app/build/generated/launcherIcons/res/drawable -name "logo_*_foreground.xml" | sed 's|.*/||' | tr '\n' ' ')
+          IC=$(find app/build/generated/launcherIcons/res/mipmap-anydpi-v26 -name "*.xml" | wc -l)
+          JSON=$(cat app/build/generated/launcherIcons/assets/launcher_icons.json | tr -d '\n' | head -c 300)
+          MERGED=$(find app/build/intermediates -name "AndroidManifest.xml" -path "*merged_manifest*" | head -1)
+          AL=$(grep -c "<activity-alias" "$MERGED" || echo 0)
+          echo "::error title=FINAL::شعارات=[$LOGOS] أيقونات=$IC aliases=$AL"
+          echo "::error title=JSON::${JSON}"
+
       - name: Prepare APK for upload
         if: success()
         run: |
