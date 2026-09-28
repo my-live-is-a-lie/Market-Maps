@@ -1,6 +1,7 @@
 package com.marketmaps.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
 val Purple80 = Color(0xFFD0BCFF)
 val PurpleGrey80 = Color(0xFFCCC2DC)
@@ -63,3 +64,25 @@ object AccentPresets {
         }
     }
 }
+
+/** درجة غامقة من اللون نفسه (تُستخدم لإطار اللون المختار في قائمة الألوان) */
+fun darkerShade(color: Color, maxLuminance: Float = 0.3f): Color {
+    var result = color
+    var steps = 0
+    while (result.luminance() > maxLuminance && steps < 30) {
+        result = Color(
+            red = result.red * 0.85f,
+            green = result.green * 0.85f,
+            blue = result.blue * 0.85f,
+            alpha = 1f
+        )
+        steps++
+    }
+    return result
+}
+
+/**
+ * يضمن أن لون التمييز مقروء حين يُستخدم كنص/إطار على الخلفية الفاتحة:
+ * الألوان الفاتحة جداً تُغمَّق (بنفس الدرجة) حتى تصبح واضحة، والألوان الغامقة تبقى كما هي.
+ */
+fun readableOnLight(color: Color, maxLuminance: Float = 0.32f): Color = darkerShade(color, maxLuminance)

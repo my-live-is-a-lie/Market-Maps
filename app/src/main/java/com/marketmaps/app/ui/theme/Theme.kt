@@ -27,7 +27,10 @@ private fun lighten(color: Color, factor: Float = 0.85f): Color {
     )
 }
 
-private fun buildLightScheme(accent: Color): ColorScheme {
+private fun buildLightScheme(accentRaw: Color): ColorScheme {
+    // الألوان الفاتحة تُغمَّق قليلاً: لون التمييز يُستخدم أيضاً كنص وإطار على خلفية
+    // فاتحة (مثل عنوان حقل «لون مخصص»)، واللون الفاتح جداً يجعل النص غير مقروء.
+    val accent = readableOnLight(accentRaw)
     val onA = onAccent(accent)
     return lightColorScheme(
         primary = accent,
@@ -36,11 +39,11 @@ private fun buildLightScheme(accent: Color): ColorScheme {
         onSecondary = onA,
         tertiary = accent,
         onTertiary = onA,
-        primaryContainer = lighten(accent, 0.75f),
+        primaryContainer = lighten(accentRaw, 0.75f),
         onPrimaryContainer = Color(0xFF1A1A1A),
-        secondaryContainer = lighten(accent, 0.7f),
+        secondaryContainer = lighten(accentRaw, 0.7f),
         onSecondaryContainer = Color(0xFF1A1A1A),
-        tertiaryContainer = lighten(accent, 0.65f),
+        tertiaryContainer = lighten(accentRaw, 0.65f),
         onTertiaryContainer = Color(0xFF1A1A1A),
         background = LightBackground,
         surface = LightSurface,

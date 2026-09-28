@@ -1,5 +1,6 @@
 package com.marketmaps.app.ui.settings
 
+import com.marketmaps.app.ui.theme.darkerShade
 import com.marketmaps.app.util.ArabicPlurals
 
 import android.widget.Toast
@@ -409,7 +410,10 @@ private fun AppearanceSettingsScreen(
                                 )
                                 .border(
                                     width = if (dynamicSelected) 3.dp else 1.dp,
-                                    color = if (dynamicSelected) MaterialTheme.colorScheme.onSurface else Color.Gray,
+                                    // الإطار المختار: درجة غامقة من اللون نفسه بدل الأسود
+                                    color = if (dynamicSelected) {
+                                        darkerShade(MaterialTheme.colorScheme.primary)
+                                    } else Color.Gray,
                                     shape = CircleShape
                                 )
                                 .clickable {
@@ -428,7 +432,8 @@ private fun AppearanceSettingsScreen(
                                     .background(preset.color, CircleShape)
                                     .border(
                                         width = if (selected) 3.dp else 1.dp,
-                                        color = if (selected) MaterialTheme.colorScheme.onSurface else Color.Gray,
+                                        // الإطار المختار: درجة غامقة من اللون المختار نفسه
+                                        color = if (selected) darkerShade(preset.color) else Color.Gray,
                                         shape = CircleShape
                                     )
                                     .clickable {
@@ -447,7 +452,7 @@ private fun AppearanceSettingsScreen(
                                 .background(Color(0xFF9E9E9E), CircleShape)
                                 .border(
                                     width = if (customSelected) 3.dp else 1.dp,
-                                    color = if (customSelected) MaterialTheme.colorScheme.onSurface else Color.Gray,
+                                    color = if (customSelected) darkerShade(Color(0xFF9E9E9E)) else Color.Gray,
                                     shape = CircleShape
                                 )
                                 .clickable { showCustomHex = !showCustomHex },
@@ -462,7 +467,9 @@ private fun AppearanceSettingsScreen(
                                 .background(rememberHueRingBrush(), CircleShape)
                                 .border(
                                     width = if (customSelected) 3.dp else 1.dp,
-                                    color = if (customSelected) MaterialTheme.colorScheme.onSurface else Color.Gray,
+                                    color = if (customSelected) {
+                                        darkerShade(AccentPresets.colorForKey(accentKey) ?: Color.Gray)
+                                    } else Color.Gray,
                                     shape = CircleShape
                                 )
                                 .clickable { showColorWheel = true },
