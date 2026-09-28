@@ -67,6 +67,15 @@ jobs:
           ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
           echo "::error title=Build failed::$ERRS"
 
+      - name: تحقق: أصول الشعارات داخل APK
+        if: always()
+        run: |
+          APK=$(find app/build/outputs/apk/debug -name '*.apk' 2>/dev/null | head -1)
+          L=$(unzip -l "$APK" 2>/dev/null | grep -E "assets/launcher" | awk '{print $4}' | tr '\n' ' ')
+          JSON=$(unzip -p "$APK" assets/launcher_icons.json 2>/dev/null | tr -d '\n' | head -c 400)
+          echo "::error title=ASSETS::[$L]"
+          echo "::error title=JSON::${JSON:-لا يوجد}"
+
       - name: Prepare APK for upload
         if: success()
         run: |
