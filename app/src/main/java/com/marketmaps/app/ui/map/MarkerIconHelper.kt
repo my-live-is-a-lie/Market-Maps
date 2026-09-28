@@ -115,33 +115,36 @@ object MarkerIconHelper {
         displayModeForZoom(zoom.toInt().coerceIn(1, 22), latitude)
 
     /**
-     * أحجام مستوحاة من لقطات 50م / 100م / 200م.
-     * عند 50م: أكبر بنسبة 15٪ عن الحجم الظاهر في الصور المرجعية.
+     * أحجام حسب مقياس الشارع:
+     * ~50م فقاعة (+10٪ عن الحجم السابق 52→57)، ~100م متوسطة،
+     * ~200م/500قدم نقطة، أبعد مخفي.
      */
     fun markerSizePxForZoom(zoom: Int): Int = when {
-        zoom >= 18 -> 56   // أقرب من 50م
-        zoom >= 17 -> 52   // ~50م (+15٪ عن الصورة)
+        zoom >= 18 -> 62   // أقرب من 50م
+        zoom >= 17 -> 57   // ~50م (+10٪)
         zoom >= 16 -> 40   // بين 50 و 100
         zoom >= 15 -> 34   // ~100م
-        zoom >= 14 -> 16   // ~200م نقطة
-        else -> 0
+        zoom >= 14 -> 16   // ~200م / 500 قدم — نقطة
+        else -> 0          // أبعد: لا أيقونات أماكن
     }
 
     fun sizeForZoom(zoom: Int): Int = markerSizePxForZoom(zoom)
 
     fun markerSizePxForMode(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.BUBBLE_LARGE -> 52   // 50م +15٪
+        DisplayMode.BUBBLE_LARGE -> 57   // 50م +10٪
         DisplayMode.BUBBLE_MEDIUM -> 34  // 100م
-        DisplayMode.CIRCLE -> 16         // 200م
+        DisplayMode.CIRCLE -> 16         // 200م نقطة
         DisplayMode.HIDDEN -> 0
     }
 
     fun sizeForMode(mode: DisplayMode): Int = markerSizePxForMode(mode)
 
+    /** أيقونة موقعي — أكبر بنسبة 30٪ عن السابق */
     private fun userPinSizePx(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.HIDDEN, DisplayMode.CIRCLE -> 16
-        DisplayMode.BUBBLE_MEDIUM -> 40
-        DisplayMode.BUBBLE_LARGE -> 56
+        DisplayMode.HIDDEN -> 52         // يبقى ظاهراً عند التصغير
+        DisplayMode.CIRCLE -> 21         // 16×1.3
+        DisplayMode.BUBBLE_MEDIUM -> 52  // 40×1.3
+        DisplayMode.BUBBLE_LARGE -> 73   // 56×1.3
     }
 
     fun colorForCategory(category: String): Int = CategoryStyles.colorFor(category)
@@ -172,7 +175,6 @@ object MarkerIconHelper {
     }
 
     fun getAndroidUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): AndroidBitmap? {
-        if (mode == DisplayMode.HIDDEN) return null
         return composeGoogleUserPin(userPinSizePx(mode))
     }
 
