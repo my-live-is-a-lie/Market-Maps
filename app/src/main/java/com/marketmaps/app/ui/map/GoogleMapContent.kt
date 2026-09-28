@@ -113,17 +113,19 @@ fun GoogleMapContent(
     val latForScale = cameraPositionState.position.target.latitude
     val mode = MarkerIconHelper.displayModeForGoogleZoom(currentZoom, latForScale)
 
-    val iconCache = remember(mode, showLabels, mapReady) { mutableMapOf<String, BitmapDescriptor>() }
+    val iconCache = remember(mode, showLabels, mapReady, nightMode) { mutableMapOf<String, BitmapDescriptor>() }
 
     fun storeIcon(store: Store, scale: Float): BitmapDescriptor? {
         if (!mapReady) return null
         if (mode == MarkerIconHelper.DisplayMode.HIDDEN) return null
         val scaleKey = (scale * 20f).toInt()
-        val cacheKey = "${store.id}|${mode.name}|$showLabels|${store.name}|s=$scaleKey"
+        val cacheKey = "${store.id}|${mode.name}|$showLabels|$nightMode|${store.name}|s=$scaleKey"
         iconCache[cacheKey]?.let { return it }
         val sizePx = (MarkerIconHelper.markerSizePxForMode(mode) * scale).toInt().coerceAtLeast(1)
         val rawBmp: AndroidBitmap? = if (showLabels && mode != MarkerIconHelper.DisplayMode.CIRCLE) {
-            MarkerIconHelper.getAndroidMarkerBitmapWithLabel(store.category, store.name, mode, scale)
+            MarkerIconHelper.getAndroidMarkerBitmapWithLabel(
+                store.category, store.name, mode, scale, night = nightMode
+            )
         } else {
             MarkerIconHelper.getAndroidMarkerBitmap(store.category, mode, sizePx)
         }

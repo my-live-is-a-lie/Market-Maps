@@ -465,10 +465,16 @@ fun MapScreen(
     // mapsforgeZoom جزء من المفاتيح: تغيّر مستوى التكبير يعيد بناء العلامات بالحجم
     // الجديد مع الإبقاء على العلامة المميزة (كان مراقب التكبير يمرر null فيضيع التمييز).
     // LaunchedEffect يلغي أي بناء سابق لم يكتمل عند تغيّر أي مفتاح.
-    LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId, highlightScaleBucket, mapsforgeZoom) {
+    LaunchedEffect(
+        mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId,
+        highlightScaleBucket, mapsforgeZoom, showMarkerLabels, mapNight
+    ) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
         val mapView = mapViewRef ?: return@LaunchedEffect
-        updateMapsforgeMarkers(mapView, stores, userLat, userLon, highlightedStoreId, highlightScaleBucket)
+        updateMapsforgeMarkers(
+            mapView, stores, userLat, userLon, highlightedStoreId, highlightScaleBucket,
+            showLabels = showMarkerLabels, night = mapNight
+        )
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -1038,11 +1044,13 @@ private suspend fun updateMapsforgeMarkers(
     userLat: Double?,
     userLon: Double?,
     highlightedStoreId: String?,
-    highlightScale: Float
+    highlightScale: Float,
+    showLabels: Boolean,
+    night: Boolean
 ) {
     val zoom = mapView.model.mapViewPosition.zoomLevel.toInt()
     val newMarkers = withContext(Dispatchers.Default) {
-        buildMapsforgeMarkers(stores, zoom, userLat, userLon, highlightedStoreId, highlightScale)
+        buildMapsforgeMarkers(stores, zoom, userLat, userLon, highlightedStoreId, highlightScale, showLabels, night)
     }
     val layers = mapView.layerManager.layers
     val oldMarkers = layers.filterIsInstance<Marker>()
@@ -1057,7 +1065,9 @@ private fun buildMapsforgeMarkers(
     userLat: Double?,
     userLon: Double?,
     highlightedStoreId: String?,
-    highlightScale: Float
+    highlightScale: Float,
+    showLabels: Boolean,
+    night: Boolean
 ): List<Layer> {
     val out = ArrayList<Layer>(stores.size + 1)
     val mode = MarkerIconHelper.displayModeForZoom(zoom)
@@ -1068,11 +1078,23 @@ private fun buildMapsforgeMarkers(
         for (store in stores) {
             val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
             // المميز يُرسم بحجمه المكبَّر مباشرة من الـ SVG (بدل createScaledBitmap)
-            val size = if (highlighted) (sizePx * highlightScale).roundToInt() else sizePx
+            val scale = if (highlighted) highlightScale else 1f
+            val size = (sizePx * scale).roundToInt()
             val bitmap = logged(TAG, "أيقونة ${store.category}") {
-                MarkerIconHelper.getMarkerBitmap(store.category, mode, size)
+                if (showLabels && mode != MarkerIconHelper.DisplayMode.CIRCLE) {
+                    MarkerIconHelper.getMarkerBitmapWithLabel(store.category, store.name, mode, scale, night)
+                } else {
+                    MarkerIconHelper.getMarkerBitmap(store.category, mode, size)
+                }
             } ?: continue
-            val marker = Marker(LatLong(store.latitude, store.longitude), bitmap, 0, -bitmap.height / 2)
+            // العلامة تُثبّت من طرف الشعار (أسفله) لا من مركز الصورة: الصورة قد
+            // تحمل الاسم أسفل الأيقونة، فتُحسب الإزاحة من ارتفاع الشعار نفسه.
+            val marker = Marker(
+                LatLong(store.latitude, store.longitude),
+                bitmap,
+                0,
+                bitmap.height / 2 - size
+            )
             if (highlighted) highlightedMarker = marker else out.add(marker)
         }
         // المميز آخراً حتى يُرسم فوق البقية

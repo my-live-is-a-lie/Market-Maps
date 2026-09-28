@@ -1,10 +1,6 @@
 package com.marketmaps.app.ui.map
 
 import android.content.Context
-import android.graphics.ColorMatrix
-import android.graphics.ColorMatrixColorFilter
-import android.graphics.Paint
-import android.view.View
 import android.widget.Toast
 import com.marketmaps.app.data.MapDownloader
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
@@ -43,8 +39,10 @@ object MapLayerHelper {
         var downloadLayer: TileDownloadLayer? = null,
         var rendererLayer: TileRendererLayer? = null,
         var mapFile: MapFile? = null,
-        /** هل طُبّق الثيم الليلي على الطبقة الحالية؟ (لتغيير الرسم عند تبديل الإعداد) */
-        var nightTheme: Boolean = false
+        /** هل طُبّق الثيم الليلي على طبقة الأوفلاين الحالية؟ */
+        var offlineNight: Boolean = false,
+        /** هل لُوّنت بلاطات الأونلاين الحالية ليلاً؟ (لكشف تغيير الوضع ومسح الكاش) */
+        var onlineNight: Boolean = false
     )
 
     /**
@@ -118,67 +116,28 @@ object MapLayerHelper {
         bundle.mapFile = null
     }
 
-    /**
-     * فلتر ليلي لخريطة OSM المباشرة (البلاطات الجاهزة).
-     * بلاطات OSM صور جاهزة من الخادم ولا يمكن إعادة تلوينها، لذا نطبّق فلتر
-     * «عكس + تدوير الألوان 180°» على عرض الخريطة — وهي الطريقة المعروفة لتحويل
-     * صور الخرائط إلى ليلية مع الإبقاء على الألوان الطبيعية تقريباً.
-     * ملاحظة: الفلتر يقع على عرض الخريطة كاملاً فيشمل العلامات أيضاً.
-     * (خرائط الأوفلاين تُستخدم لها ثيم Mapsforge الليلي الرسمي، فلا تحتاج فلتراً.)
-     */
-    fun applyNightFilter(mapView: MapView, enabled: Boolean) {
-        try {
-            if (enabled) {
-                val paint = nightPaint ?: Paint().apply {
-                    colorFilter = ColorMatrixColorFilter(nightColorMatrix())
-                }.also { nightPaint = it }
-                mapView.setLayerType(View.LAYER_TYPE_HARDWARE, paint)
-            } else {
-                mapView.setLayerType(View.LAYER_TYPE_NONE, null)
-            }
-            mapView.invalidate()
-        } catch (e: Exception) {
-            logW(TAG, "تعذر تطبيق الفلتر الليلي", e)
-        }
-    }
-
-    private var nightPaint: Paint? = null
-
-    /** عكس الألوان ثم تدوير الدرجة 180° (نفس أسلوب وضع الليل المعروف للصور) */
-    private fun nightColorMatrix(): ColorMatrix {
-        val invert = ColorMatrix(
-            floatArrayOf(
-                -1f, 0f, 0f, 0f, 255f,
-                0f, -1f, 0f, 0f, 255f,
-                0f, 0f, -1f, 0f, 255f,
-                0f, 0f, 0f, 1f, 0f
-            )
-        )
-        // مصفوفة hue-rotate(180°) وفق مواصفة CSS filter
-        val hueRotate = ColorMatrix(
-            floatArrayOf(
-                -0.574f, 1.430f, 0.144f, 0f, 0f,
-                0.426f, 0.430f, 0.000f, 0f, 0f,
-                0.426f, 1.430f, -0.856f, 0f, 0f,
-                0f, 0f, 0f, 1f, 0f
-            )
-        )
-        invert.postConcat(hueRotate)
-        return invert
-    }
-
     fun applyOnline(mapView: MapView, bundle: LayerBundle, night: Boolean = false) {
         // إيقاف وتدمير الطبقة القديمة قبل استبدالها لتفادي تسريب خيوط التحميل
         destroyDownloadLayer(bundle)
         clearBaseLayers(mapView.layerManager.layers)
         destroyRendererLayer(bundle)
 
+        // كاش الأونلاين يحفظ البلاطات الملوَّنة ليلاً، فلا يصلح للوضع الفاتح والعكس:
+        // نمسحه عند تغيير الوضع ليعاد التحميل بالألوان الصحيحة.
+        if (bundle.onlineNight != night) {
+            bundle.onlineCache.purge()
+            bundle.onlineNight = night
+        }
+
         val tileSource = OpenStreetMapMapnik.INSTANCE.apply {
             // يُفضّل لاحقاً إضافة وسيلة تواصل وفق سياسة OSM
             userAgent = "MarketMaps/1.0 (Android; https://github.com/my-live-is-a-lie/Market-Maps)"
         }
+        // غلاف الكاش الليلي: يلوّن البلاطات عند تحميلها فتبقى علامات التطبيق
+        // (ورموزها البيضاء) بألوانها الصحيحة فوق الخريطة الليلية.
+        val cache: TileCache = if (night) NightTileCache(bundle.onlineCache, true) else bundle.onlineCache
         val downloadLayer = TileDownloadLayer(
-            bundle.onlineCache,
+            cache,
             mapView.model.mapViewPosition,
             tileSource,
             AndroidGraphicFactory.INSTANCE
@@ -186,9 +145,7 @@ object MapLayerHelper {
         mapView.layerManager.layers.add(0, downloadLayer)
         downloadLayer.onResume()
         bundle.downloadLayer = downloadLayer
-        // الوضع الليلي للمباشر: فلتر على العرض (الثيم الليلي الرسمي متاح للأوفلاين فقط)
-        applyNightFilter(mapView, night)
-        bundle.nightTheme = night
+        bundle.onlineNight = night
         mapView.invalidate()
     }
 
@@ -236,9 +193,7 @@ object MapLayerHelper {
             mapView.layerManager.layers.add(0, rendererLayer)
             bundle.mapFile = mapFile
             bundle.rendererLayer = rendererLayer
-            bundle.nightTheme = night
-            // الأوفلاين يعتمد الثيم الليلي نفسه: لا فلتر عرض عليه
-            applyNightFilter(mapView, false)
+            bundle.offlineNight = night
             true
         } catch (e: Exception) {
             logE(TAG, "تعذر فتح الخريطة الأوفلاين $fileName", e)
