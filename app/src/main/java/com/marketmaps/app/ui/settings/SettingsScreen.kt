@@ -284,6 +284,7 @@ private fun AppearanceSettingsScreen(
     var themeMenuExpanded by remember { mutableStateOf(false) }
     var customHex by remember { mutableStateOf("#00897B") }
     var showCustomHex by remember { mutableStateOf(false) }
+    var showColorWheel by remember { mutableStateOf(false) }
 
     val themeLabel = when (themeMode) {
         AppThemeMode.LIGHT -> "فاتح"
@@ -454,6 +455,45 @@ private fun AppearanceSettingsScreen(
                         ) {
                             Text("#", color = Color.White, style = MaterialTheme.typography.titleMedium)
                         }
+                        // عجلة اختيار الألوان: تفتح عجلة كاملة لاختيار لون التمييز
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(rememberHueRingBrush(), CircleShape)
+                                .border(
+                                    width = if (customSelected) 3.dp else 1.dp,
+                                    color = if (customSelected) MaterialTheme.colorScheme.onSurface else Color.Gray,
+                                    shape = CircleShape
+                                )
+                                .clickable { showColorWheel = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .background(
+                                        AccentPresets.colorForKey(accentKey) ?: Color.White,
+                                        CircleShape
+                                    )
+                            )
+                        }
+                    }
+
+                    if (showColorWheel) {
+                        AccentColorWheelDialog(
+                            initialColor = AccentPresets.colorForKey(accentKey)
+                                ?: AccentPresets.list.first().color,
+                            onDismiss = { showColorWheel = false },
+                            onConfirm = { color ->
+                                showColorWheel = false
+                                val hex = colorToHex(color)
+                                customHex = hex
+                                scope.launch {
+                                    prefs.setAccentKey("custom:$hex")
+                                    Toast.makeText(context, "تم تطبيق اللون المخصص", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
                     }
                     if (showCustomHex || accentKey.startsWith("custom:")) {
                         OutlinedTextField(
