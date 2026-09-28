@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,6 +40,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -137,6 +139,9 @@ fun AccentColorWheelDialog(
 
     val picked = hsvToColor(hue, saturation, value)
     val hex = colorToHex(picked)
+    // في النمطين الغامق والمظلم تكون أزرار النافذة (نسخ/إلغاء) باللون الأبيض
+    val darkSurface = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val actionColor = if (darkSurface) Color.White else MaterialTheme.colorScheme.primary
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -204,6 +209,7 @@ fun AccentColorWheelDialog(
                     // نسخ رمز اللون إلى الحافظة (الزر في الأسفل بمحاذاة سطر الرمز)
                     TextButton(
                         modifier = Modifier.align(Alignment.Bottom),
+                        colors = ButtonDefaults.textButtonColors(contentColor = actionColor),
                         onClick = {
                             clipboard.setText(AnnotatedString(hex))
                             Toast.makeText(context, "تم نسخ رمز اللون $hex", Toast.LENGTH_SHORT).show()
@@ -218,7 +224,12 @@ fun AccentColorWheelDialog(
             Button(onClick = { onConfirm(picked) }) { Text("تطبيق") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("إلغاء") }
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(contentColor = actionColor)
+            ) {
+                Text("إلغاء")
+            }
         }
     )
 }

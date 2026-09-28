@@ -86,3 +86,22 @@ fun darkerShade(color: Color, maxLuminance: Float = 0.3f): Color {
  * الألوان الفاتحة جداً تُغمَّق (بنفس الدرجة) حتى تصبح واضحة، والألوان الغامقة تبقى كما هي.
  */
 fun readableOnLight(color: Color, maxLuminance: Float = 0.32f): Color = darkerShade(color, maxLuminance)
+
+/** درجة أفتح من اللون نفسه (مزج مع الأبيض) */
+fun lighterShade(color: Color, factor: Float = 0.6f): Color = Color(
+    red = color.red + (1f - color.red) * factor,
+    green = color.green + (1f - color.green) * factor,
+    blue = color.blue + (1f - color.blue) * factor,
+    alpha = 1f
+)
+
+/**
+ * لون إطار دائرة اللون المختار: يجب أن يظهر على لون الدائرة نفسها.
+ * الألوان الفاتحة → درجة غامقة منها، والألوان الغامقة → درجة أفتح منها
+ * (وإلا صار الإطار بلون الدائرة نفسه فلم يُرَ، مثل النيلي والأزرق الغامق).
+ */
+fun selectionBorder(color: Color): Color =
+    if (color.luminance() > 0.42f) darkerShade(color, 0.3f) else lighterShade(color, 0.6f)
+
+/** هل الخلفية الحالية غامقة؟ (لاختيار أبيض للنصوص والأيقونات في النمطين الغامق والمظلم) */
+fun Color.isDarkSurface(): Boolean = luminance() < 0.5f

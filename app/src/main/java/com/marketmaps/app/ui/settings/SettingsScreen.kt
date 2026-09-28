@@ -1,6 +1,8 @@
 package com.marketmaps.app.ui.settings
 
 import com.marketmaps.app.ui.theme.darkerShade
+import com.marketmaps.app.ui.theme.isDarkSurface
+import com.marketmaps.app.ui.theme.selectionBorder
 import com.marketmaps.app.util.ArabicPlurals
 
 import android.widget.Toast
@@ -19,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
@@ -52,7 +53,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -66,6 +66,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.AnnotatedString
@@ -77,7 +78,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.AppThemeMode
 import com.marketmaps.app.data.MapCatalog
@@ -295,6 +295,12 @@ private fun AppearanceSettingsScreen(
     var showCustomHex by remember { mutableStateOf(false) }
     var showColorWheel by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+    // أيقونات الشريط: بيضاء في النمطين الغامق والمظلم كما طُلب
+    val fieldActionTint = if (MaterialTheme.colorScheme.background.isDarkSurface()) {
+        Color.White
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
     val pickerStyleKey by prefs.colorPickerStyle.collectAsState(initial = "disc")
 
     val themeLabel = when (themeMode) {
@@ -422,7 +428,7 @@ private fun AppearanceSettingsScreen(
                                     width = if (dynamicSelected) 3.dp else 1.dp,
                                     // الإطار المختار: درجة غامقة من اللون نفسه بدل الأسود
                                     color = if (dynamicSelected) {
-                                        darkerShade(MaterialTheme.colorScheme.primary)
+                                        selectionBorder(MaterialTheme.colorScheme.primary)
                                     } else Color.Gray,
                                     shape = CircleShape
                                 )
@@ -443,7 +449,7 @@ private fun AppearanceSettingsScreen(
                                     .border(
                                         width = if (selected) 3.dp else 1.dp,
                                         // الإطار المختار: درجة غامقة من اللون المختار نفسه
-                                        color = if (selected) darkerShade(preset.color) else Color.Gray,
+                                        color = if (selected) selectionBorder(preset.color) else Color.Gray,
                                         shape = CircleShape
                                     )
                                     .clickable {
@@ -462,7 +468,7 @@ private fun AppearanceSettingsScreen(
                                 .background(Color(0xFF9E9E9E), CircleShape)
                                 .border(
                                     width = if (customSelected) 3.dp else 1.dp,
-                                    color = if (customSelected) darkerShade(Color(0xFF9E9E9E)) else Color.Gray,
+                                    color = if (customSelected) selectionBorder(Color(0xFF9E9E9E)) else Color.Gray,
                                     shape = CircleShape
                                 )
                                 .clickable { showCustomHex = !showCustomHex },
@@ -478,7 +484,7 @@ private fun AppearanceSettingsScreen(
                                 .border(
                                     width = if (customSelected) 3.dp else 1.dp,
                                     color = if (customSelected) {
-                                        darkerShade(AccentPresets.colorForKey(accentKey) ?: Color.Gray)
+                                        selectionBorder(AccentPresets.colorForKey(accentKey) ?: Color.Gray)
                                     } else Color.Gray,
                                     shape = CircleShape
                                 )
@@ -527,52 +533,67 @@ private fun AppearanceSettingsScreen(
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 trailingIcon = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        // لصق: يحذف الرمز السابق إن وجد ثم يضع الملصوق
-                                        TextButton(
-                                            onClick = {
-                                                val pasted = clipboard.getText()?.text?.trim().orEmpty()
-                                                if (pasted.isEmpty()) {
-                                                    Toast.makeText(
-                                                        context,
-                                                        "الحافظة فارغة",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                } else {
-                                                    customHex = pasted
-                                                    Toast.makeText(
-                                                        context,
-                                                        "تم لصق الرمز",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                            },
-                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        // أيقونتان (لصق ونسخ) بمسافة متوسطة بينهما،
+                                        // وباللون الأبيض في النمطين الغامق والمظلم
+                                        Box(
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .clip(CircleShape)
+                                                .clickable {
+                                                    val pasted = clipboard.getText()?.text?.trim().orEmpty()
+                                                    if (pasted.isEmpty()) {
+                                                        Toast.makeText(
+                                                            context,
+                                                            "الحافظة فارغة",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    } else {
+                                                        customHex = pasted
+                                                        Toast.makeText(
+                                                            context,
+                                                            "تم لصق الرمز",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
+                                                },
+                                            contentAlignment = Alignment.Center
                                         ) {
-                                            Text("لصق", fontSize = 12.sp)
+                                            PasteCodeIcon(
+                                                tint = fieldActionTint,
+                                                modifier = Modifier.size(19.dp)
+                                            )
                                         }
-                                        // نسخ: ينسخ الرمز الموجود في الشريط
-                                        TextButton(
-                                            onClick = {
-                                                val code = customHex.trim()
-                                                if (code.isEmpty()) {
-                                                    Toast.makeText(
-                                                        context,
-                                                        "لا يوجد رمز في الشريط",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                } else {
-                                                    clipboard.setText(AnnotatedString(code))
-                                                    Toast.makeText(
-                                                        context,
-                                                        "تم نسخ الرمز $code",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                            },
-                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                                        Box(
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .clip(CircleShape)
+                                                .clickable {
+                                                    val code = customHex.trim()
+                                                    if (code.isEmpty()) {
+                                                        Toast.makeText(
+                                                            context,
+                                                            "لا يوجد رمز في الشريط",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    } else {
+                                                        clipboard.setText(AnnotatedString(code))
+                                                        Toast.makeText(
+                                                            context,
+                                                            "تم نسخ الرمز $code",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
+                                                },
+                                            contentAlignment = Alignment.Center
                                         ) {
-                                            Text("نسخ", fontSize = 12.sp)
+                                            CopyCodeIcon(
+                                                tint = fieldActionTint,
+                                                modifier = Modifier.size(19.dp)
+                                            )
                                         }
                                     }
                                 }
