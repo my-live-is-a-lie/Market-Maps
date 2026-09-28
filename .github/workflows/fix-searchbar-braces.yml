@@ -1,0 +1,25 @@
+name: Fix SearchBar Braces
+
+on:
+  push:
+    paths:
+      - 'scripts/fix_searchbar_braces.py'
+      - '.github/workflows/fix-searchbar-braces.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix_searchbar_braces.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/marketmaps/app/ui/map/SearchBar.kt
+          git commit -m "fix: إزالة أقواس زائدة كسرت بناء SearchBar" || true
+          git push
