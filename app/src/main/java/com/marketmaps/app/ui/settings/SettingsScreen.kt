@@ -65,6 +65,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -300,6 +302,38 @@ private fun AppearanceSettingsScreen(
     val appLogoKey by prefs.appLogoKey.collectAsState(initial = "")
     val appLogoBackground by prefs.appLogoBackground.collectAsState(initial = "blue")
     var showLogoColorWheel by remember { mutableStateOf(false) }
+
+    // أيقونة الشاشة الرئيسية: تُبنى مواردها وقت البناء، والألوان الجاهزة فقط مدعومة؛
+    // للون المخصص نستخدم أقرب لون جاهز حتى تظل الأيقونة متاحة (لا تتجاهل اختيار المستخدم).
+    val activeLogoKey = appLogoKey.ifBlank { appLogos.firstOrNull()?.key.orEmpty() }
+    val launcherBackground = remember(appLogoBackground, appLogoBackgrounds) {
+        if (appLogoBackground.startsWith(CUSTOM_PREFIX)) {
+            val custom = resolveLogoBackground(appLogoBackground, appLogoBackgrounds)
+            LauncherIconSwitcher.nearestBackground(custom, appLogoBackgrounds)
+        } else {
+            appLogoBackgrounds.find { it.key == appLogoBackground }
+        }
+    }
+    val launcherNote = when {
+        appLogos.isEmpty() -> "لا يوجد شعار متاح — أضف ملف SVG في app/src/main/assets/launcher"
+        appLogoBackground.startsWith(CUSTOM_PREFIX) ->
+            "لونك المخصص يظهر في معاينة الشعار داخل التطبيق، أما أيقونة الشاشة الرئيسية " +
+                "فلا تدعم إلا الألوان الجاهزة، لذا سُيستخدم أقرب لون جاهز" +
+                (launcherBackground?.let { ": ${it.label}" } ?: "")
+        else ->
+            "أيقونة الشاشة الرئيسية تتحدّث تلقائياً حسب اختيارك" +
+                (launcherBackground?.let { " (${it.label})" } ?: "") +
+                " — قد يتأخر ظهورها قليلاً في بعض المشغّلات"
+    }
+
+    // تفعيل الأيقونة المختارة فعلياً على الشاشة الرئيسية
+    LaunchedEffect(activeLogoKey, launcherBackground?.key) {
+        val backgroundKey = launcherBackground?.key ?: return@LaunchedEffect
+        if (activeLogoKey.isBlank()) return@LaunchedEffect
+        withContext(Dispatchers.IO) {
+            LauncherIconSwitcher.apply(context, activeLogoKey, backgroundKey)
+        }
+    }
     // أيقونات الشريط: بيضاء في النمطين الغامق والمظلم كما طُلب
     val fieldActionTint = if (MaterialTheme.colorScheme.background.isDarkSurface()) {
         Color.White
@@ -641,7 +675,8 @@ private fun AppearanceSettingsScreen(
                 onSelectBackground = { key ->
                     scope.launch { prefs.setAppLogoBackground(key) }
                 },
-                onOpenCustomBackground = { showLogoColorWheel = true }
+                onOpenCustomBackground = { showLogoColorWheel = true },
+                launcherNote = launcherNote
             )
 
             if (showLogoColorWheel) {

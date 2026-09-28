@@ -189,6 +189,7 @@ fun AppLogoSection(
     onSelectLogo: (AppLogoOption) -> Unit,
     onSelectBackground: (String) -> Unit,
     onOpenCustomBackground: () -> Unit,
+    launcherNote: String,
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -301,6 +302,13 @@ fun AppLogoSection(
                     }
                 }
             }
+
+            // توضيح ما سيحدث لأيقونة الشاشة الرئيسية (قيود نظام أندرويد)
+            Text(
+                text = launcherNote,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
+            )
 
             Spacer(modifier = Modifier.height(2.dp))
         }

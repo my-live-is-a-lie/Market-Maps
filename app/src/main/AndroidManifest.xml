@@ -23,15 +23,13 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}" />
 
+        <!-- النشاط الرئيسي بدون فلتر مشغّل: أيقونة الشاشة الرئيسية تأتي من
+             الأيقونات البديلة (activity-alias) المولَّدة وقت البناء لكل شعار/لون،
+             ويبدّل بينها التطبيق حسب اختيار المستخدم في الإعدادات. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.MarketMaps">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:theme="@style/Theme.MarketMaps" />
 
     </application>
 

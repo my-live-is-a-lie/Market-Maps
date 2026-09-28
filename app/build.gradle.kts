@@ -2,6 +2,14 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Path
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.OutputFile
+import org.gradle.api.tasks.TaskAction
 import java.util.Properties
 
 // أداة تحويل SVG إلى VectorDrawable الرسمية من أندرويد (نفس أداة Vector Asset في
@@ -158,6 +166,85 @@ kotlin {
 
 val launcherSvgDir = layout.projectDirectory.dir("src/main/assets/launcher")
 val launcherIconsOutDir = layout.buildDirectory.dir("generated/launcherIcons").get().asFile
+
+/**
+ * يولّد ملف بيان يضم أيقونة بديلة (activity-alias) لكل تركيبة شعار × لون،
+ * ويُربط بـ AGP عبر addGeneratedManifestFile (أعلى أولوية في دمج البيان).
+ * الطريقة الوحيدة لتبديل أيقونة الشاشة الرئيسية: مكوّنات ثابتة في البيان
+ * يفعّل التطبيق واحداً منها ويُعطّل الباقي (قيود نظام أندرويد).
+ */
+abstract class GenerateLauncherAliasManifestTask : DefaultTask() {
+
+    @get:InputDirectory
+    abstract val svgDir: DirectoryProperty
+
+    /** مفاتيح الألوان الجاهزة بالترتيب (الأول هو الافتراضي المفعّل عند التثبيت) */
+    @get:Input
+    abstract val backgroundKeys: ListProperty<String>
+
+    @get:OutputFile
+    abstract val manifest: RegularFileProperty
+
+    @TaskAction
+    fun generate() {
+        val svgFiles = svgDir.asFile.listFiles { f -> f.isFile && f.extension.equals("svg", true) }
+            ?.sortedBy { it.name }.orEmpty()
+        val colors = backgroundKeys.get()
+        val builder = StringBuilder()
+        builder.append("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
+        builder.append("<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">\n")
+        builder.append("    <application>\n")
+        svgFiles.forEachIndexed { index, svg ->
+            val logoKey = svg.nameWithoutExtension.lowercase().replace(Regex("[^a-z0-9_]"), "_")
+                .let { if (it.isEmpty() || it[0].isDigit()) "logo_$it" else it }
+            colors.forEachIndexed { colorIndex, colorKey ->
+                val iconName = "ic_launcher_logo_${logoKey}_$colorKey"
+                // أول تركيبة فقط مفعّلة افتراضياً حتى لا يظهر أكثر من أيقونة
+                val enabled = index == 0 && colorIndex == 0
+                builder.append("        <activity-alias\n")
+                builder.append("            android:name=\"com.marketmaps.app.LauncherIcon_${logoKey}_$colorKey\"\n")
+                builder.append("            android:targetActivity=\".MainActivity\"\n")
+                builder.append("            android:enabled=\"$enabled\"\n")
+                builder.append("            android:exported=\"true\"\n")
+                builder.append("            android:icon=\"@mipmap/$iconName\"\n")
+                builder.append("            android:roundIcon=\"@mipmap/$iconName\"\n")
+                builder.append("            android:label=\"@string/app_name\">\n")
+                builder.append("            <intent-filter>\n")
+                builder.append("                <action android:name=\"android.intent.action.MAIN\" />\n")
+                builder.append("                <category android:name=\"android.intent.category.LAUNCHER\" />\n")
+                builder.append("            </intent-filter>\n")
+                builder.append("        </activity-alias>\n")
+            }
+        }
+        builder.append("    </application>\n")
+        builder.append("</manifest>\n")
+
+        val out = manifest.get().asFile
+        out.parentFile.mkdirs()
+        out.writeText(builder.toString())
+        logger.lifecycle(
+            "MARKETMAPS_ALIASES=${svgFiles.size * colors.size} أيقونة بديلة " +
+                "(${svgFiles.size} شعاراً × ${colors.size} لوناً)"
+        )
+    }
+}
+
+val launcherAliasManifest = tasks.register<GenerateLauncherAliasManifestTask>("generateLauncherAliasManifest") {
+    group = "build"
+    description = "يولّد بيان أيقونات المشغّل البديلة لكل شعار/لون"
+    svgDir.set(launcherSvgDir)
+    backgroundKeys.set(listOf("blue", "teal", "green", "orange", "red", "purple", "indigo", "dark"))
+    manifest.set(layout.buildDirectory.file("generated/launcherAliasManifest/AndroidManifest.xml"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.manifests?.addGeneratedManifestFile(
+            launcherAliasManifest,
+            GenerateLauncherAliasManifestTask::manifest
+        )
+    }
+}
 
 android {
     sourceSets.getByName("main") {
