@@ -50,7 +50,7 @@ import org.json.JSONObject
 /** نسبة حجم الشعار داخل خلفيته (مطابقة لحجمه داخل أيقونة المشغّل) */
 private const val LOGO_INSIDE_BOX_RATIO = 0.64f
 
-/** مفتاح اللون المخصص في التفضيلات (نفس صيغة لون التمييز) */
+/** مفتاح اللون المخصص في التفضيلات (ترحيل الإعدادات القديمة فقط) */
 const val CUSTOM_PREFIX = "custom:"
 
 data class AppLogoOption(val key: String, val file: String, val label: String)
@@ -188,14 +188,14 @@ fun AppLogoSection(
     accentColor: Color,
     onSelectLogo: (AppLogoOption) -> Unit,
     onSelectBackground: (String) -> Unit,
-    onOpenCustomBackground: () -> Unit,
     launcherNote: String,
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
     val logo = logos.find { it.key == selectedLogoKey } ?: logos.firstOrNull()
+    // الألوان الجاهزة فقط لهذه الخلفية (لا لون مخصص)
     val backgroundColor = resolveLogoBackground(backgroundValue, backgrounds)
-    val customSelected = backgroundValue.startsWith(CUSTOM_PREFIX)
+    val customSelected = false
 
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
@@ -253,25 +253,6 @@ fun AppLogoSection(
                                 shape = CircleShape
                             )
                             .clickable { onSelectBackground(background.key) }
-                    )
-                }
-                // لون مخصص بعجلة الألوان
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(rememberHueRingBrush(), CircleShape)
-                        .border(
-                            width = if (customSelected) 3.dp else 1.dp,
-                            color = if (customSelected) selectionBorder(backgroundColor) else Color.Gray,
-                            shape = CircleShape
-                        )
-                        .clickable { onOpenCustomBackground() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(16.dp)
-                            .background(if (customSelected) backgroundColor else Color.White, CircleShape)
                     )
                 }
             }

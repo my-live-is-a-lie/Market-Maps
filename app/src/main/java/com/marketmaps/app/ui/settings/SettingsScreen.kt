@@ -68,6 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.LayoutDirection
@@ -299,10 +300,9 @@ private fun AppearanceSettingsScreen(
     val (appLogos, appLogoBackgrounds) = remember { loadAppLogoCatalog(context) }
     val appLogoKey by prefs.appLogoKey.collectAsState(initial = "")
     val appLogoBackground by prefs.appLogoBackground.collectAsState(initial = "blue")
-    var showLogoColorWheel by remember { mutableStateOf(false) }
 
-    // أيقونة الشاشة الرئيسية: تُبنى مواردها وقت البناء، والألوان الجاهزة فقط مدعومة؛
-    // للون المخصص نستخدم أقرب لون جاهز حتى تظل الأيقونة متاحة (لا تتجاهل اختيار المستخدم).
+    // أيقونة الشاشة الرئيسية: تُبنى مواردها وقت البناء، والألوان الجاهزة الثمانية فقط
+    // (لا لون مخصص للأيقونة). أي قيمة مخصصة قديمة تُرحَّل إلى أقرب لون جاهز.
     val activeLogoKey = appLogoKey.ifBlank { appLogos.firstOrNull()?.key.orEmpty() }
     val launcherBackground = remember(appLogoBackground, appLogoBackgrounds) {
         if (appLogoBackground.startsWith(CUSTOM_PREFIX)) {
@@ -314,17 +314,22 @@ private fun AppearanceSettingsScreen(
     }
     val launcherNote = when {
         appLogos.isEmpty() -> "لا يوجد شعار متاح — أضف ملف SVG في app/src/main/assets/launcher"
-        appLogoBackground.startsWith(CUSTOM_PREFIX) ->
-            "لونك المخصص يظهر في معاينة الشعار داخل التطبيق، أما أيقونة الشاشة الرئيسية " +
-                "فلا تدعم إلا الألوان الجاهزة، لذا سُيستخدم أقرب لون جاهز" +
-                (launcherBackground?.let { ": ${it.label}" } ?: "")
         else ->
             "أيقونة الشاشة الرئيسية تتحدّث تلقائياً حسب اختيارك" +
                 (launcherBackground?.let { " (${it.label})" } ?: "") +
                 " — قد يتأخر ظهورها قليلاً في بعض المشغّلات"
     }
 
-    // تفعيل الأيقونة المختارة فعلياً على الشاشة الرئيسية
+    // ترحيل لون قديم مخصص إلى أقرب لون جاهز حتى تبقى الحالة نظيفة
+    LaunchedEffect(appLogoBackground) {
+        if (appLogoBackground.startsWith(CUSTOM_PREFIX)) {
+            launcherBackground?.let { nearest ->
+                withContext(Dispatchers.IO) { prefs.setAppLogoBackground(nearest.key) }
+            }
+        }
+    }
+
+    // تفعيل الأيقونة المختارة فعلياً على الشاشة الرئيسية (بالترتيب الآمن داخل الدالة)
     LaunchedEffect(activeLogoKey, launcherBackground?.key) {
         val backgroundKey = launcherBackground?.key ?: return@LaunchedEffect
         if (activeLogoKey.isBlank()) return@LaunchedEffect
@@ -599,9 +604,11 @@ private fun AppearanceSettingsScreen(
                                                 },
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            PasteCodeIcon(
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_content_paste),
+                                                contentDescription = "لصق الرمز",
                                                 tint = fieldActionTint,
-                                                modifier = Modifier.size(19.dp)
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
                                         Box(
@@ -627,9 +634,11 @@ private fun AppearanceSettingsScreen(
                                                 },
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            CopyCodeIcon(
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_content_copy),
+                                                contentDescription = "نسخ الرمز",
                                                 tint = fieldActionTint,
-                                                modifier = Modifier.size(19.dp)
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     }
@@ -673,29 +682,9 @@ private fun AppearanceSettingsScreen(
                 onSelectBackground = { key ->
                     scope.launch { prefs.setAppLogoBackground(key) }
                 },
-                onOpenCustomBackground = { showLogoColorWheel = true },
                 launcherNote = launcherNote
             )
 
-            if (showLogoColorWheel) {
-                val currentBackground = resolveLogoBackground(appLogoBackground, appLogoBackgrounds)
-                AccentColorWheelDialog(
-                    initialColor = currentBackground,
-                    style = ColorPickerStyle.fromKey(pickerStyleKey),
-                    onStyleChange = { newStyle ->
-                        scope.launch { prefs.setColorPickerStyle(newStyle.key) }
-                    },
-                    onDismiss = { showLogoColorWheel = false },
-                    onConfirm = { color ->
-                        showLogoColorWheel = false
-                        val hex = colorToHex(color)
-                        scope.launch {
-                            prefs.setAppLogoBackground("custom:$hex")
-                            Toast.makeText(context, "تم تغيير لون خلفية الشعار", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                )
-            }
         }
     }
 }
