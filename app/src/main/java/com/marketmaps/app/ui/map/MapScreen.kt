@@ -43,6 +43,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1069,13 +1070,17 @@ private fun AddPlaceCenterPin(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    // أصغر قليلاً حسب طلب المستخدم
-    val arrow = remember {
-        loadAssetSvgTinted(context, "icons/add_pin_arrow.svg", 40, 0xFF2E7D32.toInt())
+    val accent = MaterialTheme.colorScheme.primary
+    val arrowColor = android.graphics.Color.argb(
+        255,
+        (accent.red * 255).toInt(),
+        (accent.green * 255).toInt(),
+        (accent.blue * 255).toInt()
+    )
+    val arrow = remember(arrowColor) {
+        loadAssetSvgTinted(context, "icons/add_pin_arrow.svg", 36, arrowColor)
     }
-    val dot = remember {
-        loadAssetSvgTinted(context, "icons/add_pin_dot.svg", 20, 0xFF2E7D32.toInt())
-    }
+    // مركز الدائرة البيضاء = إحداثيات المكان المُضاف
     Box(
         modifier = modifier
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
@@ -1087,20 +1092,21 @@ private fun AddPlaceCenterPin(
             },
         contentAlignment = Alignment.Center
     ) {
-        if (dot != null) {
-            Image(
-                bitmap = dot.asImageBitmap(),
-                contentDescription = "موقع المؤشر",
-                modifier = Modifier.size(16.dp)
-            )
-        }
+        // دائرة بيضاء بإطار لون التمييز — نقطة الإضافة في منتصفها
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .background(Color.White, CircleShape)
+                .border(width = 2.5.dp, color = accent, shape = CircleShape)
+        )
+        // السهم أسفل الدائرة (كما في التصميم)
         if (arrow != null) {
             Image(
                 bitmap = arrow.asImageBitmap(),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(28.dp)
-                    .offset(y = (-24).dp)
+                    .size(26.dp)
+                    .offset(y = 22.dp)
             )
         }
     }
