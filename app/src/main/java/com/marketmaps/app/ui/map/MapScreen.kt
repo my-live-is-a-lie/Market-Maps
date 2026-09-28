@@ -62,6 +62,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -113,6 +114,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.viewinterop.AndroidView
@@ -1120,22 +1122,24 @@ private fun isLocationEnabled(context: Context): Boolean {
 // 2) السهم ورأسه ملاصق للنقطة ويشير إليها.
 // 3) نقطة الإصبع أسفل السهم: هي التي يمسكها الإصبع، فيبقى السهم أمام الإصبع لا تحته.
 // القطع الثلاث تتحرك معاً، ومساحة السحب تغطيها كلها فيعمل السحب من نقطة الإصبع نفسها.
-private val AddPinPointSize = 14.dp
-private val AddPinPointBorder = 2.dp
-private val AddPinArrowSize = 24.dp
-private val AddPinDotSize = 22.dp
+/** المؤشر مصغّر 20% عن المقاسات السابقة (14/24/22dp) */
+private const val AddPinScale = 0.8f
+private val AddPinPointSize = 14.dp * AddPinScale
+private val AddPinPointBorder = 2.dp * AddPinScale
+private val AddPinArrowSize = 24.dp * AddPinScale
+private val AddPinDotSize = 22.dp * AddPinScale
 
 /** داخل صورة السهم فراغ أعلى وأسفل؛ هاتان النسبتان تحدّدان رأس السهم وقاعدته */
 private val AddPinArrowApexInset = AddPinArrowSize * 0.166f
 private val AddPinArrowBaseInset = AddPinArrowSize * 0.78f
 
 /** بين حافة النقطة ورأس السهم، وبين قاعدة السهم وحافة نقطة الإصبع */
-private val AddPinGapPointToArrow = 1.dp
-private val AddPinGapArrowToDot = 6.dp
+private val AddPinGapPointToArrow = 1.dp * AddPinScale
+private val AddPinGapArrowToDot = 6.dp * AddPinScale
 
 /** هامش لمس مريح حول القطع */
-private val AddPinTouchPadding = 10.dp
-private val AddPinTouchWidth = 44.dp
+private val AddPinTouchPadding = 10.dp * AddPinScale
+private val AddPinTouchWidth = 44.dp * AddPinScale
 
 @Composable
 private fun AddPlaceCenterPin(
@@ -1188,12 +1192,12 @@ private fun AddPlaceCenterPin(
             },
         contentAlignment = Alignment.TopCenter
     ) {
-        // النقطة البيضاء: مركزها = إحداثيات المكان
+        // النقطة البيضاء (شبه شفافة) — مركزها = إحداثيات المكان المُضاف
         Box(
             modifier = Modifier
                 .offset(y = pointTop)
                 .size(AddPinPointSize)
-                .background(Color.White, CircleShape)
+                .background(Color.White.copy(alpha = 0.55f), CircleShape)
                 .border(width = AddPinPointBorder, color = accent, shape = CircleShape)
         )
         // السهم أسفل النقطة (رأسه بالأعلى)
@@ -1327,7 +1331,7 @@ private fun AddPlaceBottomSheet(
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
                         onClick = onPickCurrentLocation,
@@ -1336,9 +1340,17 @@ private fun AddPlaceBottomSheet(
                             .heightIn(min = 48.dp),
                         shape = RoundedCornerShape(12.dp),
                         border = BorderStroke(1.5.dp, scheme.primary.copy(alpha = 0.7f)),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = scheme.primary)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = scheme.primary),
+                        // حشو داخلي صغير حتى لا تنزل آخر كلمة إلى سطر جديد في الزر
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                     ) {
-                        Text("اختر موقعك الحالي")
+                        Text(
+                            text = "اختر موقعك الحالي",
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
+                        )
                     }
                     OutlinedButton(
                         onClick = onPickPinLocation,
@@ -1347,9 +1359,16 @@ private fun AddPlaceBottomSheet(
                             .heightIn(min = 48.dp),
                         shape = RoundedCornerShape(12.dp),
                         border = BorderStroke(1.5.dp, scheme.primary.copy(alpha = 0.7f)),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = scheme.primary)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = scheme.primary),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                     ) {
-                        Text("اختر موقع المؤشر")
+                        Text(
+                            text = "اختر موقع المؤشر",
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             }
