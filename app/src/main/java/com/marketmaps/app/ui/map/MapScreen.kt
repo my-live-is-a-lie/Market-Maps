@@ -1080,7 +1080,8 @@ private fun AddPlaceCenterPin(
     val arrow = remember(arrowColor) {
         loadAssetSvgTinted(context, "icons/add_pin_arrow.svg", 36, arrowColor)
     }
-    // مركز الدائرة البيضاء = إحداثيات المكان المُضاف
+    // كتلة واحدة: الدائرة أمام رأس السهم، وتتحركان معاً مع السحب
+    // مركز الدائرة = إحداثيات المكان المُضاف
     Box(
         modifier = modifier
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
@@ -1092,23 +1093,21 @@ private fun AddPlaceCenterPin(
             },
         contentAlignment = Alignment.Center
     ) {
-        // دائرة بيضاء بإطار لون التمييز — نقطة الإضافة في منتصفها
-        Box(
-            modifier = Modifier
-                .size(18.dp)
-                .background(Color.White, CircleShape)
-                .border(width = 2.5.dp, color = accent, shape = CircleShape)
-        )
-        // السهم أسفل الدائرة (كما في التصميم)
         if (arrow != null) {
             Image(
                 bitmap = arrow.asImageBitmap(),
                 contentDescription = null,
                 modifier = Modifier
                     .size(26.dp)
-                    .offset(y = 22.dp)
+                    .offset(y = 20.dp)
             )
         }
+        Box(
+            modifier = Modifier
+                .size(16.dp)
+                .background(Color.White, CircleShape)
+                .border(width = 2.5.dp, color = accent, shape = CircleShape)
+        )
     }
 }
 
