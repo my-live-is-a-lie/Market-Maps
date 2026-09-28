@@ -1,6 +1,7 @@
 package com.marketmaps.app.ui.map
 
 import com.marketmaps.app.util.TextNormalizer
+import com.marketmaps.app.util.ArabicPlurals
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -62,6 +63,7 @@ import com.marketmaps.app.data.Store
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 @Composable
@@ -452,9 +454,17 @@ fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
 }
 
 fun formatDistance(meters: Double): String {
+    if (meters < 0) return ""
     return if (meters < 1000) {
-        "يبعد ${meters.toInt()} متر"
+        val m = meters.roundToInt().coerceAtLeast(0)
+        "يبعد ${ArabicPlurals.meters(m)}"
     } else {
-        String.format("يبعد %.1f كم", meters / 1000)
+        val km = (meters / 1000.0)
+        val kmInt = km.roundToInt()
+        if (kotlin.math.abs(km - kmInt) < 0.05) {
+            "يبعد ${ArabicPlurals.kilometers(kmInt)}"
+        } else {
+            "يبعد ${"%.1f".format(km)} كيلومتر"
+        }
     }
 }
