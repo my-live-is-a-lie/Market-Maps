@@ -152,13 +152,18 @@ fun SearchBar(
                     leadingIcon = {
                         IconButton(
                             onClick = {
-                                // مسح النص فقط — لا يغلق شريط البحث
-                                if (query.isNotEmpty()) onQueryChange("")
+                                if (query.isNotEmpty()) {
+                                    // يوجد نص → امسحه فقط
+                                    onQueryChange("")
+                                } else {
+                                    // الحقل فارغ → أغلق شريط البحث
+                                    onExpandedChange(false)
+                                }
                             }
                         ) {
                             Icon(
                                 Icons.Default.Close,
-                                contentDescription = "مسح البحث",
+                                contentDescription = if (query.isNotEmpty()) "مسح البحث" else "إغلاق البحث",
                                 tint = barContent
                             )
                         }
@@ -427,9 +432,7 @@ fun filterAndSortStores(
     if (query.isBlank() && noFilter) return emptyList()
     val nq = if (query.isNotBlank()) TextNormalizer.normalize(query) else null
 
-    // تصفية واحدة بدل ثلاث قوائم وسيطة
     val filtered = index.asSequence().filter { item ->
-        // يبدأ التصنيف بنوع المكان (محل / ورشة / …) لتفادي تطابق «أخرى» مع كل الأنواع
         (filterType == FILTER_ALL || item.categoryType == filterType ||
             item.categoryType.startsWith("$filterType ", ignoreCase = true)) &&
             (filterSub == FILTER_ALL || item.categoryParts.any { it.equals(filterSub, ignoreCase = true) }) &&
