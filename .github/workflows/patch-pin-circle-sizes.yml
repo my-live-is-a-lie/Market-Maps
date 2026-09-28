@@ -1,0 +1,25 @@
+name: Patch Pin And Circle Sizes
+
+on:
+  push:
+    paths:
+      - 'scripts/patch_pin_circle_sizes.py'
+      - '.github/workflows/patch-pin-circle-sizes.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/patch_pin_circle_sizes.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/marketmaps/app/ui/map/MarkerIconHelper.kt
+          git commit -m "UI: تصغير علامة الموقع 40٪ عند 50م + توحيد عند 200م + دوائر −30٪" || true
+          git push
