@@ -141,12 +141,15 @@ object MarkerIconHelper {
 
     fun sizeForMode(mode: DisplayMode): Int = markerSizePxForMode(mode)
 
-    /** أيقونة موقعي — أكبر بنسبة 30٪ عن السابق */
+    /**
+     * أيقونة موقعي حسب مقياس الشارع:
+     * ~50م و~100م: أكبر 100٪، ~200م/500قدم: أكبر 50٪.
+     */
     private fun userPinSizePx(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.HIDDEN -> 52         // يبقى ظاهراً عند التصغير
-        DisplayMode.CIRCLE -> 21         // 16×1.3
-        DisplayMode.BUBBLE_MEDIUM -> 52  // 40×1.3
-        DisplayMode.BUBBLE_LARGE -> 73   // 56×1.3
+        DisplayMode.BUBBLE_LARGE -> 146   // ~50م / 100قدم — ×2
+        DisplayMode.BUBBLE_MEDIUM -> 104  // ~100م / 200قدم — ×2
+        DisplayMode.CIRCLE -> 32          // ~200م / 500قدم — ×1.5
+        DisplayMode.HIDDEN -> 52          // أبعد: يبقى ظاهراً بحجم متوسط
     }
 
     fun colorForCategory(category: String): Int = CategoryStyles.colorFor(category)

@@ -932,7 +932,7 @@ private fun buildMapsforgeMarkers(
 
     if (userLat != null && userLon != null) {
         logged(TAG, "أيقونة الموقع الحالي") {
-            val userBmp = MarkerIconHelper.getUserLocationBitmap(MarkerIconHelper.DisplayMode.BUBBLE_MEDIUM)
+            val userBmp = MarkerIconHelper.getUserLocationBitmap(mode)
             out.add(Marker(LatLong(userLat, userLon), userBmp, 0, -userBmp.height / 2))
         }
     }
