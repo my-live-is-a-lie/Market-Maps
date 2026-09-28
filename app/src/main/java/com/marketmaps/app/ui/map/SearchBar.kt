@@ -386,7 +386,7 @@ fun buildSearchIndex(stores: List<Store>): List<SearchableStore> = stores.map { 
             append(catN); append(FIELD_SEPARATOR)
             append(descN)
             // أشكال مفرد/جمع لتسريع contains لاحقاً
-            val extra = LinkedHashSet<String>()
+            val extra = linkedSetOf<String>()
             for (part in listOf(nameN, catN, descN)) {
                 for (tok in part.split(Regex("\\s+"))) {
                     if (tok.length >= 2) extra.addAll(TextNormalizer.expandToken(tok))
