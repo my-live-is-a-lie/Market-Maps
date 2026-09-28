@@ -66,6 +66,11 @@ jobs:
           [ -z "$ERRS" ] && ERRS=$(tail -40 build.log)
           ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
           echo "::error title=Build failed::$ERRS"
+          # تفاصيل مشاكل ذاكرة الإعدادات وغيرها (كل سطر كملاحظة مستقلة)
+          grep -n -A25 "Configuration cache problems" build.log 2>/dev/null | head -30 | while IFS= read -r l; do
+            l="${l//'%'/'%25'}"
+            echo "::error title=CC::$l"
+          done || true
 
       - name: عرض أيقونات SVG المولّدة
         if: always()

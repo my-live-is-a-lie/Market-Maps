@@ -148,71 +148,22 @@ kotlin {
 
 // ===== أيقونات المشغّل من ملفات SVG =====
 // أي ملف SVG يوضع في app/src/main/assets/launcher يُحوَّل وقت البناء إلى
-// VectorDrawable، وتُولَّد منه أيقونة تكيفية لكل لون خلفية في القائمة أدناه.
-// إضافة شعار جديد أو لون جديد = ملف/سطر هنا فقط، بدون أي تعديل في الكود.
-// (لا يمكن توليد ألوان عشوائية لأيقونة المشغّل: أندرويد يقرؤها من موارد
-//  مجمّعة وقت البناء، لذا الألوان قائمة جاهزة تُبنى مسبقاً.)
-
-/** ألوان خلفية أيقونة التطبيق الجاهزة (key عربي للإعدادات، HEX للأيقونة) */
-val launcherIconBackgrounds = listOf(
-    Triple("blue", "أزرق", "#024EE7"),
-    Triple("teal", "أخضر مزرق", "#00897B"),
-    Triple("green", "أخضر", "#43A047"),
-    Triple("orange", "برتقالي", "#FB8C00"),
-    Triple("red", "أحمر", "#E53935"),
-    Triple("purple", "بنفسجي", "#8E24AA"),
-    Triple("indigo", "نيلي", "#3949AB"),
-    Triple("dark", "أسود", "#111111")
-)
-
-/** منطقة الأمان للأيقونة التكيفية: يُصغَّر الشعار داخل الأيقونة */
-val launcherIconScale = 0.72f
+// VectorDrawable، وتُولَّد منه أيقونة تكيفية لكل لون خلفية في القائمة داخل المهمة.
+// إضافة شعار جديد أو لون جديد = ملف/سطر واحد، بدون أي تعديل في الكود.
+// (لا يمكن لأيقونة المشغّل أن تأخذ لوناً حراً: أندرويد يقرؤها من موارد مجمّعة
+//  وقت البناء، لذا الألوان قائمة جاهزة تُبنى مسبقاً لكل تركيبة.)
+//
+// ملاحظة: منطق التوليد مكتوب بالكامل داخل المهمة (بلا استدعاء من نطاق السكربت)
+// لتبقى متوافقة مع org.gradle.configuration-cache المفعّلة في المشروع.
 
 val launcherSvgDir = layout.projectDirectory.dir("src/main/assets/launcher")
 val launcherIconsOutDir = layout.buildDirectory.dir("generated/launcherIcons").get().asFile
-
-/** يُغلّف محتوى VectorDrawable بمجموعة تصغير حول مركز الأيقونة */
-fun withLauncherSafeZone(vectorXml: String, scale: Float): String {
-    val vpW = Regex("android:viewportWidth=\"([0-9.]+)\"").find(vectorXml)
-        ?.groupValues?.get(1)?.toFloatOrNull() ?: return vectorXml
-    val vpH = Regex("android:viewportHeight=\"([0-9.]+)\"").find(vectorXml)
-        ?.groupValues?.get(1)?.toFloatOrNull() ?: return vectorXml
-    val open = vectorXml.indexOf('>')
-    val close = vectorXml.lastIndexOf("</vector>")
-    if (open < 0 || close <= open) return vectorXml
-    val head = vectorXml.substring(0, open + 1)
-    val body = vectorXml.substring(open + 1, close)
-    val tail = vectorXml.substring(close)
-    return head + "\n<group android:pivotX=\"" + (vpW / 2f) + "\" android:pivotY=\"" + (vpH / 2f) +
-        "\" android:scaleX=\"" + scale + "\" android:scaleY=\"" + scale + "\">" +
-        body + "</group>\n" + tail
-}
-
-/** تحويل SVG إلى VectorDrawable بالمحوّل الرسمي (انعكاس: التوقيع يختلف بين إصدارات الأدوات) */
-fun convertSvgToVector(svg: File): String {
-    val className = "com.android.ide.common.vectordrawable.Svg2Vector"
-    val cls = try {
-        Class.forName(className)
-    } catch (_: ClassNotFoundException) {
-        Class.forName(className, true, Thread.currentThread().contextClassLoader)
-    }
-    val candidates = cls.methods.filter { it.name == "parseSvgToXml" && it.parameterCount == 2 }
-    val method = candidates.firstOrNull { it.parameterTypes[0] == Path::class.java }
-        ?: candidates.firstOrNull { it.parameterTypes[0] == File::class.java }
-        ?: error("لم أجد دالة التحويل parseSvgToXml في Svg2Vector")
-    val argument: Any =
-        if (method.parameterTypes[0] == Path::class.java) svg.toPath() else svg
-    val out = ByteArrayOutputStream()
-    val errorLog = method.invoke(null, argument, out) as? String ?: ""
-    if (errorLog.isNotBlank()) error(errorLog)
-    return out.toString("UTF-8")
-}
 
 android {
     sourceSets.getByName("main") {
         // موارد مولّدة: VectorDrawable + أيقونات تكيفية
         res.srcDir(File(launcherIconsOutDir, "res"))
-        // أصول مولّدة: فهرس الشعارات والألوان لواجهة الإعدادات
+        // أصول مولّدة: فهرس الشعارات والألوان لواجهة الإعدادات لاحقاً
         assets.srcDir(File(launcherIconsOutDir, "assets"))
     }
 }
@@ -221,11 +172,63 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
     group = "build"
     description = "يولّد أيقونات المشغّل من ملفات SVG في assets/launcher لكل لون خلفية"
     inputs.dir(launcherSvgDir).withPropertyName("launcherSvg")
-    outputs.dir(launcherIconsOutDir)
+    outputs.dir(launcherIconsOutDir).withPropertyName("launcherIcons")
 
     doLast {
-        val resRoot = File(launcherIconsOutDir, "res")
-        val assetsRoot = File(launcherIconsOutDir, "assets")
+        // مسارات من مدخلات/مخرجات المهمة نفسها (متوافق مع ذاكرة الإعدادات)
+        val svgDir = inputs.files.singleFile
+        val outRoot = outputs.files.singleFile
+
+        // ألوان خلفية الأيقونة: key للأيقونة، تسمية عربية، وHEX
+        val backgrounds = listOf(
+            Triple("blue", "أزرق", "#024EE7"),
+            Triple("teal", "أخضر مزرق", "#00897B"),
+            Triple("green", "أخضر", "#43A047"),
+            Triple("orange", "برتقالي", "#FB8C00"),
+            Triple("red", "أحمر", "#E53935"),
+            Triple("purple", "بنفسجي", "#8E24AA"),
+            Triple("indigo", "نيلي", "#3949AB"),
+            Triple("dark", "أسود", "#111111")
+        )
+        // منطقة الأمان للأيقونة التكيفية: يُصغَّر الشعار داخل الأيقونة
+        val iconScale = 0.72f
+
+        /** يُغلّف محتوى VectorDrawable بمجموعة تصغير حول مركز الأيقونة */
+        fun withSafeZone(vectorXml: String, scale: Float): String {
+            val vpW = Regex("android:viewportWidth=\"([0-9.]+)\"").find(vectorXml)
+                ?.groupValues?.get(1)?.toFloatOrNull() ?: return vectorXml
+            val vpH = Regex("android:viewportHeight=\"([0-9.]+)\"").find(vectorXml)
+                ?.groupValues?.get(1)?.toFloatOrNull() ?: return vectorXml
+            val open = vectorXml.indexOf('>')
+            val close = vectorXml.lastIndexOf("</vector>")
+            if (open < 0 || close <= open) return vectorXml
+            return vectorXml.substring(0, open + 1) +
+                "\n<group android:pivotX=\"" + (vpW / 2f) + "\" android:pivotY=\"" + (vpH / 2f) +
+                "\" android:scaleX=\"" + scale + "\" android:scaleY=\"" + scale + "\">" +
+                vectorXml.substring(open + 1, close) + "</group>\n" + vectorXml.substring(close)
+        }
+
+        /** تحويل SVG إلى VectorDrawable بالمحوّل الرسمي (انعكاس: التوقيع يختلف بين إصدارات الأدوات) */
+        fun convertSvg(svg: File): String {
+            val className = "com.android.ide.common.vectordrawable.Svg2Vector"
+            val cls = try {
+                Class.forName(className)
+            } catch (_: ClassNotFoundException) {
+                Class.forName(className, true, Thread.currentThread().contextClassLoader)
+            }
+            val candidates = cls.methods.filter { it.name == "parseSvgToXml" && it.parameterCount == 2 }
+            val method = candidates.firstOrNull { it.parameterTypes[0] == Path::class.java }
+                ?: candidates.firstOrNull { it.parameterTypes[0] == File::class.java }
+                ?: error("لم أجد دالة التحويل parseSvgToXml في Svg2Vector")
+            val argument: Any = if (method.parameterTypes[0] == Path::class.java) svg.toPath() else svg
+            val out = ByteArrayOutputStream()
+            val errorLog = method.invoke(null, argument, out) as? String ?: ""
+            if (errorLog.isNotBlank()) error(errorLog)
+            return out.toString("UTF-8")
+        }
+
+        val resRoot = File(outRoot, "res")
+        val assetsRoot = File(outRoot, "assets")
         resRoot.deleteRecursively()
         assetsRoot.deleteRecursively()
         val drawableDir = File(resRoot, "drawable").apply { mkdirs() }
@@ -233,7 +236,7 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
         assetsRoot.mkdirs()
 
         // ملف خلفية لكل لون
-        launcherIconBackgrounds.forEach { (colorKey, _, hex) ->
+        backgrounds.forEach { (colorKey, _, hex) ->
             File(drawableDir, "launcher_bg_$colorKey.xml").writeText(
                 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
                     "<shape xmlns:android=\"http://schemas.android.com/apk/res/android\" " +
@@ -244,13 +247,13 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
 
         val logoKeys = mutableListOf<String>()
         val iconNames = mutableListOf<String>()
-        launcherSvgDir.asFile.listFiles { f -> f.isFile && f.extension.equals("svg", true) }
+        svgDir.listFiles { f -> f.isFile && f.extension.equals("svg", true) }
             ?.sortedBy { it.name }
             ?.forEach { svg ->
                 val key = svg.nameWithoutExtension.lowercase().replace(Regex("[^a-z0-9_]"), "_")
                     .let { if (it.isEmpty() || it[0].isDigit()) "logo_$it" else it }
                 val vector = try {
-                    withLauncherSafeZone(convertSvgToVector(svg), launcherIconScale)
+                    withSafeZone(convertSvg(svg), iconScale)
                 } catch (e: Exception) {
                     logger.warn("تخطّي الشعار ${svg.name}: ${e.message}")
                     null
@@ -259,7 +262,7 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
                 File(drawableDir, "logo_${key}_foreground.xml").writeText(vector)
                 logoKeys += key
 
-                launcherIconBackgrounds.forEach { (colorKey, _, _) ->
+                backgrounds.forEach { (colorKey, _, _) ->
                     val iconName = "ic_launcher_logo_${key}_$colorKey"
                     File(mipmapDir, "$iconName.xml").writeText(
                         "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
@@ -278,7 +281,7 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
             append("{\n  \"logos\": [")
             append(logoKeys.joinToString(", ") { "{\"key\": \"$it\"}" })
             append("],\n  \"backgrounds\": [")
-            append(launcherIconBackgrounds.joinToString(", ") { (k, label, hex) ->
+            append(backgrounds.joinToString(", ") { (k, label, hex) ->
                 "{\"key\": \"$k\", \"label\": \"$label\", \"hex\": \"$hex\"}"
             })
             append("],\n  \"icons\": [")
@@ -288,7 +291,7 @@ val generateLauncherIcons = tasks.register("generateLauncherIcons") {
         File(assetsRoot, "launcher_icons.json").writeText(json)
 
         logger.lifecycle(
-            "أيقونات الشعارات: ${logoKeys.size} شعاراً × ${launcherIconBackgrounds.size} لوناً = " +
+            "أيقونات الشعارات: ${logoKeys.size} شعاراً × ${backgrounds.size} لوناً = " +
                 "${iconNames.size} أيقونة مكتملة"
         )
     }
