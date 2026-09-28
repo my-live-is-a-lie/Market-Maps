@@ -49,6 +49,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.marketmaps.app.data.FILTER_ALL
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.marketmaps.app.data.CategoryCatalog
 import com.marketmaps.app.data.CategoryData
 import com.marketmaps.app.data.AppPreferences
@@ -82,7 +83,7 @@ fun SearchBar(
     val categories by CategoryCatalog.categories.collectAsState()
     val mainFilters = listOf(FILTER_ALL) + categories.map { it.name }
 
-    val subFilters = remember(filterType) {
+    val subFilters = remember(filterType, categories) {
         if (filterType == FILTER_ALL) {
             emptyList()
         } else {
