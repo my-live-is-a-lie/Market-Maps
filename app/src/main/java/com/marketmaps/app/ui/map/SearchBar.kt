@@ -208,7 +208,6 @@ fun SearchBar(
                 )
             }
 
-            
             // سجل عمليات البحث السابقة
             if (query.isBlank() && recentSearches.isNotEmpty() && results.isEmpty()) {
                 Card(
@@ -244,27 +243,7 @@ fun SearchBar(
                 }
             }
 
-Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                quickFilters.forEach { name ->
-                    val selected = if (showingSubs) {
-                        if (name == FILTER_ALL) filterSub == FILTER_ALL else filterSub == name
-                    } else {
-                        filterType == name
-                    }
-                    val selectedColor = if (showingSubs) {
-                        if (name == FILTER_ALL) typeColor
-                        else Color(MarkerIconHelper.colorForCategory("$filterType $name"))
-                    } else {
-                        if (name == FILTER_ALL) MaterialTheme.colorScheme.primary
-                        else Color(MarkerIconHelper.colorForCategory(name))
-                    }
-Row(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
@@ -338,7 +317,6 @@ Row(
                         )
                     } else {
                         LazyColumn {
-                            // key: يحافظ على حالة العناصر ويتفادى إعادة رسمها كلها عند تغيّر ترتيب النتائج
                             items(results, key = { it.store.id }) { item ->
                                 Column(
                                     modifier = Modifier
