@@ -98,9 +98,11 @@ jobs:
           echo "=== 3) وجود الموارد داخل APK ==="
           APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -1)
           echo "APK=$APK"
-          IN_APK=$(unzip -l "$APK" | grep -cE "assets/mapsforge/dark.xml|raw/map_style_night|map_style_night")
-          unzip -l "$APK" | grep -E "assets/mapsforge/dark.xml|map_style_night" || true
-          echo "::error title=NIGHT_APK::موارد_الوضع_الليلي_في_APK=$IN_APK"
+          MATCH=$(unzip -l "$APK" | grep -E "assets/mapsforge/dark\.xml|map_style_night" || true)
+          echo "$MATCH"
+          COUNT=$(echo "$MATCH" | grep -c . || true)
+          echo "::error title=NIGHT_APK::عدد_الموارد=$COUNT سطور=[$(echo "$MATCH" | tr '\n' '|')]"
+          test "$COUNT" -ge 2
           echo "=== 4) الأدلة السابقة (الشعارات — لا تراجع) ==="
           LOGOS=$(find app/build/generated/launcherIcons/res/drawable -name "logo_*_foreground.xml" | sed 's|.*/||' | tr '\n' ' ')
           IC=$(find app/build/generated/launcherIcons/res/mipmap-anydpi-v26 -name "*.xml" | wc -l)
