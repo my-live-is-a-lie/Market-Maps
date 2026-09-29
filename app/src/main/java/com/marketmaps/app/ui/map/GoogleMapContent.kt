@@ -8,23 +8,30 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.key
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.Projection
 import com.google.android.gms.maps.GoogleMapOptions
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MapColorScheme
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.marketmaps.app.data.Store
@@ -54,10 +61,12 @@ fun GoogleMapContent(
     nightMode: Boolean = false,
     highlightedStoreId: String? = null,
     highlightScale: Float = 1f,
+    routePoints: List<RoutePoint> = emptyList(),
     onLongPress: (Double, Double) -> Unit,
     onMarkerClick: (Store) -> Unit,
     onCameraIdle: (Double, Double, Float) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onProjectionAvailable: (Projection?, IntSize) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
 
@@ -94,12 +103,30 @@ fun GoogleMapContent(
     var currentZoom by remember { mutableFloatStateOf(initialZoom) }
     var mapReady by remember { mutableStateOf(false) }
     var cameraHasMoved by remember { mutableStateOf(false) }
+    var mapSize by remember { mutableStateOf(IntSize.Zero) }
+    val projectionCallback = rememberUpdatedState(onProjectionAvailable)
 
     // عند تبديل الوضع الليلي تُنشأ الخريطة من جديد بمخطط ألوان جوجل الجديد
     LaunchedEffect(nightMode) { mapReady = false }
 
     LaunchedEffect(cameraPositionState.position.zoom) {
         currentZoom = cameraPositionState.position.zoom
+    }
+
+    LaunchedEffect(cameraPositionState.position, mapReady, mapSize) {
+        if (mapReady && mapSize != IntSize.Zero) {
+            projectionCallback.value(cameraPositionState.projection, mapSize)
+        }
+    }
+
+    LaunchedEffect(routePoints, mapReady) {
+        if (routePoints.size >= 2 && mapReady) {
+            val bounds = LatLngBounds.builder()
+            routePoints.forEach { point -> bounds.include(LatLng(point.latitude, point.longitude)) }
+            cameraPositionState.animate(
+                CameraUpdateFactory.newLatLngBounds(bounds.build(), 96)
+            )
+        }
     }
 
     // لا نحفظ الموقع قبل اكتمال التحميل وقبل أول حركة حقيقية
@@ -162,7 +189,7 @@ fun GoogleMapContent(
 
     key(nightMode) {
         GoogleMap(
-            modifier = modifier.fillMaxSize(),
+            modifier = modifier.fillMaxSize().onSizeChanged { mapSize = it },
             cameraPositionState = cameraPositionState,
             googleMapOptionsFactory = {
                 GoogleMapOptions().mapColorScheme(
@@ -181,6 +208,15 @@ fun GoogleMapContent(
                 if (isAddMode) onLongPress(latLng.latitude, latLng.longitude)
             }
         ) {
+            if (mapReady && routePoints.size >= 2) {
+                Polyline(
+                    points = routePoints.map { LatLng(it.latitude, it.longitude) },
+                    color = Color(0xFF1769E0),
+                    width = 7f,
+                    zIndex = 20f
+                )
+            }
+
             if (mapReady && mode != MarkerIconHelper.DisplayMode.HIDDEN) {
                 stores.forEach { store ->
                     val highlighted = highlightedStoreId != null && store.id == highlightedStoreId

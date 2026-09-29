@@ -130,7 +130,8 @@ class StoreRepository {
         return data
     }
 
-    private fun parseStore(id: String, data: Map<String, Any?>): Store {
+    private fun parseStore(id: String, data: Map<String, Any?>): Store? {
+        if (data["isDeleted"] == true) return null
         val createdRaw = data["createdAt"]
         val created = when (createdRaw) {
             is com.google.firebase.Timestamp -> createdRaw.toDate().time
@@ -179,10 +180,11 @@ class StoreRepository {
         }
     }
 
+    /** إخفاء المكان (حذف منطقي)؛ قواعد Firestore الحالية تمنع الحذف النهائي للمستندات. */
     suspend fun deleteStore(storeId: String): Result<Unit> {
         return try {
             if (storeId.isBlank()) return Result.failure(Exception("معرف المحل غير موجود"))
-            collection.document(storeId).delete().await()
+            collection.document(storeId).update("isDeleted", true).await()
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e

@@ -3,6 +3,9 @@ name: Build Debug APK
 # بناء يدوي فقط — نسخة Debug للاختبار
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - arena/01a0eaf3-market-maps
 
 concurrency:
   group: build-${{ github.ref }}
