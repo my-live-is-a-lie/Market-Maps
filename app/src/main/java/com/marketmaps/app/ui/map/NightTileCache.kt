@@ -148,11 +148,11 @@ class NightTileCache(
         private const val BLUE_BIAS = 12   // مياه: أزرق − أحمر
         private const val GREEN_BIAS = 8   // خضرة: أخضر − أحمر
         private const val WARM_BIAS = 20   // طرق سريعة/رمل: أحمر − أزرق
-        // أدنى من ذلك غالباً حبر داكن أصلاً؛ إبقاؤه دون تغيير يجعل التحسين idempotent
-        // حتى عند إعادة قراءة بلاطات سبق تحسينها من الكاش الدائم.
+        // نُغمّق درجات الحواف الرمادية المحيطة بالحروف، وتبقى النتيجة دون الحد الأدنى
+        // حتى لا يتكرر التحسين على البلاطات المحفوظة في الكاش الدائم.
         private const val INK_LUMA_MIN = 105
-        private const val INK_LUMA_MAX = 150
-        private const val INK_CONTRAST_FACTOR = 0.82f
+        private const val INK_LUMA_MAX = 180
+        private const val INK_CONTRAST_FACTOR = 0.58f
 
         /** ألوان النمط الليلي الرسمي من جوجل (حِزم RGB جاهزة) */
         private const val WATER = 0x17263C     // مياه

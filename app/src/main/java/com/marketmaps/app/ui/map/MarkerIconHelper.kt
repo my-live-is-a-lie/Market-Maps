@@ -53,8 +53,8 @@ object MarkerIconHelper {
     private val svgCache = ConcurrentHashMap<String, SVG>()
     private val missingSvgs = ConcurrentHashMap.newKeySet<String>()
 
-    // ألوان قريبة من تسميات نقاط الاهتمام في خرائط جوجل (الوضع الفاتح)
-    private val GOOGLE_LABEL_TEXT = Color.parseColor("#48707F")
+    // أسود فحمي عالي التباين فوق البلاطات الفاتحة، مع حد أبيض يفصله عن تفاصيل الخريطة.
+    private val GOOGLE_LABEL_TEXT = Color.parseColor("#202124")
     private const val GOOGLE_LABEL_STROKE = Color.WHITE
     // الوضع الليلي: نص فاتح بحد داكن رقيق — النص الداكن بحد أبيض سميك
     // فوق خريطة داكنة يصبح غير مقروء
