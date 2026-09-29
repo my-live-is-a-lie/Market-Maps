@@ -1,0 +1,136 @@
+name: Build Debug APK (branch)
+
+on:
+  push:
+    branches:
+      - arena/01a0e716-market-maps
+
+concurrency:
+  group: build-branch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Inject Google Maps API key
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: |
+          if [ -z "$MAPS_API_KEY" ]; then
+            echo "MAPS_API_KEY=" >> local.properties
+          else
+            echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
+          fi
+
+      - name: Build Debug APK (arm64-v8a only)
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace --no-daemon --build-cache 2>&1 | tee build.log
+
+      - name: Report compile errors
+        if: failure()
+        run: |
+          ERRS=$(grep -E "^e: |What went wrong" -A2 build.log | grep -vE "^\s+at " | head -60 || true)
+          [ -z "$ERRS" ] && ERRS=$(tail -40 build.log)
+          ERRS="${ERRS//'%'/'%25'}"; ERRS="${ERRS//$'\n'/'%0A'}"
+          echo "::error title=Build failed::$ERRS"
+
+      - name: "تحقق نهائي: الوضع الليلي من مخطط ألوان جوجل الرسمي + سلامة OSM"
+        if: always()
+        run: |
+          echo "=== 1) خرائط جوجل: MapColorScheme.DARK وإزالة النمط المخصص ==="
+          python3 - <<'PYEOF' || true
+          import os, re, sys
+
+          src = open('app/src/main/java/com/marketmaps/app/ui/map/GoogleMapContent.kt', encoding='utf-8').read()
+          theme = open('app/src/main/assets/mapsforge/dark.xml', encoding='utf-8').read().upper()
+          tiles = open('app/src/main/java/com/marketmaps/app/ui/map/NightTileCache.kt', encoding='utf-8').read()
+
+          # 1) خرائط جوجل: مخطط ألوان جوجل الرسمي بدل النمط المخصص (النمط المخصص يُلغي الوضع الداكن)
+          google_ok = (
+              'MapColorScheme.DARK' in src and 'MapColorScheme.LIGHT' in src
+              and 'googleMapOptionsFactory' in src and 'GoogleMapOptions()' in src and 'mapColorScheme(' in src
+              and 'key(nightMode)' in src
+          )
+          style_removed = ('MapStyleOptions' not in src) and ('map_style_night' not in src) and (
+              not os.path.exists('app/src/main/res/raw/map_style_night.json'))
+
+          # 2) OSM الأوفلاين: لوحة الليل قائمة كما هي
+          theme_need = {'أرض': '#242F3E', 'مياه': '#17263C', 'خضرة': '#263C3F', 'شوارع': '#38414E', 'طرق_سريعة': '#746855'}
+          theme_missing = [k for k, v in theme_need.items() if v not in theme]
+
+          # 3) بلاطات OSM المباشرة: تعيين العائلات اللونية لألوان جوجل
+          num = lambda pat: int(re.search(pat, tiles).group(1), 16)
+          water = num(r'WATER = 0x([0-9A-Fa-f]{6})')
+          park = num(r'PARK = 0x([0-9A-Fa-f]{6})')
+          highway = num(r'HIGHWAY = 0x([0-9A-Fa-f]{6})')
+          tiles_ok = (water == 0x17263C and park == 0x263C3F and highway == 0x746855
+                      and 'LOW_CHROMA_SPREAD' in tiles and 'CONTROL' in tiles)
+          tiles_txt = f"مياه=#{water:06X} خضرة=#{park:06X} طرق=#{highway:06X}"
+
+          failed = []
+          if not google_ok: failed.append('خرائط جوجل')
+          if not style_removed: failed.append('النمط المخصص')
+          if theme_missing: failed.append('ثيم OSM')
+          if not tiles_ok: failed.append('بلاطات OSM')
+
+          print(f"خرائط جوجل: مخطط_جوجل={google_ok} مخصص_مزال={style_removed}")
+          print(f"ثيم OSM: مفقود={theme_missing or 'لا شيء'}")
+          print(f"بلاطات OSM: {tiles_txt}")
+
+          for t, m in (('GOOGLE_SCHEME', f"مخطط_جوجل_الرسمي={'نعم' if google_ok else 'لا'} نمط_مخصص_مزال={'نعم' if style_removed else 'لا'} إعادة_إنشاء_عند_التبديل={'نعم' if 'key(nightMode)' in src else 'لا'}"),
+                       ('OFFLINE_THEME', f"مفقود={theme_missing or 'لا شيء'}"),
+                       ('OSM_TILES', f"{tiles_txt} مطابق={'نعم' if tiles_ok else 'لا'}")):
+              print(f"::error title={t}::{m}")
+
+          sys.exit(0 if not failed else 1)
+          PYEOF
+          echo "=== 2) داخل APK + الشعارات ==="
+          APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -1)
+          MAP=$(unzip -l "$APK" | grep -E "assets/mapsforge/dark\.xml" || true)
+          OLD=$(unzip -l "$APK" | grep -E "map_style_night" || true)
+          echo "$MAP"; echo "بقايا النمط المخصص: ${OLD:-لا شيء}"
+          echo "::error title=NIGHT_APK::خريطة_OSM_الليلية=[$(echo "$MAP" | awk '{print $NF}')] نمط_مخصص_في_APK=[${OLD:-لا شيء}]"
+          LOGOS=$(find app/build/generated/launcherIcons/res/drawable -name "logo_*_foreground.xml" | sed 's|.*/||' | tr '\n' ' ')
+          IC=$(find app/build/generated/launcherIcons/res/mipmap-anydpi-v26 -name "*.xml" | wc -l)
+          MERGED=$(find app/build/intermediates -name "AndroidManifest.xml" -path "*merged_manifest*" | head -1)
+          AL=$(grep -c "<activity-alias" "$MERGED" || echo 0)
+          echo "::error title=FINAL::شعارات=[$LOGOS] أيقونات=$IC aliases=$AL"
+
+      - name: Prepare APK for upload
+        if: success()
+        run: |
+          cp "$(find app/build/outputs/apk/debug -name '*.apk' | head -1)" ./MarketMaps-debug-arm64.apk
+          ls -lh ./MarketMaps-debug-arm64.apk
+
+      - name: Upload APK Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarketMaps-debug-arm64-branch
+          path: MarketMaps-debug-arm64.apk
+          if-no-files-found: error
+          retention-days: 14

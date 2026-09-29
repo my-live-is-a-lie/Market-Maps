@@ -12,20 +12,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.key
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMapOptions
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.MapStyleOptions
+import com.google.android.gms.maps.model.MapColorScheme
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
-import com.marketmaps.app.R
 import com.marketmaps.app.data.Store
 
 /**
@@ -59,18 +60,18 @@ fun GoogleMapContent(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    // نمط ليلي جاهز من موارد التطبيق (يُحمَّل مرة واحدة ويُعاد استخدامه)
-    val nightStyleOptions = remember {
-        runCatching {
-            MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style_night)
-        }.getOrNull()
-    }
-    val mapProperties = remember(nightMode, nightStyleOptions) {
-        MapProperties(
-            isMyLocationEnabled = false,
-            mapStyleOptions = if (nightMode) nightStyleOptions else null
-        )
-    }
+
+    /**
+     * الوضع الليلي من جوجل نفسه: **MapColorScheme.DARK** — نفس تلوين تطبيق خرائط جوجل
+     * الرسمي (الأنهار والخضرة والطرق وأيقونات الأماكن والتسميات بألوان جوجل الجديدة).
+     *
+     * سبب إزالة النمط المخصص (JSON): وثائق جوجل تنص أن النمط المخصص **يُلغي الوضع الداكن**،
+     * وهو أيضاً ما كان يُخفي أيقونات الأماكن والتسميات (النمط المخصص يستبدل تلوين جوجل).
+     *
+     * يُمرَّر المخطط عند إنشاء الخريطة، وتُعاد إنشاؤها عند تبديل الوضع فقط ([key])،
+     * وموضع الكاميرا محفوظ في cameraPositionState المُعرَّفة خارج key.
+     */
+    val mapProperties = remember { MapProperties(isMyLocationEnabled = false) }
 
     LaunchedEffect(Unit) {
         try {
@@ -93,6 +94,9 @@ fun GoogleMapContent(
     var currentZoom by remember { mutableFloatStateOf(initialZoom) }
     var mapReady by remember { mutableStateOf(false) }
     var cameraHasMoved by remember { mutableStateOf(false) }
+
+    // عند تبديل الوضع الليلي تُنشأ الخريطة من جديد بمخطط ألوان جوجل الجديد
+    LaunchedEffect(nightMode) { mapReady = false }
 
     LaunchedEffect(cameraPositionState.position.zoom) {
         currentZoom = cameraPositionState.position.zoom
@@ -156,49 +160,56 @@ fun GoogleMapContent(
         Offset(0.5f, 1.0f)
     }
 
-    GoogleMap(
-        modifier = modifier.fillMaxSize(),
-        cameraPositionState = cameraPositionState,
-        properties = mapProperties,
-        uiSettings = MapUiSettings(
-            zoomControlsEnabled = false,
-            myLocationButtonEnabled = false,
-            compassEnabled = true,
-            mapToolbarEnabled = false
-        ),
-        onMapLoaded = { mapReady = true },
-        onMapLongClick = { latLng ->
-            if (isAddMode) onLongPress(latLng.latitude, latLng.longitude)
-        }
-    ) {
-        if (mapReady && mode != MarkerIconHelper.DisplayMode.HIDDEN) {
-            stores.forEach { store ->
-                val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
-                val scale = if (highlighted) highlightScale else 1f
-                val icon = storeIcon(store, scale) ?: return@forEach
-                Marker(
-                    state = MarkerState(position = LatLng(store.latitude, store.longitude)),
-                    title = store.name,
-                    snippet = store.category,
-                    icon = icon,
-                    anchor = markerAnchor,
-                    zIndex = if (highlighted) 5f else 0f,
-                    onClick = {
-                        onMarkerClick(store)
-                        true
-                    }
+    key(nightMode) {
+        GoogleMap(
+            modifier = modifier.fillMaxSize(),
+            cameraPositionState = cameraPositionState,
+            googleMapOptionsFactory = {
+                GoogleMapOptions().mapColorScheme(
+                    if (nightMode) MapColorScheme.DARK else MapColorScheme.LIGHT
                 )
+            },
+            properties = mapProperties,
+            uiSettings = MapUiSettings(
+                zoomControlsEnabled = false,
+                myLocationButtonEnabled = false,
+                compassEnabled = true,
+                mapToolbarEnabled = false
+            ),
+            onMapLoaded = { mapReady = true },
+            onMapLongClick = { latLng ->
+                if (isAddMode) onLongPress(latLng.latitude, latLng.longitude)
             }
-
-            if (userLat != null && userLon != null) {
-                val uIcon = userIcon()
-                if (uIcon != null) {
+        ) {
+            if (mapReady && mode != MarkerIconHelper.DisplayMode.HIDDEN) {
+                stores.forEach { store ->
+                    val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
+                    val scale = if (highlighted) highlightScale else 1f
+                    val icon = storeIcon(store, scale) ?: return@forEach
                     Marker(
-                        state = MarkerState(position = LatLng(userLat, userLon)),
-                        title = "موقعي",
-                        icon = uIcon,
-                        anchor = Offset(0.5f, 1.0f)
+                        state = MarkerState(position = LatLng(store.latitude, store.longitude)),
+                        title = store.name,
+                        snippet = store.category,
+                        icon = icon,
+                        anchor = markerAnchor,
+                        zIndex = if (highlighted) 5f else 0f,
+                        onClick = {
+                            onMarkerClick(store)
+                            true
+                        }
                     )
+                }
+
+                if (userLat != null && userLon != null) {
+                    val uIcon = userIcon()
+                    if (uIcon != null) {
+                        Marker(
+                            state = MarkerState(position = LatLng(userLat, userLon)),
+                            title = "موقعي",
+                            icon = uIcon,
+                            anchor = Offset(0.5f, 1.0f)
+                        )
+                    }
                 }
             }
         }
