@@ -79,7 +79,8 @@ fun AddStoreDialog(
         newPhotoUris: List<Uri>,
         existingPhotoUrls: List<String>,
         onComplete: (success: Boolean) -> Unit
-    ) -> Unit
+    ) -> Unit,
+    onDelete: (((success: Boolean) -> Unit) -> Unit)? = null
 ) {
     val isEditMode = initialStore != null
     val categories by CategoryCatalog.categories.collectAsState()
@@ -87,21 +88,23 @@ fun AddStoreDialog(
         parseCategoryPath(initialStore?.category.orEmpty())
     }
 
-    var isSaving by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf(initialStore?.name ?: "") }
-    var description by remember { mutableStateOf(initialStore?.description ?: "") }
+    var isSaving by remember(initialStore?.id) { mutableStateOf(false) }
+    var isDeleting by remember(initialStore?.id) { mutableStateOf(false) }
+    var showDeleteConfirmation by remember(initialStore?.id) { mutableStateOf(false) }
+    var name by remember(initialStore?.id) { mutableStateOf(initialStore?.name ?: "") }
+    var description by remember(initialStore?.id) { mutableStateOf(initialStore?.description ?: "") }
 
-    var selectedLevel1 by remember { mutableStateOf(parsed.first) }
-    var expanded1 by remember { mutableStateOf(false) }
-    var selectedLevel2 by remember { mutableStateOf(parsed.second) }
-    var expanded2 by remember { mutableStateOf(false) }
-    var selectedLevel3 by remember { mutableStateOf(parsed.third) }
-    var expanded3 by remember { mutableStateOf(false) }
+    var selectedLevel1 by remember(initialStore?.id) { mutableStateOf(parsed.first) }
+    var expanded1 by remember(initialStore?.id) { mutableStateOf(false) }
+    var selectedLevel2 by remember(initialStore?.id) { mutableStateOf(parsed.second) }
+    var expanded2 by remember(initialStore?.id) { mutableStateOf(false) }
+    var selectedLevel3 by remember(initialStore?.id) { mutableStateOf(parsed.third) }
+    var expanded3 by remember(initialStore?.id) { mutableStateOf(false) }
 
-    var existingPhotos by remember {
+    var existingPhotos by remember(initialStore?.id) {
         mutableStateOf(initialStore?.photoUrls.orEmpty())
     }
-    var newPhotoUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var newPhotoUris by remember(initialStore?.id) { mutableStateOf<List<Uri>>(emptyList()) }
 
     val slotsLeft = (MAX_PHOTOS - existingPhotos.size - newPhotoUris.size).coerceAtLeast(0)
 
@@ -127,7 +130,7 @@ fun AddStoreDialog(
     }
 
     AlertDialog(
-        onDismissRequest = { if (!isSaving) onDismiss() },
+        onDismissRequest = { if (!isSaving && !isDeleting) onDismiss() },
         title = { Text(if (isEditMode) "تعديل موقع" else "إضافة موقع جديد") },
         text = {
             Column(
@@ -289,6 +292,16 @@ fun AddStoreDialog(
                     }
                 }
 
+                if (isEditMode && onDelete != null) {
+                    OutlinedButton(
+                        onClick = { showDeleteConfirmation = true },
+                        enabled = !isSaving && !isDeleting,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("حذف المكان", color = Color(0xFFB3261E))
+                    }
+                }
+
                 Text(
                     text = String.format(
                         Locale.US,
@@ -315,7 +328,7 @@ fun AddStoreDialog(
                         isSaving = false
                     }
                 },
-                enabled = isValid && !isSaving
+                enabled = isValid && !isSaving && !isDeleting
             ) {
                 if (isSaving) {
                     CircularProgressIndicator(
@@ -328,11 +341,47 @@ fun AddStoreDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isSaving) {
+            TextButton(onClick = onDismiss, enabled = !isSaving && !isDeleting) {
                 Text("إلغاء")
             }
         }
     )
+
+    if (showDeleteConfirmation && isEditMode && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { if (!isDeleting) showDeleteConfirmation = false },
+            title = { Text("تأكيد حذف المكان") },
+            text = { Text("سيتم حذف «${initialStore?.name.orEmpty()}» من الخريطة وقوائم الأماكن. هل تريد المتابعة؟") },
+            confirmButton = {
+                TextButton(
+                    enabled = !isDeleting,
+                    onClick = {
+                        if (isDeleting) return@TextButton
+                        isDeleting = true
+                        onDelete { success ->
+                            isDeleting = false
+                            if (success) {
+                                showDeleteConfirmation = false
+                                onDismiss()
+                            }
+                        }
+                    }
+                ) {
+                    if (isDeleting) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("حذف المكان", color = Color(0xFFB3261E))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmation = false },
+                    enabled = !isDeleting
+                ) { Text("إلغاء") }
+            }
+        )
+    }
 }
 
 @Composable

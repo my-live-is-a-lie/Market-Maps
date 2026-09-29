@@ -1,6 +1,7 @@
 package com.marketmaps.app.ui.map
 
 import android.Manifest
+import android.graphics.Point
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.material3.Surface
@@ -117,12 +118,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.maps.Projection as GoogleProjection
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.marketmaps.app.data.FILTER_ALL
@@ -217,6 +220,8 @@ fun MapScreen(
     var mapCenterZoom by remember { mutableDoubleStateOf(0.0) }
     var selectedLon by remember { mutableDoubleStateOf(0.0) }
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+    var googleProjection by remember { mutableStateOf<GoogleProjection?>(null) }
+    var googleMapSize by remember { mutableStateOf(IntSize.Zero) }
     var stores by remember { mutableStateOf<List<Store>>(emptyList()) }
     // rememberSaveable: نص البحث والفلاتر تبقى بعد تدوير الشاشة أو إغلاق النظام للتطبيق في الخلفية
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -683,7 +688,11 @@ fun MapScreen(
                             appPreferences.saveLastLocation(lat, lon, zoom.toDouble())
                         }
                     },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    onProjectionAvailable = { projection, size ->
+                        googleProjection = projection
+                        googleMapSize = size
+                    }
                 )
             } else {
             AndroidView(
@@ -1010,11 +1019,25 @@ fun MapScreen(
                                 val c = mv.mapViewProjection.fromPixels(x, y)
                                 lat = c.latitude
                                 lon = c.longitude
+                            } else if (
+                                mapProvider == MapProvider.GOOGLE &&
+                                googleProjection != null && googleMapSize != IntSize.Zero
+                            ) {
+                                // الإسقاط الحقيقي يراعي كثافة الشاشة ودوران/ميل الخريطة؛
+                                // الحساب التقريبي كان يزيح المكان عن رأس المؤشر.
+                                val point = Point(
+                                    (googleMapSize.width / 2f + pinOffsetX).roundToInt(),
+                                    (googleMapSize.height / 2f + pinOffsetY).roundToInt()
+                                )
+                                val coordinate = googleProjection!!.fromScreenLocation(point)
+                                lat = coordinate.latitude
+                                lon = coordinate.longitude
                             } else {
-                                // تقريب للإزاحة على خرائط جوجل من مركز الكاميرا وزومها الحقيقي
+                                // بديل تقريبي في حال لم يجهز إسقاط خرائط جوجل بعد.
                                 val z = mapCenterZoom.takeIf { it > 0.0 }
                                     ?: mapsforgeZoom.toDouble().coerceAtLeast(1.0)
-                                val mpp = 156543.03392 * kotlin.math.cos(Math.toRadians(mapCenterLat)) / Math.pow(2.0, z)
+                                val mpp = 156543.03392 * kotlin.math.cos(Math.toRadians(mapCenterLat)) /
+                                    (Math.pow(2.0, z) * density.density)
                                 lat = mapCenterLat - (pinOffsetY * mpp / 111320.0)
                                 lon = mapCenterLon + (pinOffsetX * mpp / (111320.0 * kotlin.math.cos(Math.toRadians(mapCenterLat)).coerceAtLeast(0.01)))
                             }
@@ -1066,6 +1089,26 @@ fun MapScreen(
                 AddStoreDialog(
                     latitude = store.latitude, longitude = store.longitude, initialStore = store,
                     onDismiss = { storeToEdit = null },
+                    onDelete = { onComplete ->
+                        scope.launch {
+                            val result = storeRepository.deleteStore(store.id)
+                            if (result.isSuccess) {
+                                Toast.makeText(context, "تم حذف المكان", Toast.LENGTH_SHORT).show()
+                                storeToEdit = null
+                                selectedStore = null
+                                detailsCardHeightPx = 0
+                                routePlan = null
+                                routeDestinationStoreId = null
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "تعذر حذف المكان: ${result.exceptionOrNull()?.message.orEmpty()}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                            onComplete(result.isSuccess)
+                        }
+                    },
                     onSave = { name, categoryPath, description, newPhotoUris, existingPhotoUrls, onComplete ->
                         scope.launch {
                             var photos = existingPhotoUrls

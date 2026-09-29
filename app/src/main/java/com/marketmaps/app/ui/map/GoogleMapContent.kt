@@ -8,13 +8,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.key
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.Projection
 import com.google.android.gms.maps.GoogleMapOptions
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.model.BitmapDescriptor
@@ -61,7 +65,8 @@ fun GoogleMapContent(
     onLongPress: (Double, Double) -> Unit,
     onMarkerClick: (Store) -> Unit,
     onCameraIdle: (Double, Double, Float) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onProjectionAvailable: (Projection?, IntSize) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
 
@@ -98,12 +103,20 @@ fun GoogleMapContent(
     var currentZoom by remember { mutableFloatStateOf(initialZoom) }
     var mapReady by remember { mutableStateOf(false) }
     var cameraHasMoved by remember { mutableStateOf(false) }
+    var mapSize by remember { mutableStateOf(IntSize.Zero) }
+    val projectionCallback = rememberUpdatedState(onProjectionAvailable)
 
     // عند تبديل الوضع الليلي تُنشأ الخريطة من جديد بمخطط ألوان جوجل الجديد
     LaunchedEffect(nightMode) { mapReady = false }
 
     LaunchedEffect(cameraPositionState.position.zoom) {
         currentZoom = cameraPositionState.position.zoom
+    }
+
+    LaunchedEffect(cameraPositionState.position, mapReady, mapSize) {
+        if (mapReady && mapSize != IntSize.Zero) {
+            projectionCallback.value(cameraPositionState.projection, mapSize)
+        }
     }
 
     LaunchedEffect(routePoints, mapReady) {
@@ -176,7 +189,7 @@ fun GoogleMapContent(
 
     key(nightMode) {
         GoogleMap(
-            modifier = modifier.fillMaxSize(),
+            modifier = modifier.fillMaxSize().onSizeChanged { mapSize = it },
             cameraPositionState = cameraPositionState,
             googleMapOptionsFactory = {
                 GoogleMapOptions().mapColorScheme(
