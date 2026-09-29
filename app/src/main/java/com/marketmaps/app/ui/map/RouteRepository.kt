@@ -20,6 +20,8 @@ data class RoutePlan(
 object RouteRepository {
     private const val BASE_URL = "https://router.project-osrm.org/route/v1/driving"
 
+    private fun coordinate(value: Double): String = String.format(Locale.US, "%.6f", value)
+
     suspend fun fetchDrivingRoute(
         originLatitude: Double,
         originLongitude: Double,
