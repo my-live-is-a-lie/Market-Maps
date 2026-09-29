@@ -35,6 +35,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.clickable
@@ -50,6 +51,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -60,6 +62,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -91,6 +94,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
@@ -104,10 +108,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.viewinterop.AndroidView
@@ -122,6 +129,7 @@ import com.marketmaps.app.data.FILTER_ALL
 import com.marketmaps.app.data.AppPreferences
 import com.marketmaps.app.data.SavedLocation
 import com.marketmaps.app.data.AppSettings
+import com.marketmaps.app.data.AppThemeMode
 import com.marketmaps.app.data.MapDownloader
 import com.marketmaps.app.data.MapProvider
 import com.marketmaps.app.data.DrawerSide
@@ -202,6 +210,8 @@ fun MapScreen(
     var selectedLat by remember { mutableDoubleStateOf(0.0) }
     var mapCenterLat by remember { mutableDoubleStateOf(0.0) }
     var mapCenterLon by remember { mutableDoubleStateOf(0.0) }
+    // زوم كاميرا خرائط جوجل (يُحدَّث من onCameraIdle) — لتحويل إزاحة المؤشر إلى إحداثيات
+    var mapCenterZoom by remember { mutableDoubleStateOf(0.0) }
     var selectedLon by remember { mutableDoubleStateOf(0.0) }
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
     var stores by remember { mutableStateOf<List<Store>>(emptyList()) }
@@ -248,14 +258,34 @@ fun MapScreen(
     }
     var cameraTarget by remember { mutableStateOf<CameraTarget?>(null) }
     var detailsCardHeightPx by remember { mutableIntStateOf(0) }
+    // ارتفاع بطاقة الإضافة السفلية (لرفع زر الزائد وبطاقة التفاصيل فوقها)
+    var addSheetHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val detailsCardVisible = selectedStore != null
-    val cardLiftTargetPx = if (detailsCardVisible) {
-        val hPx = if (detailsCardHeightPx > 0) detailsCardHeightPx.toFloat()
-        else with(density) { 128.dp.toPx() }
-        hPx + with(density) { 8.dp.toPx() }
-    } else 0f
+    val addSheetHeightPxResolved = if (addSheetHeightPx > 0) addSheetHeightPx.toFloat()
+    else with(density) { 176.dp.toPx() }
+    val cardGapPx = with(density) { 8.dp.toPx() }
+    // ارتفاع القائمة + هامشها السفلي، وهو ما يجب أن يرتفع به ما فوقها
+    val addSheetLiftPx = addSheetHeightPxResolved +
+        with(density) { AddSheetMarginBottom.toPx() } + cardGapPx
+    // بطاقة تفاصيل المحل تُرفع فوق بطاقة الإضافة عند ظهورهما معاً فلا تختفي إحداهما
+    val detailsCardLiftPx = if (showAddPlaceSheet && detailsCardVisible) addSheetLiftPx else 0f
+    val cardLiftTargetPx = when {
+        detailsCardVisible -> {
+            val hPx = if (detailsCardHeightPx > 0) detailsCardHeightPx.toFloat()
+            else with(density) { 128.dp.toPx() }
+            hPx + cardGapPx + detailsCardLiftPx
+        }
+        showAddPlaceSheet -> addSheetLiftPx
+        else -> 0f
+    }
     val cardLiftAnim = remember { Animatable(0f) }
+    // رفع بطاقة التفاصيل فوق بطاقة الإضافة (متحرك حتى لا تقفز)
+    val detailsCardLift by animateIntOffsetAsState(
+        targetValue = IntOffset(0, -detailsCardLiftPx.roundToInt()),
+        animationSpec = tween(durationMillis = 220),
+        label = "detailsCardLift"
+    )
     LaunchedEffect(cardLiftTargetPx) {
         cardLiftAnim.animateTo(
             cardLiftTargetPx,
@@ -402,10 +432,14 @@ fun MapScreen(
         }
     }
 
+    // الوضع الليلي للخرائط: يُطبَّق فقط عندما يكون النمط غامقاً أو مظلماً —
+    // في الوضع الفاتح تبقى الخريطة فاتحة حتى لو كان الخيار مفعّلاً.
+    val mapNight = settings.mapNightMode && settings.themeMode != AppThemeMode.LIGHT
+
     // لا حاجة لنقل Mapsforge للموقع المحفوظ بعد إنشائها: الخريطة لا تُنشأ إلا بعد
     // قراءة الموقع (locationReady)، فالموضع الأولي في factory صحيح من البداية.
 
-    LaunchedEffect(offlineMode, mapViewRef, mapProvider, activeMapFileName) {
+    LaunchedEffect(offlineMode, mapViewRef, mapProvider, activeMapFileName, mapNight) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
         val mapView = mapViewRef ?: return@LaunchedEffect
         val bundle = layerBundle ?: return@LaunchedEffect
@@ -414,13 +448,13 @@ fun MapScreen(
             val anyFile = preferred
                 ?: MapDownloader.listDownloaded(context).firstOrNull()?.fileName
             if (anyFile != null) {
-                MapLayerHelper.applyOffline(context, mapView, bundle, anyFile)
+                MapLayerHelper.applyOffline(context, mapView, bundle, anyFile, night = mapNight)
             } else {
                 Toast.makeText(context, "لا توجد خريطة محمّلة. حمّلها من الإعدادات.", Toast.LENGTH_LONG).show()
-                MapLayerHelper.applyOnline(mapView, bundle)
+                MapLayerHelper.applyOnline(mapView, bundle, night = mapNight)
             }
         } else {
-            MapLayerHelper.applyOnline(mapView, bundle)
+            MapLayerHelper.applyOnline(mapView, bundle, night = mapNight)
         }
         // تبديل الوضع يتم عادة من الإعدادات والخريطة مغطاة: applyOnline يشغّل الطبقة
         // الجديدة، فنوقفها حتى العودة إلى الخريطة.
@@ -431,10 +465,16 @@ fun MapScreen(
     // mapsforgeZoom جزء من المفاتيح: تغيّر مستوى التكبير يعيد بناء العلامات بالحجم
     // الجديد مع الإبقاء على العلامة المميزة (كان مراقب التكبير يمرر null فيضيع التمييز).
     // LaunchedEffect يلغي أي بناء سابق لم يكتمل عند تغيّر أي مفتاح.
-    LaunchedEffect(mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId, highlightScaleBucket, mapsforgeZoom) {
+    LaunchedEffect(
+        mapViewRef, stores, userLat, userLon, mapProvider, highlightedStoreId,
+        highlightScaleBucket, mapsforgeZoom, showMarkerLabels, mapNight
+    ) {
         if (mapProvider != MapProvider.MAPSFORGE) return@LaunchedEffect
         val mapView = mapViewRef ?: return@LaunchedEffect
-        updateMapsforgeMarkers(mapView, stores, userLat, userLon, highlightedStoreId, highlightScaleBucket)
+        updateMapsforgeMarkers(
+            mapView, stores, userLat, userLon, highlightedStoreId, highlightScaleBucket,
+            showLabels = showMarkerLabels, night = mapNight
+        )
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -464,6 +504,15 @@ fun MapScreen(
     val initialLat = savedLocation?.lat ?: 30.0444
     val initialLon = savedLocation?.lon ?: 31.2357
     val initialZoom = (savedLocation?.zoom ?: 14.0).toFloat()
+
+    // مركز الكاميرا وزومها قبل أول حركة (يستعملهما خيار «اختر موقع المؤشر»)
+    LaunchedEffect(initialLat, initialLon, initialZoom) {
+        if (mapCenterZoom <= 0.0) {
+            mapCenterLat = initialLat
+            mapCenterLon = initialLon
+            mapCenterZoom = initialZoom.toDouble()
+        }
+    }
 
 
     // زر الرجوع يغلق الطبقات المفتوحة أولاً بدل الخروج من التطبيق
@@ -502,6 +551,7 @@ fun MapScreen(
                     cameraTarget = cameraTarget,
                     isAddMode = false,
                     showLabels = showMarkerLabels,
+                    nightMode = mapNight,
                     highlightedStoreId = highlightedStoreId,
                     highlightScale = highlightScale,
                     onLongPress = { lat, lon ->
@@ -516,6 +566,7 @@ fun MapScreen(
                     onCameraIdle = { lat, lon, zoom ->
                         mapCenterLat = lat
                         mapCenterLon = lon
+                        mapCenterZoom = zoom.toDouble()
                         scope.launch {
                             appPreferences.saveLastLocation(lat, lon, zoom.toDouble())
                         }
@@ -535,7 +586,8 @@ fun MapScreen(
                     }
                     val bundle = MapLayerHelper.createBundle(ctx, mapView)
                     layerBundle = bundle
-                    MapLayerHelper.applyOnline(mapView, bundle)
+                    // الحالة الأولية: ستُصحَّح فوراً في LaunchedEffect أدناه حسب الإعداد والنمط
+                    MapLayerHelper.applyOnline(mapView, bundle, night = mapNight)
                     mapView.model.mapViewPosition.setCenter(LatLong(initialLat, initialLon))
                     mapCenterLat = initialLat
                     mapCenterLon = initialLon
@@ -679,7 +731,8 @@ fun MapScreen(
                     .align(Alignment.BottomStart)
                     .padding(start = 16.dp, bottom = 16.dp, end = 16.dp)
                     .offset(cardLiftOffset)
-                    .zIndex(15f),
+                    // أعلى من بطاقة الإضافة (18f) ليبقى زر الزائد ظاهراً فوقها
+                    .zIndex(19f),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -785,67 +838,81 @@ fun MapScreen(
 
             // تبقى قائمة الإضافة ظاهرة حتى لو فُتح نموذج التفاصيل
             if (showAddPlaceSheet) {
-                AddPlaceBottomSheet(
-                    onDismiss = {
-                        if (!showAddDialog) showAddPlaceSheet = false
-                    },
-                    onPickCurrentLocation = {
-                        // صلاحية + GPS
-                        val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
-                        val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
-                        if (fine != PackageManager.PERMISSION_GRANTED && coarse != PackageManager.PERMISSION_GRANTED) {
-                            Toast.makeText(context, "يلزم السماح بالوصول للموقع", Toast.LENGTH_LONG).show()
-                            locationPermissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION
-                                )
-                            )
-                            return@AddPlaceBottomSheet
-                        }
-                        if (!isLocationEnabled(context)) {
-                            Toast.makeText(context, "فعّل خدمة الموقع (GPS) لاستخدام هذا الخيار", Toast.LENGTH_LONG).show()
-                            try {
-                                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                            } catch (_: Exception) {
-                            }
-                            return@AddPlaceBottomSheet
-                        }
-                        moveToCurrentLocation(context) { lat, lon ->
-                            userLat = lat
-                            userLon = lon
-                            moveCamera(lat, lon, 18f)
-                            selectedLat = lat
-                            selectedLon = lon
-                            // لا تُغلق بطاقة الإضافة عند فتح النموذج
-                            showAddDialog = true
-                        }
-                    },
-                    onPickPinLocation = {
-                        val lat: Double
-                        val lon: Double
-                        val mv = mapViewRef
-                        if (mapProvider == MapProvider.MAPSFORGE && mv != null && mv.width > 0) {
-                            val x = mv.width / 2.0 + pinOffsetX
-                            val y = mv.height / 2.0 + pinOffsetY
-                            val c = mv.mapViewProjection.fromPixels(x, y)
-                            lat = c.latitude
-                            lon = c.longitude
-                        } else {
-                            // تقريب للإزاحة على خرائط جوجل من مركز الكاميرا
-                            val z = mapsforgeZoom.toDouble().coerceAtLeast(1.0)
-                            val mpp = 156543.03392 * kotlin.math.cos(Math.toRadians(mapCenterLat)) / Math.pow(2.0, z)
-                            lat = mapCenterLat - (pinOffsetY * mpp / 111320.0)
-                            lon = mapCenterLon + (pinOffsetX * mpp / (111320.0 * kotlin.math.cos(Math.toRadians(mapCenterLat)).coerceAtLeast(0.01)))
-                        }
-                        selectedLat = lat
-                        selectedLon = lon
-                        showAddDialog = true
-                    },
+                // هامش خارجي صغير حول البطاقة فتبدو عائمة وتظهر حوافها الأربع
+                Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
+                        .padding(
+                            start = AddSheetMarginHorizontal,
+                            end = AddSheetMarginHorizontal,
+                            bottom = AddSheetMarginBottom
+                        )
                         .zIndex(18f)
-                )
+                ) {
+                    AddPlaceBottomSheet(
+                        onDismiss = {
+                            if (!showAddDialog) showAddPlaceSheet = false
+                        },
+                        onPickCurrentLocation = {
+                            // صلاحية + GPS
+                            val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                            val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+                            if (fine != PackageManager.PERMISSION_GRANTED && coarse != PackageManager.PERMISSION_GRANTED) {
+                                Toast.makeText(context, "يلزم السماح بالوصول للموقع", Toast.LENGTH_LONG).show()
+                                locationPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                                return@AddPlaceBottomSheet
+                            }
+                            if (!isLocationEnabled(context)) {
+                                Toast.makeText(context, "فعّل خدمة الموقع (GPS) لاستخدام هذا الخيار", Toast.LENGTH_LONG).show()
+                                try {
+                                    context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                                } catch (_: Exception) {
+                                }
+                                return@AddPlaceBottomSheet
+                            }
+                            moveToCurrentLocation(context) { lat, lon ->
+                                userLat = lat
+                                userLon = lon
+                                // النقطة البيضاء هي إحداثيات المكان، فنجعلها في مركز الشاشة بالضبط
+                                pinOffsetX = 0f
+                                pinOffsetY = 0f
+                                moveCamera(lat, lon, 18f)
+                                selectedLat = lat
+                                selectedLon = lon
+                                // لا تُغلق بطاقة الإضافة عند فتح النموذج
+                                showAddDialog = true
+                            }
+                        },
+                        onPickPinLocation = {
+                            val lat: Double
+                            val lon: Double
+                            val mv = mapViewRef
+                            if (mapProvider == MapProvider.MAPSFORGE && mv != null && mv.width > 0) {
+                                val x = mv.width / 2.0 + pinOffsetX
+                                val y = mv.height / 2.0 + pinOffsetY
+                                val c = mv.mapViewProjection.fromPixels(x, y)
+                                lat = c.latitude
+                                lon = c.longitude
+                            } else {
+                                // تقريب للإزاحة على خرائط جوجل من مركز الكاميرا وزومها الحقيقي
+                                val z = mapCenterZoom.takeIf { it > 0.0 }
+                                    ?: mapsforgeZoom.toDouble().coerceAtLeast(1.0)
+                                val mpp = 156543.03392 * kotlin.math.cos(Math.toRadians(mapCenterLat)) / Math.pow(2.0, z)
+                                lat = mapCenterLat - (pinOffsetY * mpp / 111320.0)
+                                lon = mapCenterLon + (pinOffsetX * mpp / (111320.0 * kotlin.math.cos(Math.toRadians(mapCenterLat)).coerceAtLeast(0.01)))
+                            }
+                            selectedLat = lat
+                            selectedLon = lon
+                            showAddDialog = true
+                        },
+                        onHeightChanged = { addSheetHeightPx = it }
+                    )
+                }
             }
 
             if (showAddDialog) {
@@ -871,7 +938,8 @@ fun MapScreen(
                                     }
                                 }
                                 Toast.makeText(context, "تم حفظ الموقع بنجاح", Toast.LENGTH_SHORT).show()
-                                showAddDialog = false; showAddPlaceSheet = false
+                                // بطاقة الإضافة تبقى مفتوحة بعد إضافة محل (كما طُلب)
+                                showAddDialog = false
                                 onComplete(true)
                             } else {
                                 Toast.makeText(context, "فشل الحفظ: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
@@ -931,7 +999,10 @@ fun MapScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
-                        .zIndex(12f)
+                        // فوق بطاقة الإضافة (18f) ودون اللوحة الجانبية (20f)
+                        .zIndex(19.5f)
+                        // ترتفع فوق بطاقة الإضافة عند ظهورهما معاً (كانت تختفي خلفها)
+                        .absoluteOffset { detailsCardLift }
                 )
             }
         }
@@ -973,11 +1044,13 @@ private suspend fun updateMapsforgeMarkers(
     userLat: Double?,
     userLon: Double?,
     highlightedStoreId: String?,
-    highlightScale: Float
+    highlightScale: Float,
+    showLabels: Boolean,
+    night: Boolean
 ) {
     val zoom = mapView.model.mapViewPosition.zoomLevel.toInt()
     val newMarkers = withContext(Dispatchers.Default) {
-        buildMapsforgeMarkers(stores, zoom, userLat, userLon, highlightedStoreId, highlightScale)
+        buildMapsforgeMarkers(stores, zoom, userLat, userLon, highlightedStoreId, highlightScale, showLabels, night)
     }
     val layers = mapView.layerManager.layers
     val oldMarkers = layers.filterIsInstance<Marker>()
@@ -992,7 +1065,9 @@ private fun buildMapsforgeMarkers(
     userLat: Double?,
     userLon: Double?,
     highlightedStoreId: String?,
-    highlightScale: Float
+    highlightScale: Float,
+    showLabels: Boolean,
+    night: Boolean
 ): List<Layer> {
     val out = ArrayList<Layer>(stores.size + 1)
     val mode = MarkerIconHelper.displayModeForZoom(zoom)
@@ -1003,11 +1078,23 @@ private fun buildMapsforgeMarkers(
         for (store in stores) {
             val highlighted = highlightedStoreId != null && store.id == highlightedStoreId
             // المميز يُرسم بحجمه المكبَّر مباشرة من الـ SVG (بدل createScaledBitmap)
-            val size = if (highlighted) (sizePx * highlightScale).roundToInt() else sizePx
+            val scale = if (highlighted) highlightScale else 1f
+            val size = (sizePx * scale).roundToInt()
             val bitmap = logged(TAG, "أيقونة ${store.category}") {
-                MarkerIconHelper.getMarkerBitmap(store.category, mode, size)
+                if (showLabels && mode != MarkerIconHelper.DisplayMode.CIRCLE) {
+                    MarkerIconHelper.getMarkerBitmapWithLabel(store.category, store.name, mode, scale, night)
+                } else {
+                    MarkerIconHelper.getMarkerBitmap(store.category, mode, size)
+                }
             } ?: continue
-            val marker = Marker(LatLong(store.latitude, store.longitude), bitmap, 0, -bitmap.height / 2)
+            // العلامة تُثبّت من طرف الشعار (أسفله) لا من مركز الصورة: الصورة قد
+            // تحمل الاسم أسفل الأيقونة، فتُحسب الإزاحة من ارتفاع الشعار نفسه.
+            val marker = Marker(
+                LatLong(store.latitude, store.longitude),
+                bitmap,
+                0,
+                bitmap.height / 2 - size
+            )
             if (highlighted) highlightedMarker = marker else out.add(marker)
         }
         // المميز آخراً حتى يُرسم فوق البقية
@@ -1059,9 +1146,30 @@ private fun isLocationEnabled(context: Context): Boolean {
     }
 }
 
-/**
- * مؤشر الإضافة: السهم فوق والنقطة أسفله = موقع الإحداثيات (تحت الإصبع عند التمرير).
- */
+// مؤشر إضافة المكان — ثلاث قطع كما في التصميم:
+// 1) النقطة البيضاء بإطار لون التمييز (أعلى) = إحداثيات المكان المُضاف.
+// 2) السهم ورأسه ملاصق للنقطة ويشير إليها.
+// 3) نقطة الإصبع أسفل السهم: هي التي يمسكها الإصبع، فيبقى السهم أمام الإصبع لا تحته.
+// القطع الثلاث تتحرك معاً، ومساحة السحب تغطيها كلها فيعمل السحب من نقطة الإصبع نفسها.
+/** المؤشر مصغّر 20% عن المقاسات السابقة (14/24/22dp) */
+private const val AddPinScale = 0.8f
+private val AddPinPointSize = 14.dp * AddPinScale
+private val AddPinPointBorder = 2.dp * AddPinScale
+private val AddPinArrowSize = 24.dp * AddPinScale
+private val AddPinDotSize = 22.dp * AddPinScale
+
+/** داخل صورة السهم فراغ أعلى وأسفل؛ هاتان النسبتان تحدّدان رأس السهم وقاعدته */
+private val AddPinArrowApexInset = AddPinArrowSize * 0.166f
+private val AddPinArrowBaseInset = AddPinArrowSize * 0.78f
+
+/** بين حافة النقطة ورأس السهم، وبين قاعدة السهم وحافة نقطة الإصبع */
+private val AddPinGapPointToArrow = 1.dp * AddPinScale
+private val AddPinGapArrowToDot = 6.dp * AddPinScale
+
+/** هامش لمس مريح حول القطع */
+private val AddPinTouchPadding = 10.dp * AddPinScale
+private val AddPinTouchWidth = 44.dp * AddPinScale
+
 @Composable
 private fun AddPlaceCenterPin(
     offsetX: Float,
@@ -1070,52 +1178,93 @@ private fun AddPlaceCenterPin(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
     val accent = MaterialTheme.colorScheme.primary
-    val arrowColor = android.graphics.Color.argb(
+    val accentArgb = android.graphics.Color.argb(
         255,
         (accent.red * 255).toInt(),
         (accent.green * 255).toInt(),
         (accent.blue * 255).toInt()
     )
-    val arrow = remember(arrowColor) {
-        loadAssetSvgTinted(context, "icons/add_pin_arrow.svg", 36, arrowColor)
+    // الصور تُرسم بحجمها النهائي بالبكسل (لا تصغير/تكبير بعد الرسم فيبهت الشكل)
+    val arrow = remember(accentArgb, density) {
+        val px = with(density) { AddPinArrowSize.roundToPx() }
+        loadAssetSvgTinted(context, "icons/add_pin_arrow.svg", px, accentArgb)
     }
-    // كتلة واحدة: الدائرة أمام رأس السهم، وتتحركان معاً مع السحب
-    // مركز الدائرة = إحداثيات المكان المُضاف
+    val dot = remember(accentArgb, density) {
+        val px = with(density) { AddPinDotSize.roundToPx() }
+        loadAssetSvgTinted(context, "icons/add_pin_dot.svg", px, accentArgb)
+    }
+
+    // مواضع القطع من أعلى الحاوية: النقطة، ثم السهم، ثم نقطة الإصبع
+    val pointTop = AddPinTouchPadding
+    val arrowTop = pointTop + AddPinPointSize + AddPinGapPointToArrow - AddPinArrowApexInset
+    val dotTop = arrowTop + AddPinArrowBaseInset + AddPinGapArrowToDot
+
+    // ارتفاع الحاوية = أسفل نقطة الإصبع + الهامش، ومركز النقطة البيضاء = مركز الحاوية
+    val topExtent = AddPinPointSize / 2f + AddPinTouchPadding
+    val boxHeight = dotTop + AddPinDotSize + AddPinTouchPadding
+    val anchorShift = boxHeight / 2f - topExtent
+
     Box(
         modifier = modifier
-            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+            .size(width = AddPinTouchWidth, height = boxHeight)
+            // absoluteOffset: offset العادي ينعكس مع RTL فيتحرك المؤشر عكس الإصبع
+            .absoluteOffset {
+                IntOffset(offsetX.roundToInt(), offsetY.roundToInt() + anchorShift.roundToPx())
+            }
             .pointerInput(Unit) {
                 detectDragGestures { change, drag ->
                     change.consume()
                     onDrag(drag.x, drag.y)
                 }
             },
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.TopCenter
     ) {
+        // النقطة البيضاء (شبه شفافة) — مركزها = إحداثيات المكان المُضاف
+        Box(
+            modifier = Modifier
+                .offset(y = pointTop)
+                .size(AddPinPointSize)
+                .background(Color.White.copy(alpha = 0.55f), CircleShape)
+                .border(width = AddPinPointBorder, color = accent, shape = CircleShape)
+        )
+        // السهم أسفل النقطة (رأسه بالأعلى)
         if (arrow != null) {
             Image(
                 bitmap = arrow.asImageBitmap(),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(26.dp)
-                    .offset(y = 20.dp)
+                    .offset(y = arrowTop)
+                    .size(AddPinArrowSize)
             )
         }
-        Box(
-            modifier = Modifier
-                .size(16.dp)
-                .background(Color.White, CircleShape)
-                .border(width = 2.5.dp, color = accent, shape = CircleShape)
-        )
+        // نقطة الإصبع أسفل السهم (تُسحب من هنا)
+        if (dot != null) {
+            Image(
+                bitmap = dot.asImageBitmap(),
+                contentDescription = "اسحب من هنا لتحريك المؤشر",
+                modifier = Modifier
+                    .offset(y = dotTop)
+                    .size(AddPinDotSize)
+            )
+        }
     }
 }
+
+/** هامش خارجي صغير حول بطاقة الإضافة فتبدو عائمة وتظهر حوافها الأربع */
+private val AddSheetMarginHorizontal = 12.dp
+private val AddSheetMarginBottom = 8.dp
+
+/** انحناء حواف بطاقة الإضافة الأربع */
+private val AddSheetCornerRadius = 16.dp
 
 @Composable
 private fun AddPlaceBottomSheet(
     onDismiss: () -> Unit,
     onPickCurrentLocation: () -> Unit,
     onPickPinLocation: () -> Unit,
+    onHeightChanged: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -1130,21 +1279,16 @@ private fun AddPlaceBottomSheet(
         stiffness = Spring.StiffnessMediumLow
     )
 
-    // خلفية قريبة من التصميم (فاتحة خضراء خفيفة)
-    val sheetColor = if (scheme.surface.luminance() > 0.5f) {
-        Color(0xFFF1F7F1)
-    } else {
-        scheme.surface
-    }
-
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .onGloballyPositioned { coords ->
                 cardW = coords.size.width.toFloat().coerceAtLeast(1f)
                 cardH = coords.size.height.toFloat().coerceAtLeast(1f)
+                onHeightChanged(coords.size.height)
             }
-            .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
+            // absoluteOffset: offset العادي ينعكس مع RTL فتتحرك البطاقة عكس الإصبع
+            .absoluteOffset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
             .pointerInput(Unit) {
                 // نفس منطق سحب بطاقة تفاصيل المحل: محور واحد ثم إغلاق أو ارتداد
                 detectDragGestures(
@@ -1192,51 +1336,69 @@ private fun AddPlaceBottomSheet(
                     }
                 )
             },
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        color = sheetColor,
+        // مستطيل بحواف دائرية من الأربع جهات (كانت العلويتين فقط)
+        shape = RoundedCornerShape(AddSheetCornerRadius),
+        // بيضاء كما في التصميم في الوضع الفاتح (لون السمة قد يكون مائلاً للأخضر
+        // مع الثيم الديناميكي)، وسطح السمة في الوضع الغامق
+        color = if (scheme.surface.luminance() > 0.5f) Color.White else scheme.surface,
         shadowElevation = 8.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 14.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(
-                modifier = Modifier
-                    .width(36.dp)
-                    .height(4.dp)
-                    .background(scheme.onSurface.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
-            )
-            Spacer(modifier = Modifier.height(14.dp))
             Text(
                 text = "إضافة مكان جديد",
                 style = MaterialTheme.typography.titleMedium,
                 color = scheme.onSurface
             )
             Spacer(modifier = Modifier.height(16.dp))
-            // في RTL: العنصر الأول يظهر يميناً. المطلوب: يمين=الحالي، يسار=المؤشر
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onPickCurrentLocation,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(24.dp),
-                    border = BorderStroke(1.5.dp, Color(0xFF2E7D32).copy(alpha = 0.55f)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF2E7D32))
+            // الاتجاه مثبّت RTL: العنصر الأول (الحالي) يميناً، والمؤشر يساراً —
+            // لا يتغيّر الترتيب مع لغة الجهاز.
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("اختر موقعك الحالي")
-                }
-                OutlinedButton(
-                    onClick = onPickPinLocation,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(24.dp),
-                    border = BorderStroke(1.5.dp, Color(0xFF2E7D32).copy(alpha = 0.55f)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF2E7D32))
-                ) {
-                    Text("اختر موقع المؤشر")
+                    OutlinedButton(
+                        onClick = onPickCurrentLocation,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.5.dp, scheme.primary.copy(alpha = 0.7f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = scheme.primary),
+                        // حشو داخلي صغير حتى لا تنزل آخر كلمة إلى سطر جديد في الزر
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                    ) {
+                        Text(
+                            text = "اختر موقعك الحالي",
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onPickPinLocation,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.5.dp, scheme.primary.copy(alpha = 0.7f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = scheme.primary),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                    ) {
+                        Text(
+                            text = "اختر موقع المؤشر",
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
@@ -1246,7 +1408,6 @@ private fun AddPlaceBottomSheet(
                 color = scheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(6.dp))
         }
     }
 }

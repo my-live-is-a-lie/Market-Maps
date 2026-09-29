@@ -1,5 +1,9 @@
 package com.marketmaps.app.ui.settings
 
+import com.marketmaps.app.R
+import com.marketmaps.app.ui.theme.darkerShade
+import com.marketmaps.app.ui.theme.isDarkSurface
+import com.marketmaps.app.ui.theme.selectionBorder
 import com.marketmaps.app.util.ArabicPlurals
 
 import android.widget.Toast
@@ -52,6 +56,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -62,6 +67,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -279,11 +290,69 @@ private fun AppearanceSettingsScreen(
 ) {
     val context = LocalContext.current
     val themeMode by prefs.themeMode.collectAsState(initial = AppThemeMode.LIGHT)
+    val mapNightMode by prefs.mapNightMode.collectAsState(initial = false)
     val accentKey by prefs.accentKey.collectAsState(initial = AccentPresets.DEFAULT)
 
     var themeMenuExpanded by remember { mutableStateOf(false) }
     var customHex by remember { mutableStateOf("#00897B") }
     var showCustomHex by remember { mutableStateOf(false) }
+    var showColorWheel by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+    // شعار التطبيق: الشعارات والألوان تقرأ من فهرس البناء
+    val (appLogos, appLogoBackgrounds) = remember { loadAppLogoCatalog(context) }
+    val appLogoKey by prefs.appLogoKey.collectAsState(initial = "")
+    val appLogoBackground by prefs.appLogoBackground.collectAsState(initial = "blue")
+
+    // أيقونة الشاشة الرئيسية: تُبنى مواردها وقت البناء، والألوان الجاهزة الثمانية فقط
+    // (لا لون مخصص للأيقونة). أي قيمة مخصصة قديمة تُرحَّل إلى أقرب لون جاهز.
+    val activeLogoKey = appLogoKey.ifBlank { appLogos.firstOrNull()?.key.orEmpty() }
+    val launcherBackground = remember(appLogoBackground, appLogoBackgrounds) {
+        if (appLogoBackground.startsWith(CUSTOM_PREFIX)) {
+            val custom = resolveLogoBackground(appLogoBackground, appLogoBackgrounds)
+            LauncherIconSwitcher.nearestBackground(custom, appLogoBackgrounds)
+        } else {
+            appLogoBackgrounds.find { it.key == appLogoBackground }
+        }
+    }
+    val launcherNote = when {
+        appLogos.isEmpty() -> "لا يوجد شعار متاح — أضف ملف SVG في app/src/main/assets/launcher"
+        else ->
+            "أيقونة الشاشة الرئيسية تتحدّث تلقائياً حسب اختيارك" +
+                (launcherBackground?.let { " (${it.label})" } ?: "") +
+                " — قد يتأخر ظهورها قليلاً في بعض المشغّلات"
+    }
+
+    // تصحيح اختيار قديم: إن حُذف الشعار المحفوظ من مجلد الأصول نعود للأول تلقائياً
+    LaunchedEffect(appLogos, appLogoKey) {
+        if (appLogos.isNotEmpty() && appLogos.none { it.key == appLogoKey }) {
+            prefs.setAppLogoKey(appLogos.first().key)
+        }
+    }
+
+    // ترحيل لون قديم مخصص إلى أقرب لون جاهز حتى تبقى الحالة نظيفة
+    LaunchedEffect(appLogoBackground) {
+        if (appLogoBackground.startsWith(CUSTOM_PREFIX)) {
+            launcherBackground?.let { nearest ->
+                withContext(Dispatchers.IO) { prefs.setAppLogoBackground(nearest.key) }
+            }
+        }
+    }
+
+    // تفعيل الأيقونة المختارة فعلياً على الشاشة الرئيسية (بالترتيب الآمن داخل الدالة)
+    LaunchedEffect(activeLogoKey, launcherBackground?.key) {
+        val backgroundKey = launcherBackground?.key ?: return@LaunchedEffect
+        if (activeLogoKey.isBlank()) return@LaunchedEffect
+        withContext(Dispatchers.IO) {
+            LauncherIconSwitcher.apply(context, activeLogoKey, backgroundKey)
+        }
+    }
+    // أيقونات الشريط: بيضاء في النمطين الغامق والمظلم كما طُلب
+    val fieldActionTint = if (MaterialTheme.colorScheme.background.isDarkSurface()) {
+        Color.White
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    val pickerStyleKey by prefs.colorPickerStyle.collectAsState(initial = "disc")
 
     val themeLabel = when (themeMode) {
         AppThemeMode.LIGHT -> "فاتح"
@@ -408,7 +477,10 @@ private fun AppearanceSettingsScreen(
                                 )
                                 .border(
                                     width = if (dynamicSelected) 3.dp else 1.dp,
-                                    color = if (dynamicSelected) MaterialTheme.colorScheme.onSurface else Color.Gray,
+                                    // الإطار المختار: درجة غامقة من اللون نفسه بدل الأسود
+                                    color = if (dynamicSelected) {
+                                        selectionBorder(MaterialTheme.colorScheme.primary)
+                                    } else Color.Gray,
                                     shape = CircleShape
                                 )
                                 .clickable {
@@ -427,7 +499,8 @@ private fun AppearanceSettingsScreen(
                                     .background(preset.color, CircleShape)
                                     .border(
                                         width = if (selected) 3.dp else 1.dp,
-                                        color = if (selected) MaterialTheme.colorScheme.onSurface else Color.Gray,
+                                        // الإطار المختار: درجة غامقة من اللون المختار نفسه
+                                        color = if (selected) selectionBorder(preset.color) else Color.Gray,
                                         shape = CircleShape
                                     )
                                     .clickable {
@@ -446,7 +519,7 @@ private fun AppearanceSettingsScreen(
                                 .background(Color(0xFF9E9E9E), CircleShape)
                                 .border(
                                     width = if (customSelected) 3.dp else 1.dp,
-                                    color = if (customSelected) MaterialTheme.colorScheme.onSurface else Color.Gray,
+                                    color = if (customSelected) selectionBorder(Color(0xFF9E9E9E)) else Color.Gray,
                                     shape = CircleShape
                                 )
                                 .clickable { showCustomHex = !showCustomHex },
@@ -454,15 +527,133 @@ private fun AppearanceSettingsScreen(
                         ) {
                             Text("#", color = Color.White, style = MaterialTheme.typography.titleMedium)
                         }
+                        // عجلة اختيار الألوان: تفتح عجلة كاملة لاختيار لون التمييز
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(rememberHueRingBrush(), CircleShape)
+                                .border(
+                                    width = if (customSelected) 3.dp else 1.dp,
+                                    color = if (customSelected) {
+                                        selectionBorder(AccentPresets.colorForKey(accentKey) ?: Color.Gray)
+                                    } else Color.Gray,
+                                    shape = CircleShape
+                                )
+                                .clickable { showColorWheel = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .background(
+                                        AccentPresets.colorForKey(accentKey) ?: Color.White,
+                                        CircleShape
+                                    )
+                            )
+                        }
+                    }
+
+                    if (showColorWheel) {
+                        AccentColorWheelDialog(
+                            initialColor = AccentPresets.colorForKey(accentKey)
+                                ?: AccentPresets.list.first().color,
+                            style = ColorPickerStyle.fromKey(pickerStyleKey),
+                            onStyleChange = { newStyle ->
+                                scope.launch { prefs.setColorPickerStyle(newStyle.key) }
+                            },
+                            onDismiss = { showColorWheel = false },
+                            onConfirm = { color ->
+                                showColorWheel = false
+                                val hex = colorToHex(color)
+                                customHex = hex
+                                scope.launch {
+                                    prefs.setAccentKey("custom:$hex")
+                                    Toast.makeText(context, "تم تطبيق اللون المخصص", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
                     }
                     if (showCustomHex || accentKey.startsWith("custom:")) {
-                        OutlinedTextField(
-                            value = customHex,
-                            onValueChange = { customHex = it },
-                            label = { Text("لون مخصص (مثال #00897B)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        // الاتجاه مثبّت RTL: أيقونة النهاية (trailing) تكون في الجهة اليسرى
+                        // من الشريط حيث الزران المطلوبان.
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                            OutlinedTextField(
+                                value = customHex,
+                                onValueChange = { customHex = it },
+                                label = { Text("لون مخصص (مثال #00897B)") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                trailingIcon = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        // أيقونتان (لصق ونسخ) بمسافة متوسطة بينهما،
+                                        // وباللون الأبيض في النمطين الغامق والمظلم
+                                        Box(
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .clip(CircleShape)
+                                                .clickable {
+                                                    val pasted = clipboard.getText()?.text?.trim().orEmpty()
+                                                    if (pasted.isEmpty()) {
+                                                        Toast.makeText(
+                                                            context,
+                                                            "الحافظة فارغة",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    } else {
+                                                        customHex = pasted
+                                                        Toast.makeText(
+                                                            context,
+                                                            "تم لصق الرمز",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_content_paste),
+                                                contentDescription = "لصق الرمز",
+                                                tint = fieldActionTint,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .clip(CircleShape)
+                                                .clickable {
+                                                    val code = customHex.trim()
+                                                    if (code.isEmpty()) {
+                                                        Toast.makeText(
+                                                            context,
+                                                            "لا يوجد رمز في الشريط",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    } else {
+                                                        clipboard.setText(AnnotatedString(code))
+                                                        Toast.makeText(
+                                                            context,
+                                                            "تم نسخ الرمز $code",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_content_copy),
+                                                contentDescription = "نسخ الرمز",
+                                                tint = fieldActionTint,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            )
+                        }
                         Button(
                             onClick = {
                                 val hex = customHex.trim().let {
@@ -485,6 +676,97 @@ private fun AppearanceSettingsScreen(
                     }
                 }
             }
+
+            Text(text = "الوضع الليلي للخرائط", style = MaterialTheme.typography.titleLarge)
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "تمكين الوضع الليلي للخرائط",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "خرائط جوجل و OSM (المباشرة والأوفلاين)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = mapNightMode,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    prefs.setMapNightMode(enabled)
+                                    Toast.makeText(
+                                        context,
+                                        if (enabled) "تم تفعيل الوضع الليلي للخرائط" else "تم إيقاف الوضع الليلي للخرائط",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        )
+                    }
+                    Text(
+                        text = if (themeMode == AppThemeMode.LIGHT) {
+                            "لا يظهر أثره الآن: الوضع الفاتح مفعّل، وستبقى الخريطة فاتحة حتى مع تفعيل الخيار. " +
+                                "فعّل الوضع الغامق أو المظلم ليُطبَّق."
+                        } else {
+                            "سيُطبَّق الوضع الليلي على الخريطة الآن. في الوضع الفاتح تبقى الخريطة فاتحة دائماً."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Text(text = "شعار التطبيق", style = MaterialTheme.typography.titleLarge)
+
+            AppLogoSection(
+                logos = appLogos,
+                backgrounds = appLogoBackgrounds,
+                selectedLogoKey = appLogoKey.ifBlank { appLogos.firstOrNull()?.key.orEmpty() },
+                backgroundValue = appLogoBackground,
+                accentColor = AccentPresets.colorForKey(accentKey) ?: MaterialTheme.colorScheme.primary,
+                onSelectLogo = { option ->
+                    scope.launch { prefs.setAppLogoKey(option.key) }
+                },
+                onSelectBackground = { key ->
+                    scope.launch { prefs.setAppLogoBackground(key) }
+                },
+                launcherNote = launcherNote,
+                onApplyLauncherIcon = {
+                    // تنفيذ التطبيق فوراً بضغطة واحدة (بلا غلق التطبيق وإعادة فتحه)
+                    val logo = appLogos.find { it.key == activeLogoKey } ?: appLogos.firstOrNull()
+                    val backgroundKey = launcherBackground?.key ?: AppLogoDefaults.defaultBackground
+                    if (logo == null) {
+                        Toast.makeText(context, "لا يوجد شعار متاح", Toast.LENGTH_SHORT).show()
+                    } else {
+                        scope.launch {
+                            val applied = withContext(Dispatchers.IO) {
+                                LauncherIconSwitcher.apply(context, logo.key, backgroundKey)
+                            }
+                            val backgroundLabel = launcherBackground?.label.orEmpty()
+                            val message = if (applied) {
+                                "تم تطبيق الأيقونة: ${logo.label}" +
+                                    (if (backgroundLabel.isNotBlank()) " — خلفية $backgroundLabel" else "")
+                            } else {
+                                "تعذّر تطبيق الأيقونة على هذا الجهاز"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            )
+
         }
     }
 }

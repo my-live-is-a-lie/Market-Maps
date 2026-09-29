@@ -43,6 +43,17 @@ class MainActivity : ComponentActivity() {
         setContent {
             val context = LocalContext.current
             val prefs = remember { AppPreferences(context) }
+            // شبكة أمان: إن اختفت أيقونة التطبيق (تغيير لم يكتمل) نعيد تفعيلها تلقائياً
+            LaunchedEffect(Unit) {
+                val logoKey = prefs.appLogoKey.first()
+                val logoBackground = prefs.appLogoBackground.first()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        com.marketmaps.app.ui.settings.LauncherIconSwitcher
+                            .ensureValidIcon(context, logoKey, logoBackground)
+                    }
+                }
+            }
             val themeMode by prefs.themeMode.collectAsState(initial = AppThemeMode.LIGHT)
             val accentKey by prefs.accentKey.collectAsState(initial = AccentPresets.DEFAULT)
 

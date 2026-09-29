@@ -56,6 +56,10 @@ object MarkerIconHelper {
     // ألوان قريبة من تسميات نقاط الاهتمام في خرائط جوجل (الوضع الفاتح)
     private val GOOGLE_LABEL_TEXT = Color.parseColor("#48707F")
     private const val GOOGLE_LABEL_STROKE = Color.WHITE
+    // الوضع الليلي: نص فاتح بحد داكن رقيق — النص الداكن بحد أبيض سميك
+    // فوق خريطة داكنة يصبح غير مقروء
+    private val NIGHT_LABEL_TEXT = Color.parseColor("#F1F3F4")
+    private val NIGHT_LABEL_STROKE = Color.parseColor("#14181F")
     private val USER_PIN_RED = Color.parseColor("#EA4335")
     private val USER_PIN_CORE = Color.parseColor("#C5221F")
 
@@ -67,6 +71,11 @@ object MarkerIconHelper {
             Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         }
     }
+
+    /** أحجام العلامات (بكسل): كُبِّرت لأن الأيقونات كانت صغيرة يصعب تمييزها */
+    private const val BUBBLE_LARGE_PX = 72
+    private const val BUBBLE_MEDIUM_PX = 46
+    private const val CIRCLE_PX = 20
 
     enum class DisplayMode {
         BUBBLE_LARGE,
@@ -123,19 +132,19 @@ object MarkerIconHelper {
      * ~200م/500قدم نقطة، أبعد مخفي.
      */
     fun markerSizePxForZoom(zoom: Int): Int = when {
-        zoom >= 18 -> 62   // أقرب من 50م
-        zoom >= 17 -> 57   // ~50م
-        zoom >= 16 -> 11   // ~200م / 500قدم — دائرة (−30٪)
-        zoom >= 15 -> 11   // دائرة (−30٪)
-        else -> 0          // أبعد من 200م: مخفي بالكامل
+        zoom >= 18 -> BUBBLE_LARGE_PX   // أقرب من 50م
+        zoom >= 17 -> BUBBLE_MEDIUM_PX  // ~50م
+        zoom >= 16 -> CIRCLE_PX         // ~200م / 500قدم — دائرة
+        zoom >= 15 -> CIRCLE_PX         // دائرة
+        else -> 0                       // أبعد من 200م: مخفي بالكامل
     }
 
     fun sizeForZoom(zoom: Int): Int = markerSizePxForZoom(zoom)
 
     fun markerSizePxForMode(mode: DisplayMode): Int = when (mode) {
-        DisplayMode.BUBBLE_LARGE -> 57   // 50م +10٪
-        DisplayMode.BUBBLE_MEDIUM -> 34  // 100م
-        DisplayMode.CIRCLE -> 11         // 200م نقطة (−30٪)
+        DisplayMode.BUBBLE_LARGE -> BUBBLE_LARGE_PX    // 50م
+        DisplayMode.BUBBLE_MEDIUM -> BUBBLE_MEDIUM_PX  // 100م
+        DisplayMode.CIRCLE -> CIRCLE_PX                // 200م نقطة
         DisplayMode.HIDDEN -> 0
     }
 
@@ -179,6 +188,24 @@ object MarkerIconHelper {
         return MapsforgeAndroidBitmap(copy)
     }
 
+    /**
+     * أيقونة + الاسم أسفلها لخريطة OSM الأوفلاين (mapsforge لا يرسم تسميات للمحلات).
+     * تُعاد صورة مستقلة لأن Marker في mapsforge يحتفظ بها ويهدمها عند الإزالة.
+     * ارتفاع الشعار = markerSizePxForMode × scale، ويُحسب في الاستدعاء موضع التثبيت.
+     */
+    fun getMarkerBitmapWithLabel(
+        category: String,
+        name: String,
+        mode: DisplayMode,
+        scale: Float = 1f,
+        night: Boolean = false
+    ): Bitmap? {
+        val src = getAndroidMarkerBitmapWithLabel(category, name, mode, scale, night) ?: return null
+        if (src.isRecycled) return null
+        val copy = src.copy(src.config ?: AndroidBitmap.Config.ARGB_8888, false) ?: return null
+        return MapsforgeAndroidBitmap(copy)
+    }
+
     fun getAndroidUserLocationBitmap(mode: DisplayMode = DisplayMode.BUBBLE_MEDIUM): AndroidBitmap? {
         return composeGoogleUserPin(userPinSizePx(mode))
     }
@@ -199,7 +226,8 @@ object MarkerIconHelper {
         category: String,
         name: String,
         mode: DisplayMode,
-        scale: Float = 1f
+        scale: Float = 1f,
+        night: Boolean = false
     ): AndroidBitmap? {
         if (mode == DisplayMode.HIDDEN) return null
         val iconSize = (markerSizePxForMode(mode) * scale).roundToInt()
@@ -208,18 +236,34 @@ object MarkerIconHelper {
         val label = name.trim().ifEmpty { return icon }
         val displayName = if (label.length > 22) label.take(21) + "…" else label
 
-        val textSize = dpF(if (mode == DisplayMode.BUBBLE_LARGE) 12.5f else 10f) * scale
-        val strokeWidth = dpF(if (mode == DisplayMode.BUBBLE_LARGE) 2f else 1.6f) * scale
+        // ليلاً: خط أكبر قليلاً وحدّ أنحف (كان الحد الأبيض السميك يُغرق الاسم)
+        val large = mode == DisplayMode.BUBBLE_LARGE
+        val textSize = dpF(
+            when {
+                night && large -> 15f
+                night -> 12f
+                large -> 12.5f
+                else -> 10f
+            }
+        ) * scale
+        val strokeWidth = dpF(
+            when {
+                night && large -> 1.3f
+                night -> 1.0f
+                large -> 2f
+                else -> 1.6f
+            }
+        ) * scale
 
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = GOOGLE_LABEL_TEXT
+            color = if (night) NIGHT_LABEL_TEXT else GOOGLE_LABEL_TEXT
             this.textSize = textSize
             typeface = labelTypeface
             textAlign = Paint.Align.CENTER
             style = Paint.Style.FILL
         }
         val strokePaint = Paint(fillPaint).apply {
-            color = GOOGLE_LABEL_STROKE
+            color = if (night) NIGHT_LABEL_STROKE else GOOGLE_LABEL_STROKE
             style = Paint.Style.STROKE
             this.strokeWidth = strokeWidth
             strokeJoin = Paint.Join.ROUND

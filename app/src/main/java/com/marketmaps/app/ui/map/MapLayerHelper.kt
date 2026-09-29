@@ -38,7 +38,11 @@ object MapLayerHelper {
         val offlineCache: TileCache,
         var downloadLayer: TileDownloadLayer? = null,
         var rendererLayer: TileRendererLayer? = null,
-        var mapFile: MapFile? = null
+        var mapFile: MapFile? = null,
+        /** هل طُبّق الثيم الليلي على طبقة الأوفلاين الحالية؟ */
+        var offlineNight: Boolean = false,
+        /** هل لُوّنت بلاطات الأونلاين الحالية ليلاً؟ (لكشف تغيير الوضع ومسح الكاش) */
+        var onlineNight: Boolean = false
     )
 
     /**
@@ -112,18 +116,28 @@ object MapLayerHelper {
         bundle.mapFile = null
     }
 
-    fun applyOnline(mapView: MapView, bundle: LayerBundle) {
+    fun applyOnline(mapView: MapView, bundle: LayerBundle, night: Boolean = false) {
         // إيقاف وتدمير الطبقة القديمة قبل استبدالها لتفادي تسريب خيوط التحميل
         destroyDownloadLayer(bundle)
         clearBaseLayers(mapView.layerManager.layers)
         destroyRendererLayer(bundle)
 
+        // كاش الأونلاين يحفظ البلاطات الملوَّنة ليلاً، فلا يصلح للوضع الفاتح والعكس:
+        // نمسحه عند تغيير الوضع ليعاد التحميل بالألوان الصحيحة.
+        if (bundle.onlineNight != night) {
+            bundle.onlineCache.purge()
+            bundle.onlineNight = night
+        }
+
         val tileSource = OpenStreetMapMapnik.INSTANCE.apply {
             // يُفضّل لاحقاً إضافة وسيلة تواصل وفق سياسة OSM
             userAgent = "MarketMaps/1.0 (Android; https://github.com/my-live-is-a-lie/Market-Maps)"
         }
+        // غلاف الكاش الليلي: يلوّن البلاطات عند تحميلها فتبقى علامات التطبيق
+        // (ورموزها البيضاء) بألوانها الصحيحة فوق الخريطة الليلية.
+        val cache: TileCache = if (night) NightTileCache(bundle.onlineCache, true) else bundle.onlineCache
         val downloadLayer = TileDownloadLayer(
-            bundle.onlineCache,
+            cache,
             mapView.model.mapViewPosition,
             tileSource,
             AndroidGraphicFactory.INSTANCE
@@ -131,6 +145,7 @@ object MapLayerHelper {
         mapView.layerManager.layers.add(0, downloadLayer)
         downloadLayer.onResume()
         bundle.downloadLayer = downloadLayer
+        bundle.onlineNight = night
         mapView.invalidate()
     }
 
@@ -138,7 +153,8 @@ object MapLayerHelper {
         context: Context,
         mapView: MapView,
         bundle: LayerBundle,
-        fileName: String? = null
+        fileName: String? = null,
+        night: Boolean = false
     ): Boolean {
         val name = fileName?.takeIf { it.isNotBlank() }
             ?: MapDownloader.listDownloaded(context).firstOrNull()?.fileName
@@ -153,7 +169,9 @@ object MapLayerHelper {
             clearBaseLayers(mapView.layerManager.layers)
             // كانت الطبقة القديمة تُوقف فقط (onPause) فتبقى خيوطها حية — نفس تسريب applyOnline
             destroyDownloadLayer(bundle)
-            // عند التبديل بين ملفي خرائط: أغلق الملف القديم وامسح بلاطاته من الكاش
+            // عند التبديل بين ملفي خرائط أو تغيير الثيم الليلي: أغلق الطبقة القديمة
+            // وامسح بلاطاتها — الكاش مفتاحه z/x/y ولا يميّز الثيم، فبدون المسح تُعرض
+            // بلاطات مرسومة بالثيم القديم (فاتحة مثلاً) رغم تفعيل الليلي.
             if (bundle.rendererLayer != null) {
                 destroyRendererLayer(bundle)
                 bundle.offlineCache.purge()
@@ -164,7 +182,9 @@ object MapLayerHelper {
                 bundle.offlineCache,
                 mapView.model.mapViewPosition,
                 mapFile as MapDataStore,
-                MapsforgeThemes.DEFAULT,
+                // الثيم الليلي الرسمي (من assets) في الوضع الليلي، والافتراضي في الفاتح
+                if (night) AssetRenderTheme(context, AssetRenderTheme.DARK_THEME_ASSET)
+                else MapsforgeThemes.DEFAULT,
                 false,
                 true,
                 false
@@ -173,11 +193,12 @@ object MapLayerHelper {
             mapView.layerManager.layers.add(0, rendererLayer)
             bundle.mapFile = mapFile
             bundle.rendererLayer = rendererLayer
+            bundle.offlineNight = night
             true
         } catch (e: Exception) {
             logE(TAG, "تعذر فتح الخريطة الأوفلاين $fileName", e)
             Toast.makeText(context, "تعذر فتح الخريطة الأوفلاين: ${e.message}", Toast.LENGTH_LONG).show()
-            applyOnline(mapView, bundle)
+            applyOnline(mapView, bundle, night)
             false
         }
     }
