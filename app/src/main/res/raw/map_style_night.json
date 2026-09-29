@@ -22,7 +22,10 @@
     "elementType": "geometry",
     "stylers": [
       {
-        "color": "#C6E5BE"
+        "saturation": 10
+      },
+      {
+        "lightness": -65
       }
     ]
   },
