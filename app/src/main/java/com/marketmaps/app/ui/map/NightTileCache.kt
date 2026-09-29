@@ -9,21 +9,26 @@ import com.marketmaps.app.util.logW
 
 /**
  * غلاف كاش يلوّن بلاطات OSM المباشرة (بلاطات Mapnik الجاهزة) في الوضع الليلي
- * بنفس لوحة خرائط جوجل الليلية (نفس ألوان الأرض والمياه والخضرة والطرق والتسميات).
+ * بـ**النمط الليلي الرسمي من جوجل** (اللوحة المنشورة في وثائق جوجل):
+ *   الأرض #242F3E — المياه #17263C — الحدائق والخضرة #263C3F
+ *   الطرق العامة/المحلية #38414E — الطرق السريعة #746855
+ *   إطار الطرق #212A37 (وإطار السريع #1F2835) — السكك #2F3948
+ *   التسميات #9CA5B3 على هالة #242F3E — أسماء المياه #515C6D
  *
  * لماذا على الكاش وليس على عرض الخريطة؟
  * بلاطات Mapnik صور جاهزة لا يمكن إعادة تلوينها من المصدر، والحل الشائع هو فلتر
  * على عرض الخريطة كاملاً — لكن ذلك يُفسد ألوان علامات التطبيق (الأبيض داخل
  * الشعارات يصبح أسود). هنا نُلوّن البلاطات مرة واحدة عند تحميلها ودخولها للكاش.
  *
- * كيف نُلوّن؟ (مهم)
- * بلاطات Mapnik فاتحة: الأرض بيج، الشوارع بيضاء، حدود الشوارع رمادي، النصوص داكنة.
- * نستخدم:
- *   1) جدول إضاءة (LUT) للعناصر الرمادية يقلب الترتيب ليطابق جوجل:
- *      نصوص داكنة ← بيضاء #FFFFFF، حدود ← #16202C، أرض ← #1B2531، شوارع ← #3F5261.
- *   2) للعناصر الملوّنة (مياه/خضرة/طرق ملوّنة): نحفظ اللون ونقوّيه، مع هدف إضاءة
- *      مختلف لكل عائلة لونية ليطابق لون جوجل (مياه كحلية #11304C، خضرة #1D4239،
- *      طرق كبيرة #556C7A).
+ * كيف نُلوّن؟
+ * بلاطات Mapnik فاتحة: الأرض بيج، الشوارع بيضاء، النصوص داكنة، والمياه/الخضرة/الطرق
+ * الرئيسية ملوّنة. لذلك:
+ *   1) جدول إضاءة (LUT) للعناصر الرمادية: النصوص الداكنة ← #9CA5B3 (لون تسميات
+ *      جوجل الرسمي)، الأرض البيج ← #242F3E، الشوارع البيضاء ← #38414E، والمناطق
+ *      الرمادية المتوسطة (مبانٍ/حدود) ← #2B3544، فتظل الشوارع أعلى إضاءة من الأرض
+ *      وحدودها أغمق منها — تماماً كترتيب النمط الرسمي.
+ *   2) للعناصر الملوّنة: تحديد العائلة اللونية ثم التعيين إلى لون جوجل الرسمي
+ *      المقابل (مياه/خضرة/طرق سريعة) — بلا أي لون خارج اللوحة الرسمية.
  * الكاش يحفظ البلاطات الملوَّنة، لذلك [MapLayerHelper.applyOnline] يمسح كاش
  * الأونلاين عند تغيير الوضع الليلي ليعاد التحميل بالألوان الصحيحة.
  */
@@ -60,7 +65,7 @@ class NightTileCache(
         delegate.put(key, if (night) recolor(bitmap) ?: bitmap else bitmap)
     }
 
-    /** بلاطة جديدة بلوحة جوجل الليلية؛ تُرجع null إن تعذّر التحويل (فتُستخدم الأصلية) */
+    /** بلاطة جديدة بالنمط الليلي الرسمي من جوجل؛ تُرجع null إن تعذّر التحويل */
     private fun recolor(src: TileBitmap): TileBitmap? {
         return try {
             val androidSrc = AndroidGraphicFactory.getBitmap(src) ?: return null
@@ -86,46 +91,21 @@ class NightTileCache(
                 val luma = ((r * 77 + g * 150 + b * 29) shr 8).coerceIn(0, 255)
                 val spread = maxOf(r, g, b) - minOf(r, g, b)
 
-                val nr: Int
-                val ng: Int
-                val nb: Int
-                if (spread < LOW_CHROMA_SPREAD) {
-                    // رمادي/أرض/حدود/شوارع/نصوص: جدول الإضاءة الليلي، مع إلغاء
-                    // الصبغة (أرض Mapnik البيج تصبح رمادية باردة مثل لوحة جوجل)
-                    // وميل أزرق بسيط (#242F3E و #46505F أزرقان في جوجل)
-                    val target = LUT[luma]
-                    nr = target - COOL_R
-                    ng = target
-                    nb = target + COOL_B
+                val packed = if (spread < LOW_CHROMA_SPREAD) {
+                    // رمادي: أرض/شوارع/مبانٍ/حدود/نصوص ← جدول الإضاءة الرسمي
+                    LUT[luma]
+                } else if (b - r > BLUE_BIAS) {
+                    WATER
+                } else if (g - r > GREEN_BIAS) {
+                    PARK
+                } else if (r - b > WARM_BIAS) {
+                    HIGHWAY
                 } else {
-                    // ملوّن: نُعيّن لون تطبيق جوجل الرسمي مباشرة (كما في نمط الليل)
-                    // مع الحفاظ على تفاوت الإضاءة داخل العنصر نفسه (غابة أغمق من مرج)
-                    val bluish = b - r > BLUE_BIAS
-                    val greenish = !bluish && g - r > GREEN_BIAS
-                    val factor = (luma / 190f).coerceIn(0.75f, 1.3f)
-                    if (bluish) {
-                        // المياه بألوان الخريطة الفاتحة (#A2CBE6) — لا تُظلَّم
-                        nr = (162 * factor).toInt()
-                        ng = (203 * factor).toInt()
-                        nb = (230 * factor).toInt()
-                    } else if (greenish) {
-                        // الخضرة بألوان الخريطة الفاتحة (#BFE0B4) — لا تُظلَّم
-                        nr = (191 * factor).toInt()
-                        ng = (224 * factor).toInt()
-                        nb = (180 * factor).toInt()
-                    } else {
-                        // طرق كبيرة مائلة إلى الأزرق #556C7A
-                        val warm = (luma / 200f).coerceIn(0.85f, 1.1f)
-                        nr = (85 * warm).toInt()
-                        ng = (108 * warm).toInt()
-                        nb = (122 * warm).toInt()
-                    }
+                    // ملوّن غير مصنّف (بني باهت/رمادي مائل) ← مسار الأرض الرسمي
+                    LUT[luma]
                 }
 
-                pixels[i] = (alpha shl 24) or
-                    (nr.coerceIn(0, 255) shl 16) or
-                    (ng.coerceIn(0, 255) shl 8) or
-                    nb.coerceIn(0, 255)
+                pixels[i] = (alpha shl 24) or packed
             }
 
             androidOut.setPixels(pixels, 0, width, 0, 0, width, height)
@@ -143,55 +123,55 @@ class NightTileCache(
         /** حدّ يُعتبر ما دونه رمادياً (أرض/حدود/شوارع/نصوص) */
         private const val LOW_CHROMA_SPREAD = 24
 
-        /** تمييز الأزرق (مياه ب − أحمر) والأخضر (أخضر − أحمر) عن الألوان الدافئة */
-        private const val BLUE_BIAS = 12
-        private const val GREEN_BIAS = 8
+        /** تمييز عائلات الألوان في بلاطات Mapnik */
+        private const val BLUE_BIAS = 12   // مياه: أزرق − أحمر
+        private const val GREEN_BIAS = 8   // خضرة: أخضر − أحمر
+        private const val WARM_BIAS = 20   // طرق سريعة/رمل: أحمر − أزرق
 
-        /** أهداف الإضاءة لمطابقة لوحة جوجل الليلية */
-        private const val BLUE_TARGET = 43    // مياه #17639B
-        private const val GREEN_TARGET = 57  // خضرة #2E7D4F
-        private const val WARM_TARGET = 90   // طرق كبيرة #7A6A52
-
-        /** ميل أزرق بارد للعناصر الرمادية ليطابق لون الأرض/الطرق في جوجل */
-        private const val COOL_R = -6
-        private const val COOL_B = 14
-
-        /** تقوية اللون لتعويض بهتان بلاطات Mapnik */
-        private const val CHROMA_BLUE = 1.9f
-        private const val CHROMA_GREEN = 1.6f
-        private const val CHROMA_WARM = 1.3f
+        /** ألوان النمط الليلي الرسمي من جوجل (حِزم RGB جاهزة) */
+        private const val WATER = 0x17263C     // مياه
+        private const val PARK = 0x263C3F      // حدائق وخضرة
+        private const val HIGHWAY = 0x746855   // طرق سريعة
 
         /**
-         * نقاط تحكم جدول الإضاءة (إضاءة Mapnik ← إضاءة جوجل الليلية):
-         * 0–110 نصوص داكنة ← فاتحة #E8EAED، ثم 150 ← 105 انتقالاً،
-         * 200 حدود الشوارع ← #232C38 (43)، 242 الأرض ← #242F3E (46)،
-         * 255 الشوارع البيضاء ← #46505F (79) — فتبقى الشوارع أعلى إضاءة من الأرض
-         * وحدودها أغمق منها، تماماً كترتيب خرائط جوجل الليلية.
+         * نقاط تحكم جدول الإضاءة (إضاءة بلاطة Mapnik ← لون جوجل الرسمي):
+         * 0–90 نصوص داكنة ← #9CA5B3 (تسميات الطرق في النمط الرسمي)،
+         * 150 رمادي متوسط ← #746855، 205 مبانٍ/حدود ← #2B3544،
+         * 240 الأرض البيج ← #242F3E، 250–255 الشوارع البيضاء ← #38414E.
+         * (المُدخل، ثم R، G، B للمخرج)
          */
         private val CONTROL = intArrayOf(
-            0, 250,
-            60, 244,
-            110, 205,
-            150, 120,
-            175, 55,
-            200, 33,
-            225, 34,
-            242, 36,
-            250, 58,
-            255, 79
+            0, 156, 165, 179,
+            90, 156, 165, 179,
+            150, 116, 104, 85,
+            205, 43, 53, 68,
+            240, 36, 47, 62,
+            250, 56, 65, 78,
+            255, 56, 65, 78
         )
 
-        /** جدول 256 مدخلاً مبنية من نقاط التحكم بالاستيفاء الخطي */
+        /** جدول 256 مدخلاً (لون مُحزَم) مبني من نقاط التحكم بالاستيفاء الخطي */
         private val LUT: IntArray = IntArray(256).also { table ->
-            val pairs = CONTROL.size / 2
+            val points = CONTROL.size / 4
             for (i in 0 until 256) {
                 var p = 0
-                while (p < pairs - 2 && CONTROL[(p + 1) * 2] < i) p++
-                val x0 = CONTROL[p * 2]
-                val y0 = CONTROL[p * 2 + 1]
-                val x1 = CONTROL[(p + 1) * 2]
-                val y1 = CONTROL[(p + 1) * 2 + 1]
-                table[i] = if (x1 <= x0) y1 else y0 + (y1 - y0) * (i - x0) / (x1 - x0)
+                while (p < points - 1 && CONTROL[(p + 1) * 4] < i) p++
+                val x0 = CONTROL[p * 4]
+                val r0 = CONTROL[p * 4 + 1]
+                val g0 = CONTROL[p * 4 + 2]
+                val b0 = CONTROL[p * 4 + 3]
+                val x1 = CONTROL[(p + 1) * 4]
+                val r1 = CONTROL[(p + 1) * 4 + 1]
+                val g1 = CONTROL[(p + 1) * 4 + 2]
+                val b1 = CONTROL[(p + 1) * 4 + 3]
+                val span = x1 - x0
+                val t = if (span <= 0) 0 else (i - x0).coerceIn(0, span)
+                val r = if (span <= 0) r1 else r0 + (r1 - r0) * t / span
+                val g = if (span <= 0) g1 else g0 + (g1 - g0) * t / span
+                val b = if (span <= 0) b1 else b0 + (b1 - b0) * t / span
+                table[i] = (r.coerceIn(0, 255) shl 16) or
+                    (g.coerceIn(0, 255) shl 8) or
+                    b.coerceIn(0, 255)
             }
         }
     }
