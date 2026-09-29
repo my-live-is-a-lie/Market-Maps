@@ -146,10 +146,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Dispatchers
+import org.mapsforge.core.graphics.Style
 import org.mapsforge.core.model.LatLong
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 import org.mapsforge.map.android.view.MapView
 import org.mapsforge.map.layer.overlay.Marker
+import org.mapsforge.map.layer.overlay.Polyline as MapsforgePolyline
+import android.graphics.Color as AndroidColor
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -225,10 +228,22 @@ fun MapScreen(
     var userLat by remember { mutableStateOf<Double?>(null) }
     var userLon by remember { mutableStateOf<Double?>(null) }
     var selectedStore by remember { mutableStateOf<Store?>(null) }
+    var routePlan by remember { mutableStateOf<RoutePlan?>(null) }
+    var routeDestinationStoreId by remember { mutableStateOf<String?>(null) }
+    var routeLoading by remember { mutableStateOf(false) }
+    var routeLayer by remember { mutableStateOf<MapsforgePolyline?>(null) }
     var storeToEdit by remember { mutableStateOf<Store?>(null) }
     var navResults by remember { mutableStateOf<List<StoreWithDistance>>(emptyList()) }
     var navIndex by remember { mutableIntStateOf(-1) }
     // تمييز أيقونة نتيجة البحث أو المحل المفتوح في البطاقة السفلية
+    LaunchedEffect(selectedStore?.id) {
+        if (selectedStore?.id != routeDestinationStoreId) {
+            routePlan = null
+            routeDestinationStoreId = null
+            routeLoading = false
+        }
+    }
+
     val highlightedStoreId = when {
         selectedStore != null -> selectedStore!!.id
         navResults.size > 1 && navIndex in navResults.indices -> navResults[navIndex].store.id
@@ -477,6 +492,32 @@ fun MapScreen(
         )
     }
 
+    LaunchedEffect(mapViewRef, mapProvider, routePlan) {
+        routeLayer?.let { oldLayer ->
+            mapViewRef?.layerManager?.layers?.removeAll(listOf(oldLayer), false)
+            oldLayer.onDestroy()
+            routeLayer = null
+        }
+        val mapView = mapViewRef
+        val plan = routePlan
+        if (mapProvider != MapProvider.MAPSFORGE || mapView == null || plan == null) {
+            return@LaunchedEffect
+        }
+
+        val paint = AndroidGraphicFactory.INSTANCE.createPaint().apply {
+            setColor(AndroidColor.rgb(25, 118, 210))
+            setStrokeWidth(6f * context.resources.displayMetrics.density)
+            setStyle(Style.STROKE)
+        }
+        val line = MapsforgePolyline(paint, AndroidGraphicFactory.INSTANCE).apply {
+            setPoints(plan.points.map { LatLong(it.latitude, it.longitude) })
+        }
+        mapView.layerManager.layers.add(1, line)
+        routeLayer = line
+        fitMapsforgeRoute(mapView, plan.points)
+        mapView.invalidate()
+    }
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -491,6 +532,76 @@ fun MapScreen(
         if (fine == PackageManager.PERMISSION_GRANTED || coarse == PackageManager.PERMISSION_GRANTED) {
             moveToCurrentLocation(context) { lat, lon -> userLat = lat; userLon = lon; moveCamera(lat, lon, 18f) }
         } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+    }
+
+    fun toggleDirections(store: Store) {
+        if (routeLoading) return
+        if (routePlan != null && routeDestinationStoreId == store.id) {
+            routePlan = null
+            routeDestinationStoreId = null
+            return
+        }
+
+        val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+        if (fine != PackageManager.PERMISSION_GRANTED && coarse != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(context, "اسمح بالوصول إلى موقعك لعرض الاتجاهات", Toast.LENGTH_LONG).show()
+            locationPermissionLauncher.launch(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+            )
+            return
+        }
+
+        routeLoading = true
+        routeDestinationStoreId = store.id
+        routePlan = null
+        val fallbackLat = userLat
+        val fallbackLon = userLon
+        LocationServices.getFusedLocationProviderClient(context)
+            .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
+            .addOnSuccessListener { location ->
+                val originLat = location?.latitude ?: fallbackLat
+                val originLon = location?.longitude ?: fallbackLon
+                if (originLat == null || originLon == null) {
+                    routeLoading = false
+                    routeDestinationStoreId = null
+                    Toast.makeText(context, "تعذر تحديد موقعك الحالي", Toast.LENGTH_LONG).show()
+                    return@addOnSuccessListener
+                }
+
+                userLat = originLat
+                userLon = originLon
+                scope.launch {
+                    try {
+                        val plan = RouteRepository.fetchDrivingRoute(
+                            originLat,
+                            originLon,
+                            store.latitude,
+                            store.longitude
+                        )
+                        if (selectedStore?.id == store.id) {
+                            routePlan = plan
+                            Toast.makeText(context, "تم رسم المسار إلى ${store.name}", Toast.LENGTH_SHORT).show()
+                        } else {
+                            routeDestinationStoreId = null
+                        }
+                    } catch (error: Exception) {
+                        routeDestinationStoreId = null
+                        Toast.makeText(
+                            context,
+                            error.message ?: "تعذر حساب الاتجاهات. تحقق من اتصال الإنترنت.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    } finally {
+                        routeLoading = false
+                    }
+                }
+            }
+            .addOnFailureListener {
+                routeLoading = false
+                routeDestinationStoreId = null
+                Toast.makeText(context, "تعذر تحديد موقعك الحالي", Toast.LENGTH_LONG).show()
+            }
     }
 
     // المزامنة الحية تحدّث القائمة تلقائياً؛ هذه للدفع اليدوي إن لزم
@@ -554,6 +665,7 @@ fun MapScreen(
                     nightMode = mapNight,
                     highlightedStoreId = highlightedStoreId,
                     highlightScale = highlightScale,
+                    routePoints = routePlan?.points ?: emptyList(),
                     onLongPress = { lat, lon ->
                         selectedLat = lat
                         selectedLon = lon
@@ -995,6 +1107,12 @@ fun MapScreen(
                     distanceMeters = dist,
                     onDismiss = { selectedStore = null; detailsCardHeightPx = 0 },
                     onEdit = { storeToEdit = it },  // لا تغلق البطاقة عند فتح التعديل
+                    onToggleRoute = { toggleDirections(store) },
+                    routeLoading = routeLoading && routeDestinationStoreId == store.id,
+                    routeVisible = routePlan != null && routeDestinationStoreId == store.id,
+                    routeSummary = routePlan
+                        ?.takeIf { routeDestinationStoreId == store.id }
+                        ?.let(::formatRouteSummary),
                     onHeightChanged = { detailsCardHeightPx = it },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -1007,6 +1125,38 @@ fun MapScreen(
             }
         }
     }
+}
+
+private fun formatRouteSummary(plan: RoutePlan): String {
+    val minutes = (plan.durationSeconds / 60.0).roundToInt().coerceAtLeast(1)
+    return "${formatDistance(plan.distanceMeters)} • نحو $minutes دقيقة بالسيارة"
+}
+
+private fun fitMapsforgeRoute(mapView: MapView, points: List<RoutePoint>) {
+    if (points.isEmpty()) return
+    val minLat = points.minOf { it.latitude }
+    val maxLat = points.maxOf { it.latitude }
+    val minLon = points.minOf { it.longitude }
+    val maxLon = points.maxOf { it.longitude }
+    val centerLat = (minLat + maxLat) / 2.0
+    val centerLon = (minLon + maxLon) / 2.0
+    val span = maxOf(
+        maxLat - minLat,
+        (maxLon - minLon) * cos(Math.toRadians(centerLat))
+    )
+    val zoom = when {
+        span > 0.50 -> 8
+        span > 0.25 -> 9
+        span > 0.12 -> 10
+        span > 0.06 -> 11
+        span > 0.03 -> 12
+        span > 0.015 -> 13
+        span > 0.008 -> 14
+        span > 0.004 -> 15
+        else -> 16
+    }
+    mapView.model.mapViewPosition.setCenter(LatLong(centerLat, centerLon))
+    mapView.model.mapViewPosition.zoomLevel = zoom.toByte()
 }
 
 private fun findNearestStore(stores: List<Store>, lat: Double, lon: Double, maxDistanceMeters: Double): Store? {

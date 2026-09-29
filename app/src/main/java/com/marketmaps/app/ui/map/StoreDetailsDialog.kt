@@ -31,6 +31,8 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -85,6 +87,10 @@ fun StoreDetailsBottomCard(
     distanceMeters: Double?,
     onDismiss: () -> Unit,
     onEdit: (Store) -> Unit,
+    onToggleRoute: () -> Unit = {},
+    routeLoading: Boolean = false,
+    routeVisible: Boolean = false,
+    routeSummary: String? = null,
     onHeightChanged: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -375,6 +381,30 @@ fun StoreDetailsBottomCard(
                                 }
                             }
                         }
+
+                        Button(
+                            onClick = onToggleRoute,
+                            enabled = !routeLoading,
+                            modifier = Modifier.weight(1f).height(40.dp)
+                        ) {
+                            if (routeLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(if (routeVisible) "إخفاء المسار" else "الاتجاهات")
+                            }
+                        }
+                    }
+                    if (routeSummary != null) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = routeSummary,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }
