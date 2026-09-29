@@ -104,15 +104,15 @@ class NightTileCache(
                     val greenish = !bluish && g - r > GREEN_BIAS
                     val factor = (luma / 190f).coerceIn(0.75f, 1.3f)
                     if (bluish) {
-                        // مياه كحلية #11304C
-                        nr = (17 * factor).toInt()
-                        ng = (48 * factor).toInt()
-                        nb = (76 * factor).toInt()
+                        // المياه بألوان الخريطة الفاتحة (#A2CBE6) — لا تُظلَّم
+                        nr = (162 * factor).toInt()
+                        ng = (203 * factor).toInt()
+                        nb = (230 * factor).toInt()
                     } else if (greenish) {
-                        // خضرة مزرقّة #1D4239
-                        nr = (29 * factor).toInt()
-                        ng = (66 * factor).toInt()
-                        nb = (57 * factor).toInt()
+                        // الخضرة بألوان الخريطة الفاتحة (#BFE0B4) — لا تُظلَّم
+                        nr = (191 * factor).toInt()
+                        ng = (224 * factor).toInt()
+                        nb = (180 * factor).toInt()
                     } else {
                         // طرق كبيرة مائلة إلى الأزرق #556C7A
                         val warm = (luma / 200f).coerceIn(0.85f, 1.1f)

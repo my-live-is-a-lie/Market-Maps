@@ -374,10 +374,10 @@
 
     <!-- color of the ocean/sea -->
     <rule e="way" k="natural" v="issea|sea">
-        <area fill="#11304C" />
+        <area fill="#A2CBE6" />
     </rule>
     <rule e="way" k="freizeitkarte" v="meer">
-        <area fill="#11304C" />
+        <area fill="#A2CBE6" />
     </rule>
 
     <!-- color of normal land unless defined as forest, grass etc -->
@@ -417,7 +417,7 @@
         <!--<area src="jar:patterns/quarry.svg" symbol-height="90" symbol-width="90" />-->
     </rule>
     <rule cat="nature" e="way" k="natural|landuse" v="forest|wood" zoom-min="9">
-        <area fill="#1D4239" />
+        <area fill="#BFE0B4" />
         <!--<rule e="any" k="*" v="*" zoom-min="12">
             <rule e="any" k="wood" v="coniferous">
                 <area src="jar:patterns/coniferous.svg" symbol-height="50" symbol-width="50" />
@@ -432,7 +432,7 @@
         </rule>-->
     </rule>
     <rule cat="nature" e="way" k="landuse|natural" v="meadow|grassland" zoom-min="11">
-        <area fill="#1D4239" />
+        <area fill="#BFE0B4" />
     </rule>
     <rule cat="nature" e="way" k="landuse" v="field|farm|farmland|orchard|vineyard" zoom-min="12">
         <area fill="#262626" />
@@ -468,7 +468,7 @@
         <!--<area src="jar:patterns/quarry.svg" symbol-height="90" symbol-width="90" />-->
     </rule>
     <rule cat="nature" e="way" k="landuse|leisure" v="garden|village_green|common|grass" zoom-min="12">
-        <area fill="#1D4239" />
+        <area fill="#BFE0B4" />
     </rule>
     <rule cat="nature" e="way" k="landuse|leisure" v="allotments|greenfield|golf_course" zoom-min="13">
         <area fill="#003300" />
@@ -570,7 +570,7 @@
         <area fill="#3F5261" stroke="#33424F" stroke-width="0.15" />
     </rule>
     <rule e="way" k="amenity" v="biergarten">
-        <area fill="#1F4A3E" stroke="#5A4B36" stroke-width="0.2" />
+        <area fill="#C6E5BE" stroke="#5A4B36" stroke-width="0.2" />
     </rule>
     <rule e="way" k="historic" v="ruins|castle|memorial|monument">
         <rule e="way" k="building" v="~">
@@ -610,7 +610,7 @@
         <line stroke="#F2A07B" stroke-width="0.2" />
     </rule>
     <rule cat="nature" e="way" k="leisure" v="playground|pitch|dog_park" zoom-min="14">
-        <area fill="#1D4239" />
+        <area fill="#BFE0B4" />
     </rule>
     <rule e="way" k="leisure|amenity" v="swimming_pool">
         <area fill="#556C7A" stroke="#000080" stroke-width="0.15" />
@@ -619,7 +619,7 @@
         <line stroke="#806060FF" stroke-width="0.3" />
     </rule>-->
     <rule cat="nature" e="way" k="sport" v="tennis">
-        <area fill="#1D4239" />
+        <area fill="#BFE0B4" />
     </rule>
     <rule e="way" k="power"
         v="station|generator|sub_station|cable_distribution_cabinet|substation|transformer">
