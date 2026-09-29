@@ -52,8 +52,8 @@ object MapLayerHelper {
      */
     private const val SCREEN_RATIO = 1.5f
 
-    /** تكبير خفيف لنصوص الأوفلاين فقط بدل تضخيم الرسم كله عبر userScaleFactor */
-    private const val OFFLINE_TEXT_SCALE = 1.15f
+    /** تكبير نصوص الأوفلاين لتحسين القراءة دون تضخيم عناصر الخريطة كلها */
+    private const val OFFLINE_TEXT_SCALE = 1.3f
 
     fun createBundle(context: Context, mapView: MapView): LayerBundle {
         deleteLegacyCache(context)
@@ -133,9 +133,9 @@ object MapLayerHelper {
             // يُفضّل لاحقاً إضافة وسيلة تواصل وفق سياسة OSM
             userAgent = "MarketMaps/1.0 (Android; https://github.com/my-live-is-a-lie/Market-Maps)"
         }
-        // غلاف الكاش الليلي: يلوّن البلاطات عند تحميلها فتبقى علامات التطبيق
-        // (ورموزها البيضاء) بألوانها الصحيحة فوق الخريطة الليلية.
-        val cache: TileCache = if (night) NightTileCache(bundle.onlineCache, true) else bundle.onlineCache
+        // تحسين تباين التسميات المضمّنة في بلاطات OSM ذات الدقة القياسية، مع إعادة
+        // تلوين البلاطات ليلاً فقط. المعالجة تتم مرة عند دخول البلاطة إلى الكاش.
+        val cache: TileCache = NightTileCache(bundle.onlineCache, night)
         val downloadLayer = TileDownloadLayer(
             cache,
             mapView.model.mapViewPosition,

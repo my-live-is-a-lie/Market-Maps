@@ -5,51 +5,45 @@ import org.mapsforge.map.android.graphics.AndroidGraphicFactory
 import org.mapsforge.map.layer.cache.TileCache
 import org.mapsforge.map.layer.queue.Job
 import org.mapsforge.map.model.common.Observer
+import java.util.concurrent.ConcurrentHashMap
 import com.marketmaps.app.util.logW
 
 /**
- * غلاف كاش يلوّن بلاطات OSM المباشرة (بلاطات Mapnik الجاهزة) في الوضع الليلي
- * بـ**النمط الليلي الرسمي من جوجل** (اللوحة المنشورة في وثائق جوجل):
- *   الأرض #242F3E — المياه #17263C — الحدائق والخضرة #263C3F
- *   الطرق العامة/المحلية #38414E — الطرق السريعة #746855
- *   إطار الطرق #212A37 (وإطار السريع #1F2835) — السكك #2F3948
- *   التسميات #9CA5B3 على هالة #242F3E — أسماء المياه #515C6D
+ * غلاف لكاش بلاطات OSM الجاهزة:
+ * - يُحسّن تباين الحبر الداكن في التسميات الصغيرة بشكل خفيف في الوضعين.
+ * - يعيد تلوين البلاطات إلى النمط الليلي الرسمي من جوجل عند تفعيل الوضع الليلي.
  *
- * لماذا على الكاش وليس على عرض الخريطة؟
- * بلاطات Mapnik صور جاهزة لا يمكن إعادة تلوينها من المصدر، والحل الشائع هو فلتر
- * على عرض الخريطة كاملاً — لكن ذلك يُفسد ألوان علامات التطبيق (الأبيض داخل
- * الشعارات يصبح أسود). هنا نُلوّن البلاطات مرة واحدة عند تحميلها ودخولها للكاش.
- *
- * كيف نُلوّن؟
- * بلاطات Mapnik فاتحة: الأرض بيج، الشوارع بيضاء، النصوص داكنة، والمياه/الخضرة/الطرق
- * الرئيسية ملوّنة. لذلك:
- *   1) جدول إضاءة (LUT) للعناصر الرمادية: النصوص الداكنة ← #9CA5B3 (لون تسميات
- *      جوجل الرسمي)، الأرض البيج ← #242F3E، الشوارع البيضاء ← #38414E، والمناطق
- *      الرمادية المتوسطة (مبانٍ/حدود) ← #2B3544، فتظل الشوارع أعلى إضاءة من الأرض
- *      وحدودها أغمق منها — تماماً كترتيب النمط الرسمي.
- *   2) للعناصر الملوّنة: تحديد العائلة اللونية ثم التعيين إلى لون جوجل الرسمي
- *      المقابل (مياه/خضرة/طرق سريعة) — بلا أي لون خارج اللوحة الرسمية.
- * الكاش يحفظ البلاطات الملوَّنة، لذلك [MapLayerHelper.applyOnline] يمسح كاش
- * الأونلاين عند تغيير الوضع الليلي ليعاد التحميل بالألوان الصحيحة.
+ * تُعالج البلاطة مرة واحدة عند تحميلها إلى الكاش، وليس على عرض الخريطة كاملاً،
+ * حتى لا تتأثر ألوان علامات التطبيق وأيقوناته.
  */
 class NightTileCache(
     private val delegate: TileCache,
     private val night: Boolean
 ) : TileCache {
 
+    /** Keys already transformed in this session; also lazily migrates tiles from the old disk cache. */
+    private val transformedKeys = ConcurrentHashMap.newKeySet<Job>()
+
     override fun containsKey(key: Job): Boolean = delegate.containsKey(key)
 
-    override fun destroy() = delegate.destroy()
+    override fun destroy() {
+        transformedKeys.clear()
+        delegate.destroy()
+    }
 
-    override fun get(key: Job): TileBitmap? = delegate.get(key)
+    override fun get(key: Job): TileBitmap? = delegate.get(key)?.let { transformCached(key, it) }
 
     override fun getCapacity(): Int = delegate.getCapacity()
 
     override fun getCapacityFirstLevel(): Int = delegate.getCapacityFirstLevel()
 
-    override fun getImmediately(key: Job): TileBitmap? = delegate.getImmediately(key)
+    override fun getImmediately(key: Job): TileBitmap? =
+        delegate.getImmediately(key)?.let { transformCached(key, it) }
 
-    override fun purge() = delegate.purge()
+    override fun purge() {
+        transformedKeys.clear()
+        delegate.purge()
+    }
 
     override fun setWorkingSet(workingSet: MutableSet<Job>) = delegate.setWorkingSet(workingSet)
 
@@ -59,14 +53,30 @@ class NightTileCache(
 
     override fun put(key: Job, bitmap: TileBitmap?) {
         if (bitmap == null) {
+            transformedKeys.remove(key)
             delegate.put(key, null)
             return
         }
-        delegate.put(key, if (night) recolor(bitmap) ?: bitmap else bitmap)
+        // تحسين التباين يُطبّق في الوضعين، أما إعادة التلوين ففي الوضع الليلي فقط.
+        val processed = transform(bitmap)
+        if (processed != null) transformedKeys.add(key)
+        delegate.put(key, processed ?: bitmap)
     }
 
-    /** بلاطة جديدة بالنمط الليلي الرسمي من جوجل؛ تُرجع null إن تعذّر التحويل */
-    private fun recolor(src: TileBitmap): TileBitmap? {
+    /** يحوّل أيضاً البلاطات القديمة عند استرجاعها من الكاش الدائم. */
+    private fun transformCached(key: Job, bitmap: TileBitmap): TileBitmap {
+        if (key in transformedKeys) return bitmap
+        synchronized(transformedKeys) {
+            if (key in transformedKeys) return bitmap
+            val processed = transform(bitmap) ?: return bitmap
+            delegate.put(key, processed)
+            transformedKeys.add(key)
+            return processed
+        }
+    }
+
+    /** تحسين بسيط لتباين النصوص الداكنة (مع الحفاظ على ألوان الخريطة) وإعادة تلوين الليل */
+    private fun transform(src: TileBitmap): TileBitmap? {
         return try {
             val androidSrc = AndroidGraphicFactory.getBitmap(src) ?: return null
             val width = androidSrc.width
@@ -83,22 +93,33 @@ class NightTileCache(
             for (i in pixels.indices) {
                 val c = pixels[i]
                 val alpha = c ushr 24
-                val r = (c shr 16) and 0xFF
-                val g = (c shr 8) and 0xFF
-                val b = c and 0xFF
+                val originalR = (c shr 16) and 0xFF
+                val originalG = (c shr 8) and 0xFF
+                val originalB = c and 0xFF
+                val spread = maxOf(originalR, originalG, originalB) - minOf(originalR, originalG, originalB)
+                val originalLuma = ((originalR * 77 + originalG * 150 + originalB * 29) shr 8).coerceIn(0, 255)
 
-                // الإضاءة وفق Rec.601
+                // أسماء OSM داكنة ومحايدة غالباً. نُغمّق درجات الحبر والـ anti-aliasing
+                // حوله بشكل طفيف فقط؛ لا نمس الخلفيات الفاتحة أو ألوان الطرق والمياه.
+                val inkLuma = if (spread < LOW_CHROMA_SPREAD && originalLuma in INK_LUMA_MIN..INK_LUMA_MAX) {
+                    (originalLuma * INK_CONTRAST_FACTOR).toInt().coerceAtLeast(0)
+                } else originalLuma
+                val scale = if (originalLuma == 0) 1f else inkLuma.toFloat() / originalLuma
+                val r = (originalR * scale).toInt().coerceIn(0, 255)
+                val g = (originalG * scale).toInt().coerceIn(0, 255)
+                val b = (originalB * scale).toInt().coerceIn(0, 255)
                 val luma = ((r * 77 + g * 150 + b * 29) shr 8).coerceIn(0, 255)
-                val spread = maxOf(r, g, b) - minOf(r, g, b)
 
-                val packed = if (spread < LOW_CHROMA_SPREAD) {
+                val packed = if (!night) {
+                    (r shl 16) or (g shl 8) or b
+                } else if (spread < LOW_CHROMA_SPREAD) {
                     // رمادي: أرض/شوارع/مبانٍ/حدود/نصوص ← جدول الإضاءة الرسمي
                     LUT[luma]
-                } else if (b - r > BLUE_BIAS) {
+                } else if (originalB - originalR > BLUE_BIAS) {
                     WATER
-                } else if (g - r > GREEN_BIAS) {
+                } else if (originalG - originalR > GREEN_BIAS) {
                     PARK
-                } else if (r - b > WARM_BIAS) {
+                } else if (originalR - originalB > WARM_BIAS) {
                     HIGHWAY
                 } else {
                     // ملوّن غير مصنّف (بني باهت/رمادي مائل) ← مسار الأرض الرسمي
@@ -112,7 +133,7 @@ class NightTileCache(
             out.setTimestamp(src.getTimestamp())
             out
         } catch (e: Exception) {
-            logW(TAG, "تعذّر تلوين البلاطة للوضع الليلي", e)
+            logW(TAG, "تعذّرت معالجة بلاطة OSM", e)
             null
         }
     }
@@ -127,6 +148,11 @@ class NightTileCache(
         private const val BLUE_BIAS = 12   // مياه: أزرق − أحمر
         private const val GREEN_BIAS = 8   // خضرة: أخضر − أحمر
         private const val WARM_BIAS = 20   // طرق سريعة/رمل: أحمر − أزرق
+        // أدنى من ذلك غالباً حبر داكن أصلاً؛ إبقاؤه دون تغيير يجعل التحسين idempotent
+        // حتى عند إعادة قراءة بلاطات سبق تحسينها من الكاش الدائم.
+        private const val INK_LUMA_MIN = 105
+        private const val INK_LUMA_MAX = 150
+        private const val INK_CONTRAST_FACTOR = 0.82f
 
         /** ألوان النمط الليلي الرسمي من جوجل (حِزم RGB جاهزة) */
         private const val WATER = 0x17263C     // مياه
